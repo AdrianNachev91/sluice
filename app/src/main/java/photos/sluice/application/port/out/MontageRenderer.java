@@ -9,9 +9,7 @@ import photos.sluice.domain.job.ProgressCallback;
 
 /**
  * The effect boundary application services use to render montage contact sheets for a cull scope,
- * producing the prep directory a vision provider then judges. The progress- and
- * cancellation-aware overloads both default to the plain {@link #build(CullScope, MontageConfig)}
- * above, so an implementation with nothing interruptible to report still satisfies the port.
+ * producing the prep directory a vision provider then judges.
  */
 public interface MontageRenderer {
 
@@ -27,8 +25,7 @@ public interface MontageRenderer {
     /**
      * Progress-aware sibling of build() above, ticked once per montage written. Defaulted to
      * silently ignore progress so an implementation that doesn't override it still satisfies the
-     * port. CullMontageRenderer overrides the cancellation-aware sibling below directly, and both
-     * of these delegate into it, so the real work lives in exactly one place.
+     * port.
      *
      * @param scope {@link CullScope} the media scope to render montages for
      * @param config {@link MontageConfig} the montage layout configuration

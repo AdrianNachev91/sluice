@@ -29,8 +29,8 @@ public enum RunMode {
     /**
      * Moves what is in Sorted into the library.
      *
-     * <p>Both words are the vocabulary lock's own, rather than a possessive reading of them. What a
-     * progress area shows is "Moving to library...", which is the phrase that table names.
+     * <p>"Moving to library", never "moving to your library". A progress area shows exactly this
+     * phrase, so the label and the phase have to spell it the same way.
      */
     MOVE_TO_LIBRARY("Move to library", "Moving to library",
             "Moves what is in Sorted into your Library. That is the photos a sift left alone, plus "
@@ -88,7 +88,7 @@ public enum RunMode {
      *
      * <p>A ceiling rather than a promise. A run that ends early reports fewer, and the reserved
      * room simply goes unused. An engine reporting more than this grows the bars past the
-     * reservation and moves the row below once. That is the old behaviour rather than a break.
+     * reservation and moves the row below once.
      *
      * @return int the most bars this mode can draw
      */
@@ -131,7 +131,7 @@ public enum RunMode {
      * What this mode's scope field accepts, said before anything is typed into it.
      *
      * <p>Stated up front rather than only refused afterwards. The mode is chosen before anybody
-     * types, so the screen knows what it will accept and can say so, which the command line cannot.
+     * types, so the screen knows what it will accept and can say so.
      *
      * @return {@link String} the hint under the field, empty where the field takes nothing
      */
@@ -145,8 +145,8 @@ public enum RunMode {
      * <p>Built from the same name the mode's own button carries, so the two cannot come to disagree
      * about what this work is called.
      *
-     * <p>Run is the verb here, which the vocabulary carve-out allows. What it must not become is the
-     * noun: a sift a user started is a sift, never a run.
+     * <p>Run is the verb here. It must not become the noun: a sift a user started is a sift, never
+     * a run.
      *
      * @return {@link String} what it says
      */

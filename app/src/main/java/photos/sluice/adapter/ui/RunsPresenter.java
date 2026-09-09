@@ -32,17 +32,13 @@ import java.util.function.Supplier;
 /**
  * Decides what the runs screen shows and what a press on it does.
  *
- * <p>Holds the last reading of what is on disk, and the words that reading comes to. The screen
- * keeps the controls, asks here after every change, and hands every press straight back through
- * {@link #press}.
- *
- * <p>The reading is taken by calling {@link #refresh}, which diagnoses every run and blocks while
- * it does. The caller runs it off whatever thread paints.
+ * <p>Holds the last reading of what is on disk, and the words that reading comes to. Every press
+ * comes back through {@link #press}, and the reading is taken by calling {@link #refresh}.
  *
  * <p>The same reading answers {@link #unfinishedRuns}, which is the number the sidebar's entry
- * carries. One source behind both rather than one instant. A reading landing between a screen being
- * drawn and its badge being counted still leaves the two a moment apart. What it rules out is the
- * badge and the cards coming from different readings of the folder.
+ * carries, so the badge and the cards cannot come from different readings of the folder. One source
+ * rather than one instant: a reading landing between the cards being drawn and the badge being
+ * counted still leaves the two a moment apart.
  */
 @Component
 @Profile("!cli")
@@ -73,17 +69,13 @@ public class RunsPresenter {
 
     private static final String JUDGE_AGAIN = "Judge the faulty sheets again";
 
-    // Says only what the press covers beyond the button's own label, and what it costs. What
-    // happens to the decisions being replaced is bookkeeping the reader cannot act on.
+    // What happens to the decisions being replaced is bookkeeping the reader cannot act on, so it
+    // goes unsaid.
     private static final String JUDGE_AGAIN_NOTE = "Any sheets still missing are judged too. That "
             + "spends from your provider account balance.";
 
     private static final String FINISH = "Finish this sift";
 
-    // What the press does on a waiting run an agent judges. It looks at the folder again, and
-    // finishes only if everything landed since the card was drawn. Where the app judges the sheets
-    // itself the press dispatches them, spends, and finishes, so that route keeps the plainer
-    // label.
     private static final String CHECK_AND_FINISH = "Check and finish";
 
     private static final String TROUBLESHOOT = "Troubleshoot";
@@ -134,8 +126,7 @@ public class RunsPresenter {
     // here rather than on the button because the press that fills it also files sheets away, and
     // the redraw that follows builds a new button.
     private volatile @Nullable Path justCopied;
-    // The read that press triggers must not clear what the press just set, so the field survives
-    // one read and the one after it clears.
+    // The read that press triggers must not clear what the press just set.
     private volatile boolean copiedAwaitsItsRead;
 
     // Plain, unlike the fields above: one thread both writes and reads it, on the thread that
@@ -144,7 +135,6 @@ public class RunsPresenter {
 
     /**
      * Creates the presenter over the facade it reads runs through.
-     *
      *
      * @param pipeline {@link Pipeline} the one way in to every engine
      * @param launcher {@link RunLauncherPresenter} runs the job and reports it on the dashboard
@@ -160,9 +150,8 @@ public class RunsPresenter {
     /**
      * Says how the screen draws itself again once a job this screen started has ended.
      *
-     * <p>Held rather than captured at each press. A discard outlives the screen that started it.
-     * Nothing stops somebody opening Settings while it runs. The runs screen they come back to is a
-     * new one, and this field is what points at it.
+     * <p>Held rather than captured at each press. A discard outlives the screen that started it, so
+     * the runs screen the reader comes back to is a new one.
      *
      * @param repaint {@link Runnable} reads the runs again and draws, off the thread that paints
      */
@@ -235,8 +224,8 @@ public class RunsPresenter {
      */
     public void refresh() {
         this.forgetTheCopyAfterItsOwnRead();
-        // A press reports against the run as it stood then. This reading may find a different one,
-        // and a sentence about the old state reads as a claim about the new.
+        // A press reports against the run as it stood then, and this reading may find a different
+        // one.
         this.message = null;
         this.reread();
     }
@@ -276,8 +265,7 @@ public class RunsPresenter {
      * How many runs the sidebar's entry counts.
      *
      * <p>Every run that is not finished, which is every run somebody could still pick up or throw
-     * away. A folder that could not be read counts none. Nothing was established there, and a
-     * number invented from a failed read is what the reading exists to avoid.
+     * away. A folder that could not be read counts none, since nothing was established there.
      *
      * @return int how many runs have not finished
      */
@@ -290,7 +278,7 @@ public class RunsPresenter {
     /**
      * Takes a press on one of a card's buttons.
      *
-     * <p>Both kinds run as jobs, so both take the app's one job slot.
+     * <p>Continuing and discarding both run as jobs, so both take the app's one job slot.
      *
      * @param action {@link Action} the button pressed, carrying the run it acts on
      */
@@ -319,11 +307,11 @@ public class RunsPresenter {
      * <p>Built here rather than kept on the card, so a screen of waiting runs reads no index until
      * somebody asks for one.
      *
-     * <p>A follow-up discards whatever came back unusable, then asks for every sheet outstanding,
-     * both being sheets with no answer once the discard is done. A run with nothing to discard has
-     * stalled rather than gone wrong, and its follow-up is the instructions themselves. The facade
-     * decides which it is. A run put right between the card being drawn and this press still gets
-     * the answer that fits it rather than the one the card predicted.
+     * <p>A follow-up files whatever came back unusable into the run's drawer, then asks for every
+     * sheet outstanding, both being sheets with no answer once that is done. A run with nothing to
+     * file away has stalled rather than gone wrong, and its follow-up is the instructions
+     * themselves. The facade decides which it is, so a run put right between the card being drawn
+     * and this press still gets the answer that fits it.
      *
      * <p>A run whose records have gone bad between the draw and this press has none to write. That
      * is reported on the screen the same way a refused press is, and nothing reaches the clipboard.
@@ -366,9 +354,9 @@ public class RunsPresenter {
      *
      * <p>What that is turns on who judges. An agent outside the app is handed instructions, which
      * come back for the caller to put on the clipboard. Where the app judges the sheets itself
-     * there is nobody to hand anything to. The freed sheets are dispatched in the same press, and
-     * nothing comes back. Freeing them and stopping there would destroy answers that were paid for
-     * and spend nothing, which is a state no reader asked to be left in.
+     * there is nobody to hand anything to, so the freed sheets are dispatched in the same press and
+     * nothing comes back. Freeing them and stopping there would leave a run whose answers are in
+     * the drawer and whose sheets are unjudged, which is a state no reader asked to be left in.
      *
      * <p>The run moves either way, so a caller redraws after this.
      *
@@ -422,9 +410,8 @@ public class RunsPresenter {
      * Whether anything is running that this screen's own controls have to wait for.
      *
      * <p>Asks the app rather than only remembering what this screen started. Carrying a run on is
-     * handed to the dashboard, so a job this screen caused is one it holds no handle to. The
-     * app also takes one job at a time whoever started it. A card offering a second while a sort
-     * runs is offering a press that would be refused.
+     * handed to the dashboard, so a job this screen caused is one it holds no handle to. The app
+     * also takes one job at a time whoever started it.
      *
      * @return boolean true while something is
      */
@@ -450,8 +437,8 @@ public class RunsPresenter {
      * Carries one run on, and takes the reader to where that job reports itself.
      *
      * <p>Handed to the dashboard rather than run from here. A sift moving a reader's photos shows a
-     * progress bar, a running count and a card saying what it did. All of that already exists on
-     * one screen. Run from here it would move the photos behind a screen that looked stuck.
+     * progress bar, a running count and a card saying what it did, and all of that already exists
+     * on one screen.
      *
      * <p>The reader is taken there rather than told to go. A press that starts several minutes of
      * work and leaves them where they were is a press that looks like it missed.
@@ -571,8 +558,7 @@ public class RunsPresenter {
      * problems can be about the run rather than about any one sheet.
      *
      * <p>Which button leads is decided here rather than by either half, because the answer is about
-     * the pair. Finishing leads only where nothing is blamed on a sheet, since apply refuses on an
-     * unusable answer however many have arrived.
+     * the pair.
      *
      * <p>The way back leads only where the app does the judging, and only where it could clear the
      * run outright. A press that spends is worth leading with where it finishes the job. Where an
@@ -654,9 +640,7 @@ public class RunsPresenter {
      * the cheaper of the two roads out. Backing away leaves a run nothing can finish, and the only
      * way on from there discards every answer already paid for.
      *
-     * <p>That holds while throwing the whole run away is the only other road. Somewhere a reader
-     * can discard single sheets, backing away costs them one sheet rather than all of them, and
-     * the two choices weigh about the same.
+     * <p>That holds while throwing the whole run away is the only other road.
      *
      * @param run {@link CullRunSummary} the run
      * @param findings a {@link List} of {@link Finding} what the diagnosis blamed
@@ -751,10 +735,9 @@ public class RunsPresenter {
      *
      * <p>Every button goes dead while a job is running, since the app takes one at a time.
      *
-     * <p>Finishing leads only where no answer has come back unusable. Apply refuses on one however
-     * many sheets have arrived. Finishing is then a press that cannot get through, whether or not
-     * the way back could clear the run either. A card where neither press can finish it draws
-     * no filled button at all rather than dressing one of them as the way on.
+     * <p>Finishing leads only where no answer has come back unusable, since apply refuses on one
+     * however many sheets have arrived. A card where neither press can finish the run draws no
+     * filled button at all rather than dressing one of them as the way on.
      *
      * @param run {@link CullRunSummary} the run
      * @param state {@link State} its state
@@ -900,7 +883,7 @@ public class RunsPresenter {
                     + "keep out of Sorted.";
             case BLOCKED -> FindingFamily.nothingMoved(run.health().findings());
             // "Often", because the read failed and nothing here knows why. Naming the usual cause
-            // is as far as this can honestly go.
+            // is as far as this can go.
             case DAMAGED -> "Often another program has the folder open.";
             case WAITING -> "Waiting for the rest of the sheets to come back.";
             case COMPLETE -> null;
@@ -1046,8 +1029,8 @@ public class RunsPresenter {
             this.readFailure = null;
         } catch (final PathsMisconfiguredException unset) {
             // Its message and no trace. An install nobody has configured yet meets this on every
-            // start and every press. That is what a first run is, rather than anything going wrong.
-            // A trace here fills the log a reader would send about something else.
+            // start and every press. A trace here fills the log a reader would send about something
+            // else.
             log.info("Could not read the runs: {}", unset.getMessage());
             this.runs = new CullRuns.Listed(List.of());
             this.readFailure = RunRefusals.refuseMessage(unset);

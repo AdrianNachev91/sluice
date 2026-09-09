@@ -78,7 +78,7 @@ final class Months {
      * The span one {@code --months} value covers, where it has no gap in it.
      *
      * <p>{@link MonthRange} is a first and a last, so it cannot say that a month between them is
-     * out. Widening a set with a gap in it to the span around it would work on months nobody named.
+     * out.
      *
      * @param text {@link String} what was typed after the option
      * @param verb {@link String} the verb refusing, as the person typed it

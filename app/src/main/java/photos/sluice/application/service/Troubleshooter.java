@@ -15,26 +15,20 @@ import java.util.List;
 
 /**
  * The single-button recovery: diagnose a prep dir, run every repair this app can perform
- * unprompted today, re-diagnose. Then hand back what was found, what was fixed, and what remains.
- * Three AUTO repairs run today, in the locked dependency order: index before move log before stray
- * shards. Until the index is readable, nothing else can even be diagnosed. Until the log is
+ * unprompted, re-diagnose. Then hand back what was found, what was fixed, and what remains.
+ *
+ * <p>Three AUTO repairs run today, in the locked dependency order: index before move log before
+ * stray shards. Until the index is readable, nothing else can even be diagnosed. Until the log is
  * rebuilt, an already-moved file can still look like a stray shard's own missing match.
  *
- * <p>A {@link Finding.CorruptIndex} finding gets {@link PrepDirRemedies#rebuildIndex} attempted for
- * it first, unprompted. A failed attempt is a pure no-op - nothing is written unless every guard
- * passes. Everything downstream needs a readable index to even diagnose. A
- * {@link Finding.MissingSource} finding is currently the only signal available that the move-record
- * log itself might be lost or unreadable. {@link PrepDirDoctor} only ever reports one once the shard
- * contract is already clean. {@link ReconcileEngine#reconcile} is exactly the offline repair for
- * that situation. Reconcile never runs unprompted otherwise: it files the whole move-record file
- * away, which would needlessly demote an already-trustworthy log's witnessed provenance to
- * reconstructed for no benefit. A {@link Finding.StrayShard} finding gets
- * {@link PrepDirRemedies#autoRepairStrayShard} attempted for it, unprompted. That repair is provably
- * safe when it runs at all - it either renames the one unambiguous match or does nothing.
- * Every disposition-ledger CHOICE remedy - missing-source skip, overlap resolution, corrupt-sidecar
- * resolution, stray-shard set-aside - needs a real user choice. So none of them run here; they
- * surface unchanged in {@code after} for the UI to offer. No confirmation is asked before any AUTO
- * repair: none of the three ever move or delete anything the library or Sorted tree holds.
+ * <p>Every disposition-ledger CHOICE remedy needs a real user choice, so none of them run here.
+ * They surface unchanged in {@code after} for a caller to offer.
+ *
+ * <p>The move records and the answers are separate files so a repair triggered by a lost move
+ * record cannot cost the reader an unrelated answer they already gave.
+ *
+ * <p>No confirmation is asked before any AUTO repair: none of the three ever moves or deletes
+ * anything the library or Sorted tree holds.
  *
  * <p>Flowchart: {@code app/docs/design/application/service/troubleshooter.md}.
  */
@@ -73,10 +67,9 @@ public class Troubleshooter {
      * @param prepDir {@link Path} the prep directory to troubleshoot
      * @return {@link TroubleshootReport} what was found, what was fixed, and what remains
      * @throws ApplyException if the shard contract itself does not validate cleanly. Not reachable
-     *                        from a MissingSource-triggered reconcile call today. PrepDirDoctor only ever reports
-     *                        MissingSource once the shard contract has already validated clean, and reconcile()
-     *                        re-runs that identical check. If a later change breaks that invariant and this does
-     *                        throw, no report gets filed - the exception propagates before render() runs.
+     *                        from a MissingSource-triggered reconcile today, since PrepDirDoctor
+     *                        only reports MissingSource once that contract has validated. If it
+     *                        does throw, no report is filed: it propagates before render() runs
      */
     public TroubleshootReport troubleshoot(final Path prepDir) throws ApplyException {
         final PrepDirHealth before = this.prepDirDoctor.diagnose(prepDir);
@@ -103,10 +96,9 @@ public class Troubleshooter {
      * StrayShard finding can surface either while WAITING (other montages still being culled) or
      * BLOCKED (culling finished, something else needs a remedy). Unlike a MissingSource finding,
      * PrepDirDoctor never gates it on the shard contract being otherwise complete - so this repair
-     * isn't gated on overall state either. Each attempt re-reads current disk state. That means an
-     * earlier repair in this same pass can make a later one possible (one candidate montage
-     * claimed) or moot (nothing left unclaimed). autoRepairStrayShard() itself decides that per its
-     * own unambiguity rule, not this loop.
+     * isn't gated on overall state either. Each attempt re-reads current disk state. So an earlier
+     * repair in this same pass can make a later one possible, or moot. autoRepairStrayShard()
+     * decides that per its own unambiguity rule, not this loop.
      *
      * @param prepDir {@link Path} the prep directory being troubleshot
      * @param diagnosis {@link PrepDirHealth} the diagnosis to read StrayShard findings from
@@ -125,7 +117,7 @@ public class Troubleshooter {
     /**
      * Renders the technical, support-hand-off report text - the same level of detail
      * {@link Finding#describe()} already gives an aggregated {@code ApplyException}, never
-     * layman-friendly copy. A UI maps that friendlier language on top of this structured data.
+     * layman-friendly wording.
      *
      * @param prepDir {@link Path} the prep directory troubleshot
      * @param before {@link PrepDirHealth} the diagnosis taken before any repair

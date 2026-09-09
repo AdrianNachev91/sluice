@@ -36,8 +36,6 @@ class SluiceCliTest {
         assertThat(result.err()).contains("sortt");
     }
 
-    // The usage block runs to as many lines as there are verbs. Repeating it under every refusal
-    // therefore grows with the surface, while the mistake it explains stays one line.
     @Test
     void aRefusalPointsAtTheHelpRatherThanReprintingIt() {
         final CliHarness.Result result = CliHarness.run(this.commandLine, "--month=6-8");
@@ -118,8 +116,6 @@ class SluiceCliTest {
         assertThat(result.err()).isEmpty();
     }
 
-    // The refusal a verb gives an unknown option ends by naming that verb's own --help. Reachable
-    // only on the root, that line sends a reader to a command which answers with the same refusal.
     @Test
     void everyVerbAnswersTheHelpItsOwnRefusalPointsAt() {
         assertThat(this.commandLine.getSubcommands().keySet()).isNotEmpty().allSatisfy(verb -> {
@@ -155,8 +151,6 @@ class SluiceCliTest {
                 .allSatisfy(verb -> assertThat(result.out()).containsPattern("(?m)^\\s+" + verb + "\\s"));
     }
 
-    // Asking for a document is asking about a result, and help is not one. A document written here
-    // would be an empty one wrapped around nothing.
     @Test
     void askingForHelpPrintsHelpEvenWhenADocumentWasAskedFor() {
         final CliHarness.Result result = CliHarness.run(this.commandLine, "--json", "--help");

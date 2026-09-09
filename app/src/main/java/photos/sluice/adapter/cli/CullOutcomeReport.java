@@ -128,9 +128,8 @@ final class CullOutcomeReport {
      *
      * <p>A stop landing mid-apply leaves photos in their categories.
      *
-     * <p>The near-duplicate group count is left off, unlike a completed run's report. A group is
-     * resolved by copying its keeper, and that keeper stays in Sorted. Counted under a line about
-     * what left, it would name a photo that is still there.
+     * <p>The near-duplicate group count is left off, since these lines are about what left Sorted
+     * and a group's keeper does not leave it.
      *
      * @param line {@link String} what the pause itself says
      * @param moved {@link ApplyReport} what apply moved before it stopped, or null where it never
@@ -199,8 +198,7 @@ final class CullOutcomeReport {
      * @return {@link CommandOutcome} the outcome
      */
     private static CommandOutcome blockedOutcome(final CullJobOutcome.Blocked blocked) {
-        final String line = "Every sheet came back, but there are problems with some. Your photos are still "
-                + "in Sorted. "
+        final String line = "Every sheet came back, but there are problems with some. Nothing was moved. "
                 + "Run 'troubleshoot " + blocked.job().scope() + "' to see what went wrong.";
         return CommandOutcome.blocked(CullPayloads.outcome(blocked), List.of(line), notes(blocked));
     }

@@ -88,33 +88,29 @@ import java.util.stream.IntStream;
  * JPEG, and the photo table. A structured-output schema constrains the response to a JSON verdict
  * list. The model must return a verdict for every tile. That forces a look at every photo rather
  * than a skim over the ones that need one. Every verdict is written to the shard, keeps included,
- * which is the same on-disk contract an external agent answers. {@link ShardValidator} is what
- * checks the sheet is covered, so the rule holds for both routes rather than only this one.
+ * which is the same on-disk contract an external agent answers.
  *
  * <p>The model references photos by tile index and filename, never by path. The response is
  * resolved index to sidecar src here. A name that does not match the sidecar entry at that index
- * fails validation rather than healing. The mismatch signals a mis-keyed tile, and guessing which
- * field to trust could set aside the wrong photo.
+ * fails validation rather than healing, since guessing which field to trust could set aside the
+ * wrong photo.
  *
- * <p>Failure channels split by who can fix them. A response that fails validation is a content
- * problem the model itself can often fix. It gets one corrective retry that echoes the failed
- * reply back with the full problem list. A second failure throws checked {@link CullException}
- * naming the montage and both attempts' problems. The one-retry cap is deliberate, so a model
- * that cannot cull a montage stops burning tokens. Missing connection settings (model id, API
- * key) are the user's configuration to fix, and fail unchecked with the property or variable
- * name. A montage image that can't be read is broken app output, and fails unchecked because the
- * scope needs re-prepping. An unreadable sidecar skips its own montage instead, leaving the apply
- * phase to offer the user a repair - see {@link #readEntries}.
+ * <p>A response that fails validation gets one corrective retry echoing the failed reply back with
+ * the problem list. A second failure throws checked {@link CullException}. That cap is deliberate,
+ * so a model that cannot cull a montage stops burning tokens. The design doc's failure-channel
+ * table has the rest, split by who can fix each one.
  *
- * <p>A montage whose valid shard is already on disk is skipped. A run can be interrupted by a
- * crash or a user cancellation. Either way, re-invoking it on the same prep directory finishes
- * only the remainder. An invalid existing shard is re-culled and overwritten. A stray decisions
- * file naming no current montage is left untouched. {@link CullOptions} is not wired yet. Every
- * montage needs a shard regardless of allowPartial, and timeout is unhonored.
+ * <p>A montage whose valid shard is already on disk is skipped, so re-invoking an interrupted run
+ * on the same prep directory finishes only the remainder. An invalid existing shard is re-culled
+ * and overwritten. A stray decisions file naming no current montage is left untouched.
+ * {@link CullOptions} is not wired yet. Every montage needs a shard regardless of allowPartial,
+ * and timeout is unhonored.
  *
  * <p>An API client is built lazily inside whichever call needs one, never at startup, so the app
- * boots without an API key for users on other providers. The factory seams exist for tests to
- * inject a mock client.
+ * boots without an API key for users on other providers.
+ *
+ * <p>Flowcharts, failure channels and scenario table:
+ * {@code app/docs/design/adapter/vision/anthropic-culler.md}.
  */
 @Component
 class AnthropicCuller implements VisionCuller {
@@ -124,8 +120,8 @@ class AnthropicCuller implements VisionCuller {
     static final String PROVIDER_ID = "anthropic";
     // What the SDK client reaches when the endpoint field is left blank, per Anthropic's own docs.
     private static final String DEFAULT_ENDPOINT = "https://api.anthropic.com";
-    // The console's front door rather than the keys page itself. A deep link into somebody else's
-    // web app is the part that moves, and a screen draws this one as a link somebody presses.
+    // The console's front door rather than the keys page itself, since a deep link into somebody
+    // else's web app is the part that moves.
     private static final String SETUP_GUIDE =
             "Create an API key in the Anthropic Console at https://console.anthropic.com.";
 
@@ -134,31 +130,24 @@ class AnthropicCuller implements VisionCuller {
     static final SecretId API_KEY = new SecretId(PROVIDER_ID, "ANTHROPIC_API_KEY");
 
     // The response ceiling, which doubles as a per-call cost cap. A verdict runs about 70 tokens,
-    // so the longest list a sheet can produce is ~3.5k for a dense 7x7 grid. The remaining ~12k is
-    // a reasoning allowance. A model that reasons before answering spends from this same ceiling,
-    // at whatever depth it chooses. Reasoning that squeezes out the verdict list arrives as
-    // truncated JSON.
+    // so the longest list a sheet can produce is ~3.5k for a dense 7x7 grid. The rest is a
+    // reasoning allowance, since a model that reasons before answering spends from this same
+    // ceiling. Reasoning that squeezes out the verdict list arrives as truncated JSON.
     private static final long MAX_TOKENS = 16384;
     private static final int DEFAULT_TRANSPORT_RETRIES = 2;
     // A check always has someone waiting on its answer, so it fails rather than retries. The SDK's
-    // backoff would otherwise spend a minute on a service that is down, with the screen that asked
-    // reading as hung.
+    // backoff would otherwise spend a minute on a service that is down, with the surface that
+    // asked reading as hung.
     private static final int CHECK_RETRIES = 0;
-    // What a person is willing to sit in front of after pressing something. The screen says it is
-    // connecting for the whole of it, so this is the length of a wait somebody is watching rather
-    // than the length the service might take.
+    // The length of a wait somebody is watching, rather than the length the service might take.
     private static final Duration CHECK_TIMEOUT = Duration.ofSeconds(10);
     // A bound on a list that runs to tens of entries. The paging is driven by what the service
     // says rather than by anything here, so it gets a ceiling.
     private static final long CHECK_MODEL_CEILING = 500;
-    // The models offered before anything has been asked of the service. Listing what an account
-    // can really run needs a key and a network. So this is what a fresh install opens on, and a
-    // successful check replaces it with the account's own list.
-    //
-    // Each one has to read an image and answer against a JSON schema, which is what a montage and
-    // a verdict are. Least capable first, so a surface with no recommendation to fall back on
-    // lands on the cheapest rather than the dearest. Labels stay plain display names so the two
-    // lists read alike when one replaces the other.
+    // What a fresh install opens on, before a key and a network can answer what the account really
+    // runs. Least capable first, so a surface with no recommendation to fall back on lands on the
+    // cheapest rather than the dearest. Labels stay plain display names, so this list and the
+    // account's own read alike when one replaces the other.
     private static final ModelCatalog MODELS = new ModelCatalog(List.of(
             new ModelOption("claude-haiku-4-5", "Claude Haiku 4.5"),
             new ModelOption("claude-sonnet-5", "Claude Sonnet 5"),
@@ -178,12 +167,11 @@ class AnthropicCuller implements VisionCuller {
     // the whole value. Reusing that validator's expression verbatim would accept "FOO-bar", which it
     // then refuses.
     //
-    // No maxLength beside it, though the validator caps a slug at 24. A length ceiling is applied by
-    // shaping the answer rather than refusing it, so it truncates. Two truncated-alike groups share
-    // a Duplicates folder whenever their keepers fall in the same year-month, which is what
-    // CullDestinations keys that folder on. The validator catches that only when both groups
-    // contributed a chosen keeper, since the merged id then carries two and WrongChosenCount fires.
-    // A merge where one side brought only rejects passes validation and lands silently.
+    // No maxLength beside it, though the validator caps a slug at 24. A ceiling truncates rather
+    // than refuses, and two truncated-alike groups share a Duplicates folder whenever their keepers
+    // fall in the same year-month. The validator catches that only when both groups brought a chosen
+    // keeper, since the merged id then carries two and WrongChosenCount fires. A merge where one
+    // side brought only rejects passes validation and lands silently.
     private static final Map<String, Object> GROUP_SLUG =
             Map.of("type", "string", "minLength", 1, "pattern", "^[a-z0-9]+(-[a-z0-9]+)*$");
 
@@ -191,10 +179,9 @@ class AnthropicCuller implements VisionCuller {
     private final ShardCodec shardCodec;
     private final SidecarReader sidecarReader;
     private final CullSettings settings;
-    // Built per call rather than cached, so a run that forecasts before it culls constructs two.
-    // A cached client would have to notice a credential the user changed in Settings, and no signal
-    // for that reaches this class. Fresh construction has no stale state to get wrong, and each
-    // caller closes what it opened.
+    // Built per call rather than cached. A cached client would have to notice a credential the user
+    // changed in Settings, and no signal for that reaches this class. Fresh construction has no
+    // stale state to get wrong, and each caller closes what it opened.
     private final Supplier<AnthropicClient> clientFactory;
     private final Function<CullProviderSettings, AnthropicClient> checkClientFactory;
     private final ShardValidator validator = new ShardValidator();
@@ -222,13 +209,11 @@ class AnthropicCuller implements VisionCuller {
      * Constructs the culler with injectable client factories, for tests.
      *
      * <p>Two factories rather than one, because a check and a cull want different clients. Culling
-     * rides the configured transport retries; a check refuses them. Only one of the two is ever
-     * asked for a client on any given call.
+     * rides the configured transport retries; a check refuses them.
      *
      * <p>The check factory takes the provider settings to check, rather than closing over the
-     * stored ones. {@link #check()} passes what is stored; {@link #check(CullProviderSettings)}
-     * passes a candidate a screen is holding and has not saved. One factory serves both, so a
-     * candidate endpoint reaches the same client-building logic the stored one already does.
+     * stored ones, so a candidate endpoint that has not been saved reaches the same client-building
+     * logic the stored one does.
      *
      * @param prompt {@link CullerPrompt} the prompt builder
      * @param shardCodec {@link ShardCodec} reads and writes per-montage shards
@@ -275,9 +260,9 @@ class AnthropicCuller implements VisionCuller {
     /**
      * {@inheritDoc}
      *
-     * <p>This app calls the model itself, so it needs the model settings and a key. A model id is
-     * the one value it cannot be run without. Required here, it is caught while a user is still
-     * looking at the field, rather than at cull time against settings they last saw accepted.
+     * <p>A model id is the one value this provider cannot run without. Declaring it required is
+     * what catches a missing one while a user is still looking at the field, rather than at cull
+     * time against settings they last saw accepted.
      */
     @Override
     public VisionProviderDescriptor describe() {
@@ -307,9 +292,8 @@ class AnthropicCuller implements VisionCuller {
      * it said.
      *
      * <p>The catch-all is what makes that true rather than intended. An endpoint is a field a user
-     * types into. The HTTP client rejects an unparseable one with an exception of its own, from no
-     * family this class could enumerate. A credential store can refuse to answer the same way.
-     * Neither has anywhere to go from the surface that asked.
+     * types into, and the HTTP client rejects an unparseable one from no family this class could
+     * enumerate. A credential store can refuse to answer the same way.
      *
      * @return {@link ProviderCheck} what the service said
      */
@@ -388,18 +372,15 @@ class AnthropicCuller implements VisionCuller {
         int culled = 0;
         int skipped = 0;
         int apiCalls = 0;
-        // Montages this run actually dispatched for, which is what the token bound is measured
-        // against. A montage resumed from an existing shard cost nothing, so counting it would hand
-        // the run an allowance it never earned.
+        // What the token bound is measured against. A montage resumed from an existing shard cost
+        // nothing, so counting it would hand the run an allowance it never earned.
         int montagesAttempted = 0;
         boolean stoppedAtCeiling = false;
         final int total = prep.entries().size();
         int ordinal = 0;
-        // Every readable sidecar is read up front, so validation sees as much of the scope as
-        // survives. That is the in-scope set the shard contract defines. Accepted shards still
-        // accumulate one montage at a time. ShardValidator's cross-shard rules (a near-dup group
-        // id reused by two montages, say) can only fire on the whole set. Earlier shards are known
-        // clean, so any fresh problem implicates the current montage.
+        // Every readable sidecar is read up front, so validation sees the whole in-scope set the
+        // shard contract defines. Accepted shards still accumulate one montage at a time, and
+        // earlier ones are known clean, so any fresh problem implicates the current montage.
         //
         // A sidecar that can't be read leaves its montage out of the map entirely. The loop below
         // then skips that montage instead of failing the whole run. See readEntries().
@@ -460,10 +441,9 @@ class AnthropicCuller implements VisionCuller {
                             final AttemptOutcome retried = this.attempt(montage, entries, retryResponse,
                                     acceptedShards, scopeSrcs, categoryNames);
                             if (retried.shard() == null) {
-                                // A cancellation requested while the retry call itself was in flight
-                                // reaches here too. Thrown only when uncancelled, so a cancel never
-                                // surfaces as a retry-failure CullException, matching the montage-loop
-                                // check above.
+                                // Thrown only when uncancelled, so a cancellation requested while
+                                // the retry call was in flight never surfaces as a retry-failure
+                                // CullException.
                                 if (!cancellation.isCancelled()) {
                                     throw retryFailedException(prep.scope(), montage, outcome.problems(),
                                             retried.problems(),
@@ -504,10 +484,10 @@ class AnthropicCuller implements VisionCuller {
      * built by the same builder the paid call uses, so the schema and system prompt are counted too
      * rather than being left out of the figure.
      *
-     * <p>One montage priced rather than all of them. The system prompt and the schema are the same
-     * for every montage in a run, so what varies is the photo table. A run's last sheet can also be
-     * shorter than a full one, which makes this an over-estimate for a scope the grid does not
-     * divide evenly, and the ceiling built on it correspondingly looser.
+     * <p>One montage priced rather than all of them, since only the photo table varies between
+     * them. A run's last sheet can be shorter than a full one, which makes this an over-estimate
+     * for a scope the grid does not divide evenly, and the ceiling built on it correspondingly
+     * looser.
      *
      * <p>Every way this can fail answers {@link SpendForecast.Unknown}. An estimate that cannot be
      * built must not be what stops a run from starting.
@@ -619,10 +599,9 @@ class AnthropicCuller implements VisionCuller {
     /**
      * Whether the run has made every call it is allowed.
      *
-     * <p>The bound is whatever the caller handed over, and the one the app builds cannot be reached
-     * by correct code: it allows two calls for every montage this run has to judge, and the loop
-     * walks that same list taking at most two each. What it catches is a defect that has stopped
-     * following the list.
+     * <p>What this catches is a defect that has stopped following the montage list. A bound
+     * allowing two calls per montage cannot be reached by a loop that walks that same list taking
+     * at most two each.
      *
      * @param ceiling {@link SpendCeiling} the run's ceiling, or null when the run is unbounded
      * @param apiCalls how many calls the run has made
@@ -714,10 +693,8 @@ class AnthropicCuller implements VisionCuller {
      * Anything it does not know follows, in the order the service gave. A model the service names
      * by a dated snapshot takes the rung of the plain id that snapshot is of.
      *
-     * <p>A surface with no recommendation to fall back on starts on the first entry. Sorting the
-     * known models ahead of the rest keeps an unknown one out of that position while any known
-     * model survives the filter. An account offering only unknown models has nothing better to
-     * start on.
+     * <p>Sorting the known models ahead of the rest keeps an unknown one out of the first position,
+     * which is where a surface with no recommendation to fall back on starts.
      *
      * @param offerable a {@link List} of {@link ModelOption}, the models this account can be offered
      * @return a {@link List} of {@link ModelOption} the same models, in the order to offer them
@@ -762,8 +739,8 @@ class AnthropicCuller implements VisionCuller {
      * recommendation nobody can select would default a picker to a model the service refuses.
      *
      * <p>The answer is the id the account was offered, which is the dated one where the service
-     * named a snapshot. Answering with this class's own id instead would name a model absent from
-     * the very list it is offered beside.
+     * named a snapshot. This class's own id would name a model absent from the list it is offered
+     * beside.
      *
      * @param offerable a {@link List} of {@link ModelOption}, the models this account can be offered
      * @return {@link String} the offered id of the recommended model, or null when it is not among
@@ -897,8 +874,8 @@ class AnthropicCuller implements VisionCuller {
     /**
      * Turns one montage's response into a candidate shard, or reports every response-level problem
      * found and returns null. Only what exists solely in the response is checked here: tile-index
-     * coverage and the name match. Everything shard-shaped stays with ShardValidator, the
-     * contract's single source of truth, which the caller runs over the accumulated set.
+     * coverage and the name match. Everything shard-shaped stays with {@link ShardValidator}, the
+     * contract's single source of truth.
      *
      * @param montage {@link String} the montage name
      * @param entries a {@link List} of {@link SidecarPhotoEntry}, the montage's sidecar photo entries
@@ -974,13 +951,11 @@ class AnthropicCuller implements VisionCuller {
      * failing the run. A sidecar names the photos its montage's tile grid shows. Without one there
      * is nothing to key the model's verdicts back to files, so that montage cannot be culled.
      *
-     * <p>Skipping it beats failing the run, because a montage that already holds a shard has a
-     * genuine repair path. The apply phase reports it as a corrupt sidecar and offers the choice of
-     * trusting that shard or setting the montage aside. Failing here would put the run out of reach
-     * of the answer to that question.
-     *
-     * <p>Damaged content and a read that merely failed are both tolerated, matching what the apply
-     * phase does with the same sidecar. Neither is a judgement this class is placed to make.
+     * <p>Skipping it beats failing the run, because the apply phase reports a corrupt sidecar and
+     * offers the choice of trusting any existing shard or setting the montage aside. Failing here
+     * would put the run out of reach of the answer to that question. Damaged content and a read
+     * that merely failed are both tolerated, neither being a judgement this class is placed to
+     * make.
      *
      * @param sidecarPath {@link Path} path of the montage's sidecar
      * @return an {@link Optional} {@link List} of {@link SidecarPhotoEntry} the entries, or empty if unreadable
@@ -998,8 +973,8 @@ class AnthropicCuller implements VisionCuller {
      *
      * <p>A response the ceiling cut short is reported as that, before the parse. Its text is a
      * verdict list that stops mid-token, so parsing it would blame the model's JSON for a budget
-     * that ran out. Whoever reads the failure needs those apart. One is a model that cannot follow
-     * a schema. The other is a sheet whose verdicts and reasoning together do not fit.
+     * that ran out. A model that cannot follow a schema and a sheet whose verdicts and reasoning
+     * together do not fit call for different answers.
      *
      * @param response {@link Message} the model's response to parse
      * @param problems a {@link List} of {@link String}, accumulator for problems found, mutated by this call
@@ -1056,17 +1031,13 @@ class AnthropicCuller implements VisionCuller {
     /**
      * Assembles one montage's complete API request. The image block precedes the text turn per
      * Anthropic's vision guidance: models resolve references into an image better when the image
-     * comes first. The schema rides along as a structured-output format, so the response text is
-     * meant to be the verdict JSON itself rather than prose around it. A request for a format is not
-     * a guarantee of one. So {@link #parse} records a problem rather than throwing when the response
-     * is not one, and that problem is what drives the corrective retry. No sampling
-     * parameters - current Anthropic models reject them outright.
+     * comes first. The schema rides along as a structured-output format, which is a request rather
+     * than a guarantee, so {@link #parse} records a problem instead of throwing when the response
+     * is not one. No sampling parameters - current Anthropic models reject them outright.
      *
      * <p>No thinking parameter and no effort parameter either, so each model reasons at whatever
-     * depth it reasons by default. Omitting both is the only shape every current model accepts. A
-     * parameter asking for a particular depth is refused by some model, or by some setting of one.
-     * Whether depth helps a model read a contact sheet is unmeasured, so this asks for as little as
-     * it can.
+     * depth it reasons by default. Omitting both is the only shape every current model accepts, and
+     * whether depth helps a model read a contact sheet is unmeasured.
      *
      * @param model {@link String} the model id to request
      * @param systemPrompt {@link String} the shared system prompt
@@ -1144,18 +1115,10 @@ class AnthropicCuller implements VisionCuller {
      * cross-verdict and cross-shard rules have no expression in a schema describing one verdict.
      *
      * <p>A string constraint here shapes the answer rather than refusing it, so its direction
-     * decides whether it is safe. A floor only steers an empty value away. That is what
-     * {@code minLength} does for a reason, and what the slug's character rule does for a shape.
-     *
-     * <p>A ceiling is the unsafe direction, so the slug's 24-character cap stays with the validator.
-     * A {@code maxLength} would cut a long slug to fit rather than refuse it. Two truncated-alike
-     * groups then share a Duplicates folder whenever their keepers fall in the same year-month.
-     * The validator catches that only when both groups brought a chosen keeper, since the merged id
-     * carries two and {@code WrongChosenCount} fires. A merge where one side brought only rejects
-     * passes and lands silently. A refusal costs one retry; that costs the user photos in a folder
-     * they never chose. The {@code minLength} below is a floor rather than a target, so an
-     * ordinary reason is untouched and only an empty one is
-     * steered away from.
+     * decides whether it is safe. A floor only steers an empty value away, which is what
+     * {@code minLength} does for a reason and the slug's character rule does for a shape. A ceiling
+     * truncates instead, so the slug's 24-character cap stays with the validator - see
+     * {@link #GROUP_SLUG} for what a silent truncation costs.
      *
      * @param categories a {@link List} of {@link String}, the run's recorded category names
      * @return {@link JsonOutputFormat.Schema} the schema to send with every montage in this run
@@ -1192,10 +1155,9 @@ class AnthropicCuller implements VisionCuller {
      *
      * <p>Every branch declares every field a verdict may carry, and the branches differ only in
      * what they pin action to and what they demand. Narrowing a branch to the fields its own action
-     * needs would refuse a keep that volunteered a reason. Nothing downstream objects to that one:
-     * {@link #collectVerdict} builds a keep from its file alone, reading neither reason, group nor
-     * chosen_reason. The point here is to stop paying for refusals, so a branch that invented one
-     * would work against it.
+     * needs would refuse a keep that volunteered a reason, which nothing downstream objects to. The
+     * point here is to stop paying for refusals, so a branch that invented one would work against
+     * it.
      *
      * @param action a {@link Map} of {@link String} to {@link Object}, the sub-schema pinning this branch's action
      * @param alsoRequired a {@link List} of {@link String}, the fields this action needs beyond the common three

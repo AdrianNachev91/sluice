@@ -82,7 +82,7 @@ placeholder an empty result does.
 flowchart TD
     A["renderRaster(file, tileSize)<br/>(Thumbnailator/ImageIO,<br/>auto-oriented, aspect-preserved)"] --> B{"succeeds?"}
     B -- yes --> C(["real tile,<br/>unreviewable = source < 640px<br/>(separate header-only dimension read)"])
-    B -- no --> D["renderExifThumbnail(file, tileSize)"]
+    B -- no --> D["exifThumbnailResult(file, tileSize)"]
     D --> E{"file has a standard<br/>EXIF embedded thumbnail?"}
     E -- yes --> F["extract + decode those<br/>bytes directly as a JPEG"]
     F --> G{"succeeds?"}

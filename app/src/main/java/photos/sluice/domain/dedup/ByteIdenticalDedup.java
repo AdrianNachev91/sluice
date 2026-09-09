@@ -18,8 +18,7 @@ import java.util.Set;
 public final class ByteIdenticalDedup {
 
     /**
-     * The three-way split produced by {@link ByteIdenticalDedup#plan}: files to route to Sorted,
-     * files redundant against the library, and duplicates found within the batch itself.
+     * The three-way split produced by {@link ByteIdenticalDedup#plan}.
      */
     public record DedupPlan(List<MediaFile> toSort, List<MediaFile> redundantVsLibrary,
                             List<MediaFile> withinBatchDuplicates) {
@@ -52,15 +51,11 @@ public final class ByteIdenticalDedup {
         final Set<String> seenInBatch = new HashSet<>();
 
         for (final HashedMedia hashed : media) {
-            // Library redundancy is checked before in-batch dedup: a hash already present in the
-            // library goes to redundantVsLibrary even if it also repeats within the batch, so
-            // every matching occurrence lands there rather than only the first.
+            // Library redundancy first, so a hash the library already holds sends every one of its
+            // occurrences to redundantVsLibrary rather than only the first.
             if (libraryHashes.contains(hashed.sha256())) {
                 redundantVsLibrary.add(hashed.file());
             } else if (!seenInBatch.add(hashed.sha256())) {
-                // Set.add returns false when the hash was already present, so this one call both
-                // checks and records "have we seen this hash before" - reaching this branch means
-                // it had.
                 withinBatchDuplicates.add(hashed.file());
             } else {
                 toSort.add(hashed.file());

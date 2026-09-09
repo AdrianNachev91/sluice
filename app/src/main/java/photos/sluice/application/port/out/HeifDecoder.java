@@ -13,8 +13,8 @@ import java.util.Optional;
 public interface HeifDecoder {
 
     /**
-     * Empty means no decoder is available or the file couldn't be decoded - callers degrade
-     * gracefully (flag unreviewed-heic, still date-sort) rather than failing the whole run.
+     * Empty means no decoder is available or the file could not be decoded, letting a caller
+     * degrade rather than fail the whole run.
      *
      * @param file {@link Path} the HEIF/AVIF/HEIC file to decode
      * @return an {@link Optional} {@link BufferedImage}, or empty if decoding is unavailable or fails

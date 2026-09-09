@@ -11,7 +11,7 @@ import java.util.Set;
 
 /**
  * Finds Takeout JSON sidecars that are now orphaned: no media file left in the sidecar's own
- * directory owns it. Runs after the per-file routing pass, independently of it.
+ * directory owns it.
  *
  * <p>A sidecar counts as spent here purely because its media is gone, regardless of which
  * date-resolution source actually won for that file.
@@ -19,39 +19,33 @@ import java.util.Set;
  * <p>Everything returned here gets hard-deleted by the caller, so the decision is deliberately
  * one-sided. Three things keep a sidecar alive, and any one of them is enough. A remaining media
  * file is paired to it, a remaining media file's name claims it, or it could never have been a
- * per-photo sidecar at all. Only a sidecar none of those claims is swept.
+ * per-photo sidecar at all.
  *
  * <p>Flowchart: {@code app/docs/design/domain/scan/sidecar-sweep.md}.
  */
 public final class SidecarSweep {
 
     // Google truncates a sidecar's name to this length. Measured, not guessed. A real export of
-    // 14,789 sidecars held 773 cut names, every one of them exactly 46 characters. Every one had
-    // media beside it whose own name started with that cut. Community sources describe the same cap
+    // 14,789 sidecars held 773 cut names, every one of them exactly 46 characters. Each had media
+    // beside it whose own name started with that cut. Community sources describe the same cap
     // (GooglePhotosTakeoutHelper issue #353, metadatafixer.com). Treat it as approximate.
     //
-    // The length is doing two jobs below, both of them about a name too mangled to read normally. A
-    // cut name is a raw prefix of the media filename, so a prefix match at this length or beyond is
-    // evidence of truncation rather than coincidence. And a cut name usually loses its media
-    // extension, which is otherwise the signal that a .json was ever a sidecar at all. Reaching
-    // this length is what separates such a name from an album descriptor.
-    //
-    // Public: a test reuses this exact threshold rather than hard-coding a copy that could drift
-    // out of sync.
+    // The length does two jobs below, both about a name too mangled to read normally. A cut name is
+    // a raw prefix of the media filename, so a prefix match at this length or beyond is evidence of
+    // truncation rather than coincidence. And a cut name usually loses its media extension, which is
+    // otherwise the only signal that a .json was ever a sidecar at all.
     public static final int MIN_TRUNCATED_OWNER_KEY_LENGTH = 46;
 
     /**
      * remainingMedia and remainingJsonPaths describe the Inbox as it stands right now. This
      * method has no opinion on how the caller derived "remaining," and does no scanning itself.
-     * Returns the subset of remainingJsonPaths that no remaining media file owns.
      *
-     * <p>sidecarsByMedia is the pairing the caller already computed when it scanned. It is the
-     * authoritative answer to which sidecar a media file reads its date from. A sidecar it still
-     * maps a remaining media file to is by definition still needed. Passing it in is what keeps
-     * the sweep from re-deriving that relationship and getting a different answer.
+     * <p>sidecarsByMedia is the pairing already computed at scan time, and the authoritative answer
+     * to which sidecar a media file reads its date from. Taking it rather than re-deriving it is
+     * what stops two derivations of the same relationship disagreeing over a delete.
      *
      * <p>Its sidecar paths must be the same {@link Path} values remainingJsonPaths holds, since
-     * membership is decided by equality. Both come from one scan of the same tree, so they are.
+     * membership is decided by equality.
      *
      * @param remainingMedia a {@link List} of {@link Path} media files still present in the Inbox
      * @param remainingJsonPaths a {@link List} of {@link Path} sidecar JSON files still present in the Inbox
@@ -87,8 +81,7 @@ public final class SidecarSweep {
     }
 
     /**
-     * The keep rules, cheapest first. Each covers a case the others miss, so the sweep asks all of
-     * them before giving up on a sidecar.
+     * The keep rules, cheapest first. Each covers a case the others miss.
      *
      * @param json {@link Path} the sidecar being judged
      * @param pairedToRemainingMedia a {@link Set} of {@link Path} sidecar paths some remaining media file is paired to

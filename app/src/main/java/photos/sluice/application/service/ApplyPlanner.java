@@ -162,8 +162,7 @@ public class ApplyPlanner {
      * <p>Both lists are checked, because both are files on disk that something other than this app
      * could have written. index.json carries the unreviewable entries. The sidecars carry the
      * {@code src} set. A decision's own file is only ever trusted by way of that set, so checking
-     * the set is what covers every decision too. A prep dir whose sidecars are intact but whose
-     * index.json was edited, or the reverse, is caught either way round.
+     * the set is what covers every decision too.
      *
      * <p>The two lists are merged before checking, so one escaping path named by both is reported
      * once. Twice would read as two separate things to put right.
@@ -438,8 +437,7 @@ public class ApplyPlanner {
 
     /**
      * classify()'s verdict for one decision. Done carries the {@link MoveRecord} that proved it, as
-     * a non-null component. A decision that isn't Done simply has no Done case to carry one, so
-     * there is nothing for a caller to null-check.
+     * a non-null component, so no caller ever null-checks one.
      */
     sealed interface Status {
 

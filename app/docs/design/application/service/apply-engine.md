@@ -101,11 +101,15 @@ near-dup group's folder (given the group's chosen file as its anchor - see `near
 directories, so agreement between the two is what keeps an already-moved file from looking
 permanently lost on reconcile. See `reconcile-engine.md`.
 
-All three refuse a destination that does not land strictly inside the root it resolved from. Every
-segment they are handed is already constrained upstream. A category is checked by `CategoryName`
-when the prep index is read, a group id by `ShardValidator`'s slug rule, a year-month by its own
-digit pattern. The refusal is still the last line before a move, and the only place the resolved
-path itself is compared against its root.
+A destination built out of a segment is refused unless it lands strictly inside the root it resolved
+from. That covers `duplicatesDir()`, `unreviewableDir()`, and `destinationDirFor()` for a review
+category. The library category is the exception. It resolves a fixed folder name under the library
+root, so there is no segment to escape with and no refusal there.
+
+Every segment the others are handed is already constrained upstream. A category is checked by
+`CategoryName` when the prep index is read, a group id by `ShardValidator`'s slug rule, a year-month
+by its own digit pattern. The refusal is still the last line before a move, and the only place the
+resolved path itself is compared against its root.
 
 `requireUnderLibrary()` guards the one place a path reaches the library hash index without this
 class having resolved it. `backfillClassificationWrite()` takes that path off the move-record log.

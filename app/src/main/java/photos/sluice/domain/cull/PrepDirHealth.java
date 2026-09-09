@@ -7,9 +7,7 @@ import java.util.List;
  * an overall state, plus every currently open finding.
  *
  * <p>Findings are ordered by repair dependency - AUTO-remedied first, then CHOICE, then the
- * informational NONE ones - rather than just by severity. The same shape backs both a proactive
- * dashboard read and a failed apply's own {@link photos.sluice.application.port.out.ApplyException}.
- * The UI panel for either looks identical.
+ * informational NONE ones - rather than just by severity.
  */
 public record PrepDirHealth(State state, List<Finding> findings) {
 

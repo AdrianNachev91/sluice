@@ -23,9 +23,7 @@ import java.util.regex.Pattern;
  * no date at all, and never a guessed one.
  *
  * <p>Lines written before dates existed carry a name and a reason only. Both shapes are read, and
- * the two readings are deliberately different. A date is looked for across every line at once,
- * which only a dated line can answer. Whether a photo is listed is asked about one name, which is
- * the only way to answer it for a filename holding the separator itself.
+ * the two readings are deliberately different.
  */
 public final class ReasonNotes {
 
@@ -66,9 +64,9 @@ public final class ReasonNotes {
     /**
      * Whether a filename is one this app wrote about the photos in a folder.
      *
-     * <p>Two shapes, because two things write one. A sort and a sift both append to
-     * {@link #FILE_NAME}. A sift also writes one per near-copy group, named for the photo that group
-     * kept, so {@code IMG_1.jpg.txt} is the note about {@code IMG_1.jpg}.
+     * <p>Two shapes. One is {@link #FILE_NAME} itself. The other is a near-copy group's own note,
+     * named for the photo that group kept, so {@code IMG_1.jpg.txt} is the note about
+     * {@code IMG_1.jpg}.
      *
      * <p>The photo a note is named for does not have to still be beside it. A reader who deleted the
      * kept copy by hand would otherwise leave its note behind for good, since nothing else ever

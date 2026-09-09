@@ -60,8 +60,7 @@ class PageHeaderTest {
     }
 
     // Text a reader can select has to hold focus to be selected, and it is a text input control
-    // like the fields are. Read as one, a click on a help line would leave Enter dead until the
-    // reader clicked back into something they could type in.
+    // like the fields are. Read as one, a click on a help line would leave Enter dead.
     @Test
     void enterStillSavesAfterAClickOnTextThatIsOnlyForReading() throws Exception {
         final Page page = onFxThread(PageHeaderTest::aPage);

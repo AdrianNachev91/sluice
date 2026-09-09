@@ -31,7 +31,7 @@ import java.util.Set;
  * re-derive an answer somebody gave.
  *
  * <p>Every CHOICE remedy lands in the ledger rather than editing a shard or index.json. Producer
- * output stays byte-pristine, which is what keeps the audit trail honest.
+ * output stays byte-pristine, so the trail still records what the producer actually said.
  *
  * <p>Naming and parsing live together on purpose. Each file's line shapes are only unambiguous as a
  * closed set, and that reasoning only holds while a single class owns both sides of it.
@@ -142,7 +142,7 @@ public class MoveLedger implements LedgerReader {
 
     /**
      * Records a move inferred after the fact from disk state, the original log having been lost.
-     * The provenance marker keeps a rebuilt log honest about which entries were witnessed.
+     * The provenance marker is what separates such a line from a witnessed one.
      *
      * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
      * @param source {@link Path} the file whose move was inferred
@@ -282,9 +282,7 @@ public class MoveLedger implements LedgerReader {
      * carries its subject first and its marker second, so one field decides which kind a line is. A
      * line whose shape is not recognized, or whose shape matches but whose subject or resolution
      * field is garbled, is silently ignored the same way. One bad line then costs one lost answer
-     * rather than the whole file. The disposition it named simply reads as never given, and the run
-     * diagnoses to its real state with the original finding re-raised, where the remedies work
-     * normally.
+     * rather than the whole file, and the disposition it named reads as never given.
      *
      * @param line {@link String} one line of the choices file
      * @param skipped a {@link Set} of {@link Path} accumulated sources the user gave up on

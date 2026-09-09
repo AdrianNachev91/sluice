@@ -79,9 +79,9 @@ final class ShardTallyCalculator {
     /**
      * Both answers about one prep dir, from a single walk of it.
      *
-     * <p>A watcher wants readiness and a card wants the tally, and asking separately would open
-     * every shard twice per poll. The two share every read. Whether a shard is there and parses is
-     * what readiness is, and it is also the first half of what the tally counts.
+     * <p>Asking for the two separately would open every shard twice. They share every read: whether
+     * a shard is there and parses is what readiness is, and it is also the first half of what the
+     * tally counts.
      *
      * @param prepDir {@link Path} the prep dir to read
      * @return {@link Reading} whether it is worth resuming, and how far through its sheets it is

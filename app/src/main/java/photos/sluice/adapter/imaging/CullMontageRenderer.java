@@ -40,13 +40,15 @@ import java.util.stream.Stream;
  *
  * <p>{@link MontageBuilder} itself never sees the unreviewable flag. This is the only place that
  * acts on it.
+ *
+ * <p>Flowcharts, cancellation and the scenario table:
+ * {@code app/docs/design/adapter/imaging/cull-montage-renderer.md}.
  */
 @Component
 public class CullMontageRenderer implements MontageRenderer {
 
-    // WhatsApp's received-photo filename convention. A reliable non-vision prior for received
-    // clutter (documents, screenshots, memes, product shots), not auto-junk. Just a signal for the
-    // culler to scrutinize harder, at zero extra image-token cost.
+    // WhatsApp's received-photo filename convention. A non-vision prior for received clutter, not
+    // auto-junk: a signal for the culler to scrutinize harder, at no extra image-token cost.
     private static final Pattern RECEIVED_PATTERN = Pattern.compile("^IMG-\\d{8}-WA\\d", Pattern.CASE_INSENSITIVE);
 
     private final TileRenderer tileRenderer;
@@ -138,22 +140,18 @@ public class CullMontageRenderer implements MontageRenderer {
         final List<CullCandidate> ordered =
                 this.cullScopeSelector.order(this.collectCandidates(photosRoot, scope), scope);
 
-        // Render every candidate's tile up front and split off the unreviewable ones here, before
-        // any batching decision is made. MontageBuilder composes whatever list it's handed with no
-        // concept of "skip this one". Once photos are grouped into a montage, there's no way to pull
-        // one back out without reshuffling every batch after it. Splitting first means batch
-        // boundaries are only ever computed over photos that will actually appear. Unreviewable
-        // files are never moved here (see PrepDir's own doc comment). They're only reported, so a
-        // caller has something to act on instead of the file just silently staying wherever it
-        // already is.
+        // Render every tile up front and split off the unreviewable ones before any batching
+        // decision is made. Once photos are grouped into a montage there is no way to pull one back
+        // out without reshuffling every batch after it. Splitting first means batch boundaries are
+        // only ever computed over photos that will actually appear. An unreviewable file is never
+        // moved here, only reported.
         //
-        // This is the long pass (one HEIC CLI decode per candidate), and it runs entirely before
-        // clearPrepDir() below. A cancellation seen here leaves disk fully untouched - there is no
-        // partial prep dir for a caller to resume from.
-        // Counted in photos, which is the number a reader can check against their own folder. The
-        // sheets written afterwards are a handful of near-instant steps. Counting them would make
-        // the total larger than the photo count and mean nothing anybody could point at. How many
-        // sheets a run produced is what the result card reports.
+        // This is the long pass, one HEIC CLI decode per candidate, and it runs entirely before
+        // clearPrepDir() below. A cancellation seen here leaves disk untouched.
+        //
+        // Progress is counted in photos, the number a reader can check against their own folder.
+        // The sheets written afterwards are near-instant, and counting them would push the total
+        // past the photo count for no gain.
         final List<RenderedCandidate> rendered = new ArrayList<>();
         for (final CullCandidate candidate : ordered) {
             if (cancellation.isCancelled()) {
@@ -171,11 +169,9 @@ public class CullMontageRenderer implements MontageRenderer {
                 .map(candidate -> candidate.candidate().path())
                 .toList();
 
-        // logs/sift-prep/<scopeTag> is cleared before writing, not appended to. A prior run of the
-        // same scope may have produced more montages than this run does, if fewer photos are
-        // reviewable this time around. A stale montage-002.* from that prior run would otherwise
-        // survive alongside this run's smaller output, with nothing to indicate it's no longer
-        // current.
+        // Cleared before writing, not appended to. A prior run of the same scope may have produced
+        // more montages than this one does. A stale montage-002.* would otherwise survive beside
+        // this run's smaller output, with nothing to tell the two apart.
         final String scopeTag = CullScope.tag(scope);
         final Path prepDir = this.pathsPort.cullPrep().resolve(scopeTag);
         clearPrepDir(prepDir);
@@ -184,11 +180,11 @@ public class CullMontageRenderer implements MontageRenderer {
         final int tilesPerMontage = config.tilesPerRow() * config.tilesPerRow();
         final List<String> entries = new ArrayList<>();
         for (int start = 0; start < reviewable.size(); start += tilesPerMontage) {
-            // Checked per montage. Whatever montages this run wrote before stopping are cleared
-            // again on the way out, so a cancelled render leaves no directory behind at all. A
-            // scope is occupied by any prep dir holding files, and a half-rendered one holds
-            // nothing worth occupying it with. No index.json was ever written, so nothing here
-            // records a single decision. The images cost only the time to render them again.
+            // Whatever montages this run wrote before stopping are cleared on the way out, so a
+            // cancelled render leaves no directory behind at all. A scope is occupied by any prep
+            // dir holding files, and a half-rendered one holds nothing worth occupying it with. No
+            // index.json was ever written, so it records not one decision, and its images cost only
+            // the time to render them again.
             if (cancellation.isCancelled()) {
                 clearPrepDir(prepDir);
                 return null;
@@ -203,8 +199,8 @@ public class CullMontageRenderer implements MontageRenderer {
         }
 
         // photos reports reviewable.size(), not the raw count found in scope. An unreviewable file
-        // never appears in any montage or sidecar. Counting it here would make this number
-        // disagree with what a caller can actually see on disk.
+        // appears in no montage or sidecar, so counting it would make this number disagree with
+        // what is on disk.
         //
         // The category set is read once, here, and travels with the run from now on. This is the
         // last moment it is a live value rather than a recorded one, and the only place a card

@@ -156,8 +156,7 @@ class YamlConfigFileRepairTest {
                 .isInstanceOf(MalformedSettingsException.class);
     }
 
-    // The file parses, so the refusal cannot come from the parser. Overwriting what the user wrote
-    // as something else is what the read refuses, and a repair inherits that.
+    // The file parses, so the refusal cannot come from the parser.
     @Test
     void refusesToRemoveASettingFromUnderAnEntryThatIsNotAGroup(@TempDir final Path dir) throws IOException {
         final Path file = dir.resolve("config.yml");
@@ -170,8 +169,6 @@ class YamlConfigFileRepairTest {
         assertThat(Files.readString(file)).isEqualTo(original);
     }
 
-    // The moment is the only thing telling a folder of these apart. Picking the right one to retype
-    // from is what somebody is there to do.
     @Test
     void movesTheFileAsideUnderTheMomentItWasSetAside(@TempDir final Path dir) throws IOException {
         final Path file = dir.resolve("config.yml");
@@ -213,9 +210,6 @@ class YamlConfigFileRepairTest {
                 .hasContent("second\n");
     }
 
-    // Nothing removes the kept files, so the names for one moment can all be taken, and the user is
-    // the only one who can free any. So the refusal names the folder and what to delete in it,
-    // rather than reporting that a move failed.
     @Test
     void aMomentWithNoFreeNameLeftRefusesInWordsTheUserCanActOn(@TempDir final Path dir) throws IOException {
         final Path file = dir.resolve("config.yml");

@@ -54,8 +54,9 @@ class NioMediaStoreTest {
         assertThat(MediaStore.isIncompleteTransfer(root.resolve("IMG_1234.jpg"))).isFalse();
     }
 
-    // TRUNCATE_EXISTING is what makes the part file a fresh one. Without it a copy appends to what
-    // an earlier abandoned run left under that name. The photo then lands with a tail.
+    // TRUNCATE_EXISTING is what makes the part file a fresh one. Without it the write starts at
+    // offset 0 and leaves whatever an earlier abandoned run wrote past that point. The photo then
+    // lands with a tail.
     @Test
     void aCopyOverAPartFileLeftByAnEarlierRunWritesOnlyTheSourceBytes(@TempDir final Path root)
             throws IOException {
@@ -290,7 +291,7 @@ class NioMediaStoreTest {
     }
 
     // Resolving through the link is what lets two configured roots naming one folder be compared as
-    // plain paths. Windows junctions behave the same way.
+    // plain paths.
     @Test
     void realDirectoryFollowsALinkToItsTarget(@TempDir final Path root) throws IOException {
         final Path target = Files.createDirectory(root.resolve("target"));
@@ -353,10 +354,6 @@ class NioMediaStoreTest {
         assertThat(this.store.readLines(missing)).isEmpty();
     }
 
-    // A caller that degrades around damaged content keys off this exact cause to tell it apart from
-    // a file that is merely locked. So holding it is the adapter's job, not a side effect of how a
-    // line happens to get decoded. Substituting replacement characters instead would look like a
-    // successful read of a file whose real content is gone.
     @Test
     void readLinesOnBytesThatAreNotUtf8ThrowsWithADecodeFailureCause(@TempDir final Path root) throws IOException {
         final Path file = root.resolve("choices.log");
@@ -451,7 +448,6 @@ class NioMediaStoreTest {
         assertThat(root.resolve("holiday.jpg")).hasContent("holiday");
     }
 
-    // An import rests the safety of its part files on this refusal.
     @Test
     void copyToRefusesANameAlreadyTakenRatherThanReplacingIt(@TempDir final Path root) throws IOException {
         Files.writeString(root.resolve("holiday.jpg"), "the one being copied");

@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 // Everything here runs on the FX thread, because resolving a look reads the desktop's preferences
-// and that call refuses any other thread. Which is also why nothing outside adapter/ui resolves one.
+// and that call refuses any other thread.
 class ThemeSelectionTest {
 
     @BeforeAll
@@ -29,10 +29,10 @@ class ThemeSelectionTest {
         runOnFxThread(ThemeSelection::clear);
     }
 
-    // Only as strong as the machine it runs on. Both sides read the same desktop scheme. So an
-    // implementation ignoring the scheme, and hardcoding whichever look the desktop is set to, would
-    // pass here. Probed on a light desktop: hardcoding DARK fails this. On a dark desktop it would
-    // not, and nothing in the suite would catch it. Setting the scheme is not ours to do.
+    // Only as strong as the machine it runs on. Both sides read the same desktop scheme, so an
+    // implementation hardcoding whichever look the desktop is set to would pass here. On a light
+    // desktop, hardcoding DARK fails this. On a dark desktop it would not. Setting the scheme is
+    // not ours to do.
     @Test
     void followsTheDesktopUntilAChoiceIsSet() throws Exception {
         assertThat(onFxThread(ThemeSelectionTest::effectiveLook)).isEqualTo(onFxThread(ThemeSelectionTest::desktopLook));
@@ -62,7 +62,6 @@ class ThemeSelectionTest {
         assertThat(afterReturning).isEqualTo(onFxThread(ThemeSelectionTest::desktopLook));
     }
 
-    // The whole point of the property: a window binds once and is told, rather than polling.
     @Test
     void watchersAreToldWhenTheChoiceChanges() throws Exception {
         final List<Theme> seen = onFxThread(() -> {

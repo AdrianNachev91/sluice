@@ -66,12 +66,10 @@ class TileRendererTest {
     }
 
     // A real CC0 fixture from Wikimedia Commons (SVG_Gradient.svg), exercising Batik against
-    // actual gradient/stop/transform features, not just a synthesized flat rectangle. Its root
-    // <svg> element declares only a viewBox="0 0 300 200", with no width/height attributes - a
-    // common, valid SVG authoring style. Batik's own default sizing cannot handle that style
-    // correctly (verified: without svgAspectRatio's explicit hints, this fixture rendered visibly
-    // stretched into a square). The exact 224x150 here asserts that the 3:2 aspect ratio was
-    // actually preserved, not just that some bounded image came out.
+    // actual gradient, stop and transform features rather than a synthesized flat rectangle. Its
+    // root svg element declares only a viewBox, with no width or height attributes, which is a
+    // common and valid authoring style. Batik's own default sizing renders that stretched into a
+    // square unless svgAspectRatio hands it explicit hints.
     @Test
     void rendersARealGradientSvgFixturePreservingItsViewBoxAspectRatio() {
         final TileResult result = this.renderer.render(FIXTURES.resolve("gradient.svg"), TILE_SIZE);
@@ -81,11 +79,11 @@ class TileRendererTest {
         assertThat(result.image().getHeight()).isEqualTo(150);
     }
 
-    // Many real-world SVGs (Illustrator exports especially) carry the standard SVG 1.1 public
-    // DOCTYPE prolog. A blanket disallow-doctype-decl - an earlier draft of the XXE defense -
-    // would have made this file fail XML parsing entirely, silently falling back to the
-    // square-guess aspect ratio despite being perfectly legitimate. The narrower
-    // external-entity-blocking defense parses it correctly while still rejecting XXE attacks.
+    // Many real-world SVGs, Illustrator exports especially, carry the standard SVG 1.1 public
+    // DOCTYPE prolog. A blanket disallow-doctype-decl was rejected as the XXE defense for that
+    // reason. It fails XML parsing on a perfectly legitimate file, then falls back silently to the
+    // square-guess aspect ratio. Blocking external entities alone parses this correctly and still
+    // rejects XXE.
     @Test
     void aDoctypeDeclaredSvgStillGetsItsRealAspectRatio() {
         final TileResult result = this.renderer.render(FIXTURES.resolve("doctype-viewbox-only.svg"), TILE_SIZE);
@@ -95,10 +93,8 @@ class TileRendererTest {
         assertThat(result.image().getHeight()).isEqualTo(TILE_SIZE / 4);
     }
 
-    // A real file in this project's own library is a PNG mislabeled with an .svg extension. Batik
-    // correctly fails to parse it as XML, and the raster fallback recovers a real tile instead of
-    // a placeholder. Verified against the actual file (defqon_2027_overlay.svg) rather than a
-    // synthesized case.
+    // A real mislabelling found in this project's own media: a PNG carrying an .svg extension.
+    // Batik fails to parse it as XML, and the raster fallback is what recovers a tile.
     @Test
     void aFileWithSvgExtensionThatIsActuallyPngFallsBackToRasterDecode() {
         final TileResult result = this.renderer.render(FIXTURES.resolve("defqon_2027_overlay.svg"), TILE_SIZE);
@@ -117,14 +113,11 @@ class TileRendererTest {
     }
 
     // TwelveMonkeys can read this file's embedded-preview dimensions but not decode its pixel
-    // data - a Missing TIFF tag JPEGQTables failure on the "old-style JPEG" TIFF compression,
-    // verified empirically against the real fixture. renderRaster alone would fall back to a
-    // placeholder. But the file also carries a standard EXIF embedded thumbnail, a complete,
-    // independently decodable JPEG blob per the EXIF spec, unlike the TIFF-compressed main image.
-    // renderExifThumbnail recovers that thumbnail as a real tile instead - a real, legible photo,
-    // verified empirically. Its 160x120 source is below the judgeable bar (this old 2004-era
-    // camera's recoverable preview really is that small), so unreviewable is still true even
-    // though real pixels came back - contrast with the modern Sony fixture below.
+    // data, failing on a missing TIFF JPEGQTables tag in the old-style JPEG compression. The file
+    // also carries a standard EXIF embedded thumbnail, which is an independently decodable JPEG
+    // blob per the spec, so that is what comes back instead. This 2004-era camera's recoverable
+    // preview really is only 160x120, below the judgeable bar, so unreviewable stays true even
+    // though real pixels came back.
     @Test
     void realCanonCr2FixtureFallsBackToItsExifThumbnailWhenThePrimaryDecodeFails() {
         final Path cr2 = FIXTURES.resolve("raw-samples/canon-eos-20d.cr2");
@@ -136,11 +129,9 @@ class TileRendererTest {
         assertThat(result.image().getHeight()).isEqualTo(TILE_SIZE * 120 / 160);
     }
 
-    // A current-generation (2023) Sony ILCE-6700 - unlike the old Canon/Nikon fixtures above, its
-    // EXIF embedded thumbnail is a near-full-resolution 6192x4128, well above the judgeable bar.
-    // Verified empirically: this is a real, sharp, clearly judgeable landscape photo, not a tiny
-    // icon. Confirms modern camera files are not assumed to share the old-camera tiny-preview
-    // problem - the same code path recovers a genuinely reviewable tile here.
+    // A 2023 Sony ILCE-6700, whose EXIF embedded thumbnail is a near-full-resolution 6192x4128,
+    // well above the judgeable bar. So the tiny-preview problem is the old cameras', not a
+    // property of the RAW path itself.
     @Test
     void realModernSonyArwFixtureRecoversAJudgeablePreview() {
         final Path arw = FIXTURES.resolve("raw-samples/sony-ilce-6700.arw");
@@ -151,10 +142,9 @@ class TileRendererTest {
         assertThat(Math.max(result.image().getWidth(), result.image().getHeight())).isEqualTo(TILE_SIZE);
     }
 
-    // Fast, isolated coverage of the length-sanity guard itself. The real CR2 fixture above only
-    // ever exercises one legitimate small value (6162 bytes), so a flipped comparison or a dropped
-    // cap wouldn't be caught by that test alone. Boundary values are the cap itself (20MB, 20971520
-    // bytes) and one past it, alongside zero/negative and a realistic small value.
+    // The real RAW fixtures only ever exercise one legitimate small value, so a flipped comparison
+    // or a dropped cap would not be caught by them. The values below are the cap itself and one
+    // past it, alongside zero, negative and a realistic small value.
     @ParameterizedTest
     @CsvSource({
             "0, false",
@@ -167,10 +157,8 @@ class TileRendererTest {
         assertThat(TileRenderer.isPlausibleThumbnailLength(length)).isEqualTo(expected);
     }
 
-    // A fake file with a RAW extension but genuinely unparseable content (not a real image at
-    // all) has no EXIF thumbnail to fall back to either. Both fallbacks are exhausted here, so a
-    // placeholder is correct. Distinguishes "primary decode fails but a thumbnail rescues it"
-    // (CR2 above) from "nothing at all is recoverable" (this case).
+    // A RAW extension over content that is not an image at all, so there is no EXIF thumbnail to
+    // fall back to either. Both fallbacks are exhausted, which is what makes a placeholder right.
     @Test
     void aFileWithRawExtensionAndNoRealImageContentAtAllFallsBackToAPlaceholder() {
         final TileResult result = this.renderer.render(FIXTURES.resolve("fake-corrupt.cr2"), TILE_SIZE);
@@ -180,11 +168,9 @@ class TileRendererTest {
         assertThat(result.image().getHeight()).isEqualTo(TILE_SIZE);
     }
 
-    // TwelveMonkeys successfully decodes this file's one embedded image directly via the primary
-    // raster path: a real, if low-quality, 160x120 thumbnail, verified empirically against the
-    // real fixture. That source is below the judgeable bar, so unreviewable is true even though a
-    // real (if tiny) tile came back - the primary-path case the whole judgeability check exists
-    // for, not just the EXIF-thumbnail fallback.
+    // TwelveMonkeys decodes this file's one embedded image on the primary raster path, a real if
+    // low-quality 160x120 thumbnail. That source is below the judgeable bar, so this is the
+    // primary path's own version of the case, not the EXIF-thumbnail fallback's.
     @Test
     void realNikonNefFixtureDecodesARealButTooSmallEmbeddedThumbnail() {
         final Path nef = FIXTURES.resolve("raw-samples/nikon-d40.nef");
@@ -196,9 +182,9 @@ class TileRendererTest {
         assertThat(result.image().getHeight()).isEqualTo(TILE_SIZE * 120 / 160);
     }
 
-    // Real WebP sample from Google's own official, permissively-licensed WebP gallery
-    // (developers.google.com/speed/webp/gallery1). Confirms the added TwelveMonkeys imageio-webp
-    // dependency actually decodes real WebP bytes, not just that a reader is present.
+    // Real WebP sample from Google's own permissively-licensed WebP gallery
+    // (developers.google.com/speed/webp/gallery1), so this proves the imageio-webp reader decodes
+    // real bytes rather than merely being present.
     @Test
     void rendersARealWebpFixtureToABoundedTile() {
         final TileResult result = this.renderer.render(FIXTURES.resolve("webp-sample.webp"), TILE_SIZE);
@@ -220,9 +206,6 @@ class TileRendererTest {
         assertThat(result.image().getHeight()).isEqualTo(TILE_SIZE * 2 / 3);
     }
 
-    // A raster source below the judgeable bar (640px) is flagged unreviewable even though the
-    // decode itself succeeds cleanly - the primary raster path's own version of the small-preview
-    // problem the Nikon NEF fixture demonstrates with real bytes above.
     @Test
     void aSmallRasterImageDecodesButIsFlaggedUnreviewable(@TempDir final Path tempDir) throws IOException {
         final Path tiny = tempDir.resolve("tiny.jpg");
@@ -235,9 +218,8 @@ class TileRendererTest {
         assertThat(result.image().getHeight()).isEqualTo(TILE_SIZE * 2 / 3);
     }
 
-    // Pins down the exact boundary (< 640, not <= 640) rather than leaving it to the gap between
-    // the fixture sizes used elsewhere (960px "large" vs 160-300px "small") - a flipped comparison
-    // operator wouldn't be caught by any of those.
+    // Every other fixture here sits well clear of the bar. A flipped comparison operator would not
+    // be caught by any of them.
     @ParameterizedTest
     @CsvSource({
             "640, false",
@@ -254,10 +236,7 @@ class TileRendererTest {
         assertThat(result.unreviewable()).isEqualTo(expectedUnreviewable);
     }
 
-    // heic, heif, and avif all share the same HeifDecoder port and routing. This test uses a
-    // stub decoder to prove the routing itself, the same way the decoder-returns-empty and
-    // too-small tests below do. A separate test elsewhere in this file proves a real decoder
-    // recovers a real tile end to end for one of the three.
+    // A stub decoder, so what this proves is the routing rather than any decode.
     @ParameterizedTest
     @ValueSource(strings = {"heic", "heif", "avif"})
     void heifFamilyRoutesToTheInjectedDecoderAndResizesItsResult(final String extension, @TempDir final Path tempDir)
@@ -274,12 +253,10 @@ class TileRendererTest {
         assertThat(result.image().getHeight()).isEqualTo(TILE_SIZE / 2);
     }
 
-    // A real AVIF file (arctic-sky.avif, a public-domain USGS photo via Wikimedia Commons,
-    // verified genuine ftyp/avif box structure), run through a TileRenderer wired to the real
-    // CliHeifDecoder instead of the stub every other test in this class uses. This proves the
-    // HEIF-family routing path actually recovers a real tile end to end, not just that it calls
-    // whatever HeifDecoder it's given. 1600x1063 source (verified via `magick identify`) fit
-    // within 224x224 lands on 224x149.
+    // A real AVIF file: a public-domain USGS photo via Wikimedia Commons, with genuine ftyp/avif
+    // box structure. It runs through the real CliHeifDecoder rather than the stub every other test
+    // here uses, so this covers the HEIF family end to end. Its 1600x1063 source fitted within
+    // 224x224 lands on 224x149.
     @Test
     void realAvifFixtureDecodesToARealTileViaTheCliHeifDecoder() {
         final TileRenderer withRealHeifDecoder = new TileRenderer(new CliHeifDecoder("heif-convert"));
@@ -292,8 +269,6 @@ class TileRendererTest {
         assertThat(result.image().getHeight()).isEqualTo(149);
     }
 
-    // The HEIC/AVIF decode path's own version of the judgeability check: a decoder can hand back
-    // real pixels that are still too small to trust, same as the raster and EXIF-thumbnail paths.
     @Test
     void heifDecoderReturningATooSmallImageIsFlaggedUnreviewable(@TempDir final Path tempDir) throws IOException {
         final Path fakeHeic = tempDir.resolve("photo.heic");
@@ -310,8 +285,7 @@ class TileRendererTest {
 
     // A stub decoder, because no real HeifDecoder can be made to throw on demand. The port's
     // signature permits an unchecked exception, and an implementation backed by a native library
-    // or a different process can raise one. Then render() absorbs it into the same placeholder an
-    // empty result produces, so the failure stays contained to one tile of the montage.
+    // or another process can raise one.
     @Test
     void heicFallsBackToAPlaceholderWhenTheDecoderThrows(@TempDir final Path tempDir) throws IOException {
         final Path fakeHeic = tempDir.resolve("photo.heic");
@@ -340,16 +314,12 @@ class TileRendererTest {
         assertThat(result.image().getHeight()).isEqualTo(TILE_SIZE);
     }
 
-    // isSourceUnreviewable reads a separate, lightweight ImageIO stream to check index 0's size.
-    // renderRaster's own Thumbnailator-based decode is a black box that never exposes which
-    // sub-image it actually used. Whether the two reads agree is an assumption, not something this
-    // code can check at runtime. Verified directly against Thumbnailator 0.4.21's own source that
-    // both reads agree today (InputStreamImageSource.FIRST_IMAGE_INDEX = 0, used consistently for
-    // width/height/read), but that's an internal library detail, not a public contract. This test
-    // doesn't lean on re-reading that source again. It builds a file whose two sub-images are
-    // visibly different in size and color. It then checks the tile's actual rendered content
-    // against what unreviewable claims about it. A future Thumbnailator version that picked a
-    // different sub-image would fail this test immediately, rather than silently disagreeing.
+    // Whether the size check and the decode read the same sub-image is an assumption, not
+    // something this code can check at runtime. Thumbnailator 0.4.21's own source has them agree,
+    // at InputStreamImageSource.FIRST_IMAGE_INDEX = 0. That is an internal detail rather than a
+    // public contract. So the fixture below carries two sub-images differing visibly in size and
+    // colour, and the tile's rendered content is checked against what unreviewable claims. A
+    // version that picked the other sub-image fails here rather than disagreeing silently.
     @Test
     void unreviewableFlagMatchesTheSubImageActuallyRendered(@TempDir final Path tempDir) throws IOException {
         final Path tiff = tempDir.resolve("two-page.tiff");

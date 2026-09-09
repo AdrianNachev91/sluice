@@ -35,9 +35,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 // End-to-end test wiring the real TileRenderer/MontageBuilder/SidecarWriter/PrepIndexWriter behind
-// CullMontageRenderer, over a synthetic Sorted/Photos tree. HeifDecoder is stubbed - HEIC/AVIF
-// decode paths already have real-fixture coverage in TileRendererTest, not this test's job to
-// re-prove.
+// CullMontageRenderer, over a synthetic Sorted/Photos tree. HeifDecoder is stubbed: every fixture
+// here is a JPEG, so nothing reaches it.
 class CullMontageRendererTest {
 
     // Above LowResGate.MIN_DIMENSION (640) on the long side, so these photos are always reviewable.
@@ -176,9 +175,6 @@ class CullMontageRendererTest {
 
         final PrepDir result = renderer(pathsConfig).build(new CullScope.OldestN(2), MontageConfig.defaults());
 
-        // The 2 oldest by mtime are oldest-corrupt and second-oldest. Capping to n happens before
-        // the unreviewable filter, so the corrupt file's slot is dropped rather than backfilled from
-        // third-oldest, even though third-oldest would itself be reviewable.
         assertThat(result.photos()).isEqualTo(1);
         assertThat(result.unreviewable()).containsExactly(oldestCorrupt);
         final String sidecar = Files.readString(result.prepDir().resolve("montage-001.json"), StandardCharsets.UTF_8);
@@ -259,8 +255,6 @@ class CullMontageRendererTest {
         final PrepDir result = renderer(pathsConfig).build(new CullScope.Year(2019, null), new MontageConfig(64, 2),
                 (current, total) -> ticks.add(current + "/" + total));
 
-        // Five photos into two sheets. The bar counts the five, since that is the number a reader
-        // can check against their own folder, and the sheets are what the result card reports.
         assertThat(result.montages()).isEqualTo(2);
         assertThat(ticks).containsExactly("1/5", "2/5", "3/5", "4/5", "5/5");
     }
@@ -287,9 +281,7 @@ class CullMontageRendererTest {
         writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T00:00:00Z"));
         writePhoto(juneDir, "b.jpg", Instant.parse("2019-06-02T00:00:00Z"));
         // Not cancelled for the first candidate's check, cancelled from the second check onward,
-        // so one tile is rendered in memory before the cancellation trips. That proves even a
-        // partially-rendered tile doesn't leave anything on disk, since the render pass runs
-        // entirely before clearPrepDir().
+        // so one tile is rendered in memory before the cancellation trips.
         final AtomicInteger checks = new AtomicInteger();
         final CancellationSignal cancelBeforeSecondCandidate = () -> checks.incrementAndGet() > 1;
 
@@ -300,9 +292,6 @@ class CullMontageRendererTest {
         assertThat(Files.exists(pathsConfig.logs().resolve("sift-prep").resolve("2019"))).isFalse();
     }
 
-    // A scope is occupied by any prep dir holding files. A half-rendered one left lying around
-    // would refuse every later cull of that scope, while holding nothing worth refusing over. It
-    // records no decision at all, and its montages cost only the time to render them again.
     @Test
     void cancellationMidBatchClearsTheMontagesItHadAlreadyWritten(@TempDir final Path root) throws IOException {
         final var pathsConfig = pathsConfig(root);
@@ -319,8 +308,7 @@ class CullMontageRendererTest {
         final CancellationSignal cancelBeforeSecondMontage = () -> checks.incrementAndGet() > 3;
         // Watched on disk while the run is still going, because afterwards there is nothing left
         // to tell apart. Progress cannot answer this: it counts photos read, so it reports the
-        // same two ticks whether a sheet was ever written or not. Without a witness taken during
-        // the run, the empty-directory assertion below holds under either.
+        // same two ticks whether a sheet was ever written or not.
         final Path prepDir = pathsConfig.logs().resolve("sift-prep").resolve("2019");
         final AtomicInteger sheetsSeenOnDisk = new AtomicInteger();
         final CancellationSignal watchingCancel = () -> {
@@ -336,9 +324,8 @@ class CullMontageRendererTest {
         assertThat(prepDir).doesNotExist();
     }
 
-    // The category set is captured at prep time and travels with the run. Proved against a set that
-    // is not the default, so a renderer ignoring its settings and hardcoding something would fail
-    // rather than coincidentally match.
+    // Proved against a set that is not the default, so a renderer ignoring its settings and
+    // hardcoding something would fail rather than coincidentally match.
     @Test
     void buildStampsTheConfiguredCategorySetOntoThePrepDirAndItsIndex(@TempDir final Path root) throws IOException {
         final var pathsConfig = pathsConfig(root);
@@ -386,8 +373,7 @@ class CullMontageRendererTest {
                 new PrepIndexWriter(), new NioMediaStore(), pathsConfig, new FixedSettings(categories));
     }
 
-    // Only categories() is ever read here. The rest of the port is provider routing, which the
-    // renderer has no part in.
+    // Only categories() is ever read here.
     private record FixedSettings(List<CullCategory> categories) implements CullSettings {
 
         @Override

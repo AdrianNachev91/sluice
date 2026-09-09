@@ -60,8 +60,8 @@ class ReviewFoldersTest {
                 .containsExactly("Food");
     }
 
-    // Unreviewable keeps the year-and-month shape a sift found the photos in, unlike the two flat
-    // roots beside it. A row per year would name a folder holding no files.
+    // Unreviewable keeps the year-and-month shape, unlike the two flat roots beside it. A row per
+    // year would name a folder holding no files.
     @Test
     void anUnreviewableFolderIsNamedByBothLevelsBelowItsRoot() {
         this.file("Unreviewable/2019/06/a.jpg");
@@ -97,8 +97,6 @@ class ReviewFoldersTest {
                         tuple("2019-06_beach", FiledBy.A_SIFT));
     }
 
-    // The two names are only a sort's under Review. Somebody who makes one by hand under either of
-    // the other roots has not made it a sort's.
     @Test
     void aFolderNamedTheWayASortNamesOneIsStillASiftsUnderAnotherRoot() {
         this.file("Duplicates/2019-06/a.jpg");

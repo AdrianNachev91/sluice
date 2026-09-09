@@ -44,10 +44,8 @@ import static photos.sluice.application.service.CullPrepTestSupport.writeSidecar
 // A planner verdict is only observable through the run it permits or blocks.
 class ApplyPlannerTest {
 
-    // The shard contract is checked once over every montage's shards together, never one montage at
-    // a time. A group id reused across two shards is the clearest proof. Each shard alone is
-    // perfectly well-formed, with one chosen keeper and one reject. Only a whole-set check can see
-    // that the two groups would merge into a single Duplicates folder at apply time.
+    // Each shard alone is well-formed, with one chosen keeper and one reject. Only a whole-set
+    // check can see that the two groups would merge into a single Duplicates folder at apply time.
     @Test
     void aNearDupGroupIdReusedAcrossTwoMontagesFailsValidation(@TempDir final Path root) throws IOException {
         final Path libraryRoot = root.resolve("Library");
@@ -78,12 +76,11 @@ class ApplyPlannerTest {
         assertThat(Files.exists(julyReject)).isTrue();
     }
 
-    // The pair below is why a prep dir records its own category set. Both run against the standard
-    // fixedSettings() wiring, which preps under scenery/food/funny plus junk. Each index
-    // deliberately disagrees with that set, and the index is what decides.
+    // This pair and the next both run against the standard fixedSettings() wiring, which preps
+    // under scenery, food, funny and junk. Each index deliberately disagrees with that set.
     //
-    // Here the shard names a category nobody has configured. It applies anyway, because the run was
-    // prepped under a set that had it. Editing a category cannot strand a run that already named it.
+    // Here the shard names a category nobody has configured, and it applies anyway because the run
+    // was prepped under a set that had it.
     @Test
     void aCategoryOnlyThePrepDirRecordsStillValidates(@TempDir final Path root) throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
@@ -100,8 +97,8 @@ class ApplyPlannerTest {
         assertThat(Files.exists(root.resolve("Review/receipts/a.jpg"))).isTrue();
     }
 
-    // The mirror. junk is one every run gets, and this one was not prepped under it, so it is
-    // refused. A planner still consulting config would let this through.
+    // The mirror. junk is one every run gets, and this one was not prepped under it, so a planner
+    // still consulting config would let it through.
     @Test
     void aConfiguredCategoryThePrepDirNeverRecordedIsRefused(@TempDir final Path root) throws IOException {
         final Path libraryRoot = root.resolve("Library");
@@ -140,8 +137,8 @@ class ApplyPlannerTest {
     void aMissingNearDupChosenFileFailsLoudlyEvenThoughItsNeverAMoveBasedDecision(@TempDir final Path root) throws IOException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        final Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk - a copy that never
-        // ran
+        // Never written to disk, standing in for a copy that never ran.
+        final Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg");
         final Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(reject, "blurry");
         writeIndex(prepDir, 2, List.of("montage-001"));
@@ -156,10 +153,8 @@ class ApplyPlannerTest {
         assertThat(Files.exists(reject)).isTrue();
     }
 
-    // classify() answers Unresolved for a NearDupChosen decision before it ever consults a move
-    // record. A real run copies the chosen file rather than moving it, so it never writes one. A
-    // record naming a NearDupChosen source can only have come from somewhere else, and is refused
-    // even when it hash-verifies.
+    // A real run copies the chosen file rather than moving it, so it never writes a move record. A
+    // record naming one can only have come from somewhere else.
     @Test
     void aNearDupChosenDecisionIsNeverResolvedByAMoveRecordEvenOneThatHashVerifies(@TempDir final Path root) throws IOException {
         final Path libraryRoot = root.resolve("Library");
@@ -187,8 +182,7 @@ class ApplyPlannerTest {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk
-        // The move record points at a destination that was never actually written - a record alone
-        // is never treated as proof; the destination has to hash-verify too.
+        // The move record points at a destination that was never written.
         writeMoveRecord(prepDir, photo, root.resolve("Review/junk/a.jpg"), "not-a-real-hash-value");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
@@ -206,9 +200,8 @@ class ApplyPlannerTest {
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk
         final Path dest = root.resolve("Review/junk/a.jpg");
         writeFile(dest, "content changed after the record was written");
-        // A hash that deliberately doesn't match dest's actual content. Stands in for the
-        // destination having been altered (or a different file landing there) after the record
-        // for this decision was written.
+        // A hash that does not match dest's content, standing in for the destination having been
+        // altered, or a different file landing there, after the record was written.
         writeMoveRecord(prepDir, photo, dest, "not-a-real-hash-value");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
@@ -225,8 +218,8 @@ class ApplyPlannerTest {
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
-        // No sidecar written for montage-001 at all - stands in for a missing or corrupt one; both
-        // fail the same way (readSidecar() throws UncheckedIOException either way).
+        // No sidecar for montage-001 at all. Missing and corrupt fail the same way, the read
+        // throwing either way.
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
         final ValidationReport report = applyPlanner(root)
@@ -238,9 +231,8 @@ class ApplyPlannerTest {
     }
 
     // A montage with an unreadable sidecar and no shard reads like one still being culled, and is
-    // not. A culler keys its verdicts against the sidecar, so it can never produce a shard for a
-    // montage whose sidecar it cannot read. Left unreported, the run sits WAITING with an empty
-    // findings list and only a discard escapes it. Reported, SET_ASIDE becomes reachable.
+    // not. A culler keys its verdicts against the sidecar, so it can never produce a shard here.
+    // Unreported, the run sits WAITING with an empty findings list and only a discard escapes it.
     @Test
     void validateReportsACorruptSidecarForAMontageWithNoShardYet(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -257,10 +249,9 @@ class ApplyPlannerTest {
         assertThat(report.findings()).containsExactly(new Finding.CorruptSidecar("montage-002"));
     }
 
-    // A montage whose sidecar reads fine and simply lacks a shard is skipped in silence, because it
-    // genuinely is still being culled. This is the boundary the corrupt-sidecar finding must not
-    // cross. An implementation flagging every uncalled montage would still satisfy every assertion
-    // about reporting a corrupt one, while burying the user in noise for runs that are mid-cull.
+    // The boundary the corrupt-sidecar finding must not cross. An implementation flagging every
+    // uncalled montage would satisfy every assertion about reporting a corrupt one, while burying
+    // the user in noise for runs that are mid-sift.
     @Test
     void validateSaysNothingAboutAMontageWithAReadableSidecarAndNoShardYet(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -279,8 +270,6 @@ class ApplyPlannerTest {
         assertThat(report.findings()).isEmpty();
     }
 
-    // Both answers are terminal, so neither re-raises the finding the user already settled. SET_ASIDE
-    // drops the montage; there is no shard for APPLY_ANYWAY to trust, so it contributes nothing.
     @Test
     void validateStopsReportingACorruptSidecarWithNoShardOnceItIsSetAside(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -299,8 +288,7 @@ class ApplyPlannerTest {
     }
 
     // APPLY_ANYWAY on a shardless montage says to trust a shard that is not there, so the montage
-    // contributes nothing. What matters is that the answer still counts as given. Re-raising the
-    // finding would ask the user to settle something they already settled.
+    // contributes nothing. What matters is that the answer still counts as given.
     @Test
     void validateStopsReportingACorruptSidecarWithNoShardOnceItIsApplyAnyway(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -316,15 +304,14 @@ class ApplyPlannerTest {
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
 
         assertThat(report.findings()).isEmpty();
-        // Weak on its own, since montage-002 has no shard file for any implementation to read. It
-        // pins the other half of the sentence above: the answered montage contributes nothing while
-        // montage-001 still contributes normally.
+        // Weak on its own, montage-002 having no shard file for any implementation to read. It
+        // pins the other half: the answered montage contributes nothing while montage-001 still
+        // contributes normally.
         assertThat(report.decisions()).hasSize(1);
     }
 
-    // This gate is the only one an apply-only resume passes through, so an unparseable shard has to
-    // come back as a finding here. Left to escape as an exception it would crash the job instead of
-    // resolving it to a Blocked run the user can act on.
+    // This gate is the only one an apply-only resume passes through. Escaping as an exception, an
+    // unparseable shard would crash the job rather than resolving to a Blocked run.
     @Test
     void validateReportsCorruptShardForAMontageWhoseShardCannotBeParsed(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -342,9 +329,8 @@ class ApplyPlannerTest {
         assertThat(report.decisions()).isEmpty();
     }
 
-    // A corrupt shard must not take the rest of the batch down with it. The second montage's
-    // decisions still have to reach the report, so a troubleshooter sees one problem rather than a
-    // whole scope gone dark.
+    // The second montage's decisions still have to reach the report, so a troubleshooter sees one
+    // problem rather than a whole scope gone dark.
     @Test
     void validateStillCollectsEveryOtherMontagesDecisionsAlongsideACorruptShard(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -366,9 +352,8 @@ class ApplyPlannerTest {
         assertThat(report.decisions()).extracting(Decision::file).containsExactly(second);
     }
 
-    // The other half of the damaged-vs-failed split. A shard whose read merely failed says nothing
-    // about the culling agent's work. Blaming it with a CorruptShard finding would be a wrong
-    // diagnosis on content that is very likely intact.
+    // A shard whose read merely failed says nothing about the culling agent's work. A CorruptShard
+    // finding would be a wrong diagnosis on content that is likely intact.
     @Test
     void validateLetsAFailedShardReadPropagateInsteadOfBlamingTheCuller(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -385,12 +370,10 @@ class ApplyPlannerTest {
                 .isNotInstanceOf(MalformedPrepJsonException.class);
     }
 
-    // The sidecar side of the same damaged-vs-failed split. A montage whose sidecar merely failed to
-    // read - a lock held for a moment by a backup process - has done nothing wrong. Its culler
-    // answers are not suspect. Diagnosing it as CorruptSidecar would cost the user an irreversible
-    // CHOICE answer over a file that was never damaged. Injected at the CullPrepPort seam, proving
-    // the classification without depending on how a given platform's filesystem treats a directory
-    // standing in for a file.
+    // A sidecar whose read merely failed, over a lock a backup process held for a moment, has done
+    // nothing wrong. Diagnosing it as CorruptSidecar would cost the user an irreversible CHOICE
+    // answer over a file that was never damaged. Injected at the CullPrepPort seam, so the
+    // classification does not depend on how a platform treats a directory standing in for a file.
     @Test
     void validateLetsAFailedSidecarReadPropagateInsteadOfDiagnosingCorruption(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);

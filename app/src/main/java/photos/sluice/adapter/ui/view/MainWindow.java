@@ -51,22 +51,17 @@ final class MainWindow {
 
     private static final String FAILED = "screen-failed";
 
-    // What the count on the Runs entry means, for a reader who meets a number beside a word and no
-    // explanation. The screen it leads to says the same thing per run.
+    // Has to stay in step with what the Runs screen says per run.
     private static final String RUNS_COUNT_MEANS =
             "Sifts you have started that have not finished. Open Runs to carry them on or throw "
                     + "them away.";
 
-    // What the mark on the Dashboard entry means, for a reader who has left that screen. The two
-    // read the same way round: the first needs nothing, the second is waiting on them.
+    // This pair stays parallel: one wants nothing from the reader, the other is waiting on them.
     private static final String DASHBOARD_RUNNING = "Something is running on the Dashboard.";
 
     private static final String DASHBOARD_FINISHED = "Something on the Dashboard has finished, and "
             + "is waiting for you to close it.";
 
-    /**
-     * Prevents instantiation of this static factory class.
-     */
     private MainWindow() {
     }
 
@@ -124,8 +119,8 @@ final class MainWindow {
         final var leaving = new Leaving(leavingLosesWork);
         drawDashboard(content, presenter, settingsPresenter, runLauncherPresenter, null, navigation);
         // A ToggleGroup lets its own selected toggle be clicked back to unselected, unlike a radio
-        // group. Clicking the active nav entry would otherwise leave the sidebar showing none of
-        // the three as current. Its content pane would still be the one on screen.
+        // group. Clicking the active nav entry would otherwise leave the sidebar marking no entry
+        // as current while that entry's pane stayed on screen.
         group.selectedToggleProperty().addListener((_, previous, current) -> {
             if (current == null) {
                 group.selectToggle(previous);
@@ -237,10 +232,8 @@ final class MainWindow {
      * Asks the configured provider what this account can run, once the window is up.
      *
      * <p>The thread of its own is what keeps the network call off the paint. The wait for the first
-     * frame is a second guard rather than the working one. Nothing here touches the scene today, so
-     * taking it away would change nothing. Anything added here later that does touch the scene
-     * would hold the opening paint back, and this is what stops it. Kept deliberately, so it does
-     * not read as a wait nobody needed.
+     * frame is a second guard rather than the working one, kept deliberately: nothing here touches
+     * the scene today, and anything added later that did would hold the opening paint back.
      *
      * <p>Without it, a provider already holding a key is described on the Settings screen by that
      * provider's own guess at what it offers.
@@ -437,7 +430,7 @@ final class MainWindow {
     /**
      * The count of unfinished runs, drawn beside the entry that leads to them.
      *
-     * <p>Takes no room at zero, so a reader with nothing outstanding sees a plain sidebar.
+     * <p>Takes no room while it says nothing.
      *
      * @return {@link Label} the badge
      */

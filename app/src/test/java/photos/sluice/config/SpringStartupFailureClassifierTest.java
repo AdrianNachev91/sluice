@@ -70,9 +70,8 @@ class SpringStartupFailureClassifierTest {
         });
     }
 
-    // A refusal the app words itself, rather than one the framework raises. It binds cleanly and is
-    // refused by the value built out of it. So nothing here is a BindException, and there is no
-    // place in the file to point at.
+    // It binds cleanly and is refused by the value built out of it. So nothing here is a
+    // BindException, and there is no place in the file to point at.
     @Test
     void settingsTheAppItselfRefusesCarryTheirOwnSentence(@TempDir final Path dir) throws IOException {
         final Path configFile = dir.resolve("config.yml");
@@ -187,9 +186,8 @@ class SpringStartupFailureClassifierTest {
         assertThat(classify(dir.resolve("config.yml"), outer)).isInstanceOf(Unclassified.class);
     }
 
-    // A second walk with its own bound, so the cause-chain test above says nothing about it.
-    // Returning at all is the proof, and the timeout needs its own thread to measure a method that
-    // never does.
+    // A second walk with its own bound. Returning at all is the proof, and the timeout needs its
+    // own thread to measure a method that never does.
     @Test
     @Timeout(value = 10, unit = TimeUnit.SECONDS, threadMode = ThreadMode.SEPARATE_THREAD)
     void anOriginChainThatHoldsItselfStillAnswers() {

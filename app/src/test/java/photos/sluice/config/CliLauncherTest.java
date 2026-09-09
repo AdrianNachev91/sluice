@@ -100,8 +100,8 @@ class CliLauncherTest {
         assertThat(exitCode).isEqualTo(CommandLine.ExitCode.OK);
     }
 
-    // This failure kills the context before a command runs. Nothing narrower than the whole boot
-    // reaches it, so the classifier, the report and this class only meet here.
+    // This failure kills the context before a command runs, so nothing narrower than the whole boot
+    // reaches it.
     @Test
     void aConfigFileTheParserGivesUpOnIsRefusedRatherThanCrashingTheProcess(@TempDir final Path dir)
             throws IOException {

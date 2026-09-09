@@ -86,12 +86,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 // The wiring only a built scene graph can be wrong about: which destination a nav entry shows, and
-// which of its two states the Dashboard rests in. What each screen says is asserted elsewhere
-// (SettingsPaneTest for Settings, FirstRunCardTest for the first-run card, RunLauncherPaneTest for
-// the launcher the configured Dashboard rests on; the Review pane carries nothing of its own yet).
+// which of its two states the Dashboard rests in. What each screen says is asserted in that
+// screen's own test.
 //
-// Runs on the FX thread throughout. Building the scene reads the desktop's colour preferences, same
-// as SettingsPaneTest, and that call refuses any other thread.
+// Runs on the FX thread throughout. Building the scene reads the desktop's colour preferences, and
+// that call refuses any other thread.
 class MainWindowTest {
 
     private static final SecretId ANTHROPIC_KEY = new SecretId("anthropic", "ANTHROPIC_API_KEY");
@@ -190,8 +189,7 @@ class MainWindowTest {
     }
 
     // Selecting the Dashboard as the shell is built raises no action event, so nothing on the
-    // opening path counts unless the shell asks for it. A reader coming back to unfinished sifts
-    // would otherwise be told nothing until they happened to press a nav entry.
+    // opening path counts unless the shell asks for it.
     @Test
     void theRunsEntryCountsWhatIsOutstandingWithoutWaitingForANavPress() throws Exception {
         final Pipeline pipeline = mock(Pipeline.class);
@@ -243,8 +241,8 @@ class MainWindowTest {
         assertThat(currentScreen(root).lookup("#screen-failure-copy")).isNotNull();
     }
 
-    // The frames name paths from the reader's own machine, and the panel asks them to quote this
-    // into a bug report. Revealing that is their press, not something the screen does for them.
+    // The frames name paths from the reader's own machine, so revealing them is their press rather
+    // than something the screen does for them.
     @Test
     void theFailureStartsFoldedAwayAndTheReaderOpensIt() throws Exception {
         final BorderPane root = onFxThread(() ->
@@ -260,8 +258,7 @@ class MainWindowTest {
         assertThat(trace.isVisible()).isTrue();
     }
 
-    // Copy works without opening the fold first, so handing the failure to somebody who can read
-    // it never requires reading it yourself.
+    // So handing the failure to somebody who can read it never requires reading it yourself.
     @Test
     void copyingTheFailureDoesNotNeedTheFoldOpen() throws Exception {
         final BorderPane root = onFxThread(() ->
@@ -294,9 +291,8 @@ class MainWindowTest {
         assertThat(currentScreen(root).getId()).isEqualTo("Dashboard");
     }
 
-    // The launcher is the configured Dashboard's whole content, and the shell is the only thing that
-    // puts it there. Without this, it could stop being wired in and every other Dashboard assertion
-    // here would still pass, because they read the screen's name rather than what is on it.
+    // Every other Dashboard assertion here reads the screen's name rather than what is on it. So
+    // the launcher could stop being wired in and they would all still pass.
     @Test
     void aConfiguredDashboardRestsOnTheRunLauncher() throws Exception {
         final BorderPane root = onFxThread(() -> built(firstRunPresenter(false)));
@@ -369,8 +365,6 @@ class MainWindowTest {
     }
 
     // A freshly drawn screen needs its own applyCss/layout pass before a lookup can reach inside it.
-    // SettingsPaneTest's own built() runs one for that reason too. MainWindow.show swaps the content
-    // in without running one, so a screen switched to here needs it done by hand.
     private static void clickNav(final BorderPane root, final String navId) throws Exception {
         runOnFxThread(() -> {
             ((ToggleButton) root.lookup(navId)).fire();
@@ -379,7 +373,6 @@ class MainWindowTest {
         });
     }
 
-    // The content VBox itself carries no id; MainWindow.show sets one on whichever screen it holds.
     private static Node currentScreen(final BorderPane root) {
         return ((Parent) root.getCenter()).getChildrenUnmodifiable().getFirst();
     }
@@ -388,7 +381,6 @@ class MainWindowTest {
         return ((TextInputControl) screen.lookup(".pane-heading")).getText();
     }
 
-    // The presenter pair the Settings screen and its VISION PROVIDER card read and write through.
     private record Presenters(SettingsPresenter settings, VisionProviderPresenter vision) {
     }
 
@@ -423,7 +415,7 @@ class MainWindowTest {
                 new PrepDirHealth(State.WAITING, List.of()), new ShardTally(1, 1, 2), Instant.now());
     }
 
-    // Polled rather than asserted straight away: the count is read on a thread of its own and drawn
+    // Polled rather than asserted straight away. The count is read on a thread of its own and drawn
     // a frame later, which is the whole point of the path being tested.
     private static boolean waitFor(final Callable<Boolean> settled) {
         try {
@@ -460,8 +452,7 @@ class MainWindowTest {
                 List.of(), Set.of(2019), List.of(), false, 0);
     }
 
-    // A mock answers cullRuns() with null, so it is given an empty listing instead. The sidebar's
-    // count and the runs screen then both draw their real nothing-here state.
+    // A mock answers cullRuns() with null, so it is given an empty listing instead.
     private static RunsPresenter runsPresenter() {
         final Pipeline pipeline = mock(Pipeline.class);
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of()));
@@ -472,8 +463,7 @@ class MainWindowTest {
         return new RunsPresenter(pipeline, new RunLauncherPresenter(pipeline, new FxProgressPort()));
     }
 
-    // A mock answers reviewListing() with null, so it is given an empty one instead. The review
-    // screen then draws its real nothing-here state.
+    // A mock answers reviewListing() with null, so it is given an empty one instead.
     private static ReviewPresenter reviewPresenter() {
         final Pipeline pipeline = mock(Pipeline.class);
         when(pipeline.reviewListing()).thenReturn(new ReviewListing(List.of(), List.of()));
@@ -610,8 +600,7 @@ class MainWindowTest {
         return settingsPresenter(_ -> {});
     }
 
-    // One card is enough. What this test needs is a real pane to exist, not any particular thing
-    // drawn inside it.
+    // One card is enough: what this needs is a real pane, not any particular thing inside it.
     private static PhotoCategoriesPresenter photoCategoriesPresenter() {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 "anthropic", Map.of(), List.of(CullCategory.of("blurry", "Not worth keeping")),
@@ -689,8 +678,7 @@ class MainWindowTest {
             public void remove(final SecretId id) {
             }
         };
-        // A fixture builder, kept as one method rather than split, the same call SettingsPaneTest's
-        // own equivalent makes.
+        // A fixture builder, kept as one method rather than split.
         //noinspection ExtractMethodRecommender
         final var apiSettings = Set.of(ProviderSetting.MODEL, ProviderSetting.CREDENTIAL);
         final List<VisionProviderDescriptor> providers = List.of(

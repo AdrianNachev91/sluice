@@ -25,8 +25,8 @@ class PipelinePathGuardTest {
 
     private final RecordingProgressPort progress = new RecordingProgressPort();
 
-    // The refusal has to reach the caller instead of the job. Started work would report a failed run
-    // for what is really a settings problem, and would already hold the job slot to say so.
+    // Started work would report a failed run for what is really a settings problem, and would hold
+    // the job slot while it said so.
     @Test
     void aJobIsRefusedBeforeItStartsRatherThanFailingInside(@TempDir final Path root) throws IOException {
         final Pipeline pipeline = pipeline(root, this.progress);
@@ -36,8 +36,7 @@ class PipelinePathGuardTest {
                 .isInstanceOf(PathsMisconfiguredException.class);
     }
 
-    // The refusal carries the violation as a value, so a screen can mark the field that caused it
-    // rather than reading a sentence.
+    // As a value, so a screen can mark the field rather than parse a sentence.
     @Test
     void theRefusalNamesTheRootThatIsGone(@TempDir final Path root) throws IOException {
         final Pipeline pipeline = pipeline(root, this.progress);
@@ -50,9 +49,8 @@ class PipelinePathGuardTest {
                                 .containsExactly(new NotADirectory(PathRole.LIBRARY_ROOT, library)));
     }
 
-    // The scenario PipelineSurfaceTest's root-check exemption is argued from. The refusal asserted
-    // first is the control: a fixture whose roots were fine would prove nothing about an exemption.
-    // Nothing is running here, so the answer below says only that the call was let through.
+    // The refusal asserted first is the control: a fixture whose roots were fine would prove
+    // nothing. Nothing is running here, so the answer below says only that the call was let through.
     @Test
     void theExitPathIsNotRefusedOnceAFolderRootHasGone(@TempDir final Path root) throws IOException {
         final Pipeline pipeline = pipeline(root, this.progress);
@@ -62,8 +60,7 @@ class PipelinePathGuardTest {
         assertThat(pipeline.stopAcceptingJobs(Duration.ofSeconds(5))).isTrue();
     }
 
-    // The check reads the roots on every call rather than at construction. That is what lets the app
-    // boot with nothing configured, and start working the moment a first run configures it.
+    // Reading the roots per call is what lets the app boot with nothing configured.
     @Test
     void restoringTheFolderIsEnoughToWorkAgain(@TempDir final Path root) throws IOException {
         final Pipeline pipeline = pipeline(root, this.progress);

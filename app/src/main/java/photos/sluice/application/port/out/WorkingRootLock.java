@@ -26,9 +26,7 @@ public interface WorkingRootLock {
      *
      * <p>Nothing already held is given up here. A caller moving from one root to another therefore
      * holds both until it says which to give up, and neither root is unheld in between. What makes
-     * that worth the second claim is that the caller's own work between the two calls can fail. A
-     * save that has taken the root it is moving to, and then cannot write, still holds the root it
-     * is moving from.
+     * that worth the second claim is that the caller's own work between the two calls can fail.
      *
      * <p>Two paths a caller reads as different roots can be one folder underneath, and an
      * implementation is free to recognise that. Acquiring such a folder a second time adds a hold on
@@ -55,8 +53,7 @@ public interface WorkingRootLock {
     /**
      * Gives up every root this process holds. Does nothing when it holds none.
      *
-     * <p>For a caller that has to hand everything back without knowing what is held, which is what
-     * an exit path needs. A caller giving up one root of several names it instead.
+     * <p>For a caller that has to hand everything back without knowing what is held.
      */
     void releaseAll();
 }

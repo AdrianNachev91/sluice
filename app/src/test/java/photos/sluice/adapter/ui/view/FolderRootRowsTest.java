@@ -20,7 +20,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.onFxThread;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.runOnFxThread;
 
-// The rows both the first-run card and the Settings folders card are built from.
 class FolderRootRowsTest {
 
     @BeforeAll

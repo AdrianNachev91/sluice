@@ -127,8 +127,7 @@ class AnswerCommandTest {
                 AnswerSource.CLI);
     }
 
-    // Both RECHECK outcomes, and the second is the one a unit test alone would have missed. A
-    // restored photo closes its own finding, so nothing on the run answers to the key any more.
+    // A restored photo closes its own finding, so nothing on the run answers to the key any more.
     // Resolving against open findings alone therefore reports the good news as a failure.
     @Test
     void lookingAgainAtAPhotoStillMissingSaysSo() {

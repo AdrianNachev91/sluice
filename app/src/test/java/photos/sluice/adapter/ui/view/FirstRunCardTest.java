@@ -51,9 +51,8 @@ import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.scrollOf;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.textsOfClass;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.threeProviders;
 
-// The install below is a working double rather than a set of canned answers: a save changes what
-// it reports as unset. Nothing else can exercise the loop where a save redraws the card it was
-// pressed on.
+// The install below is a working double rather than canned answers. That is what lets a save
+// redraw the card it was pressed on, and be read back.
 class FirstRunCardTest {
 
     private static final String WORKING_ROOT = "D:\\staging";
@@ -171,8 +170,7 @@ class FirstRunCardTest {
     @Test
     void theProviderTheCardOpensOnIsWhatASaveStores() throws Exception {
         // Configured to something else, so the assertion cannot pass on the fixture's own opening
-        // value. The card's dropdown resolves to the provider it shows, and that is what has to
-        // reach the settings.
+        // value.
         final var install = new Install(startingOn("anthropic"));
         final Built built = onFxThread(() -> built(install));
 

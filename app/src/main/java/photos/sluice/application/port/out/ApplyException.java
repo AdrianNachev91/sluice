@@ -10,9 +10,8 @@ import java.util.List;
  * neither on disk nor already recorded as applied.
  *
  * <p>The message carries every problem found, aggregated, so a bad run is fixed in one pass
- * instead of one error per re-run. Structured findings are available via {@link #findings()}, so a
- * failed apply and {@link photos.sluice.application.service.PrepDirDoctor}'s own proactive
- * diagnosis feed the identical UI panel.
+ * instead of one error per re-run. {@link #findings()} carries the same problems structured, for a
+ * surface that renders them rather than the message.
  *
  * <p>Checked, because this is an expected, recoverable outcome: fix the shards (or re-run the
  * culler) and apply again. Zero files are ever moved when this is thrown.

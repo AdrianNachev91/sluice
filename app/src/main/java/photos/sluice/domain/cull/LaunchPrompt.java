@@ -11,8 +11,7 @@ import java.util.stream.Collectors;
  *
  * <p>Sluice ships no culler. On this route the reader supplies the intelligence, and the app
  * supplies only the folder and the contract. So this text is the whole of what stands between a
- * folder of sheets and an agent that can answer it. A bare path would leave them to work the
- * contract out from the files.
+ * folder of sheets and an agent that can answer it.
  *
  * <p>Names the categories the run was prepped with rather than the ones configured now. A run waits
  * while somebody works, and the two moments can be days apart. {@link ShardValidator} judges the
@@ -136,9 +135,8 @@ public final class LaunchPrompt {
      * How a fresh run's instructions open: where the sheets are, and how much there is to do.
      *
      * <p>Ends by saying the rest is not optional, and that a reader passing this work on passes the
-     * whole of it. This paragraph reads as a complete brief, and what follows is what makes the job
-     * doable rather than merely described. An agent that summarises before delegating takes the
-     * brief and drops the contract, and what arrives is a request nobody can answer correctly.
+     * whole of it. This paragraph reads as a complete brief on its own. An agent that summarises
+     * before delegating drops the contract, and what arrives is a request nobody can answer.
      *
      * @param prep {@link PrepDir} the run
      * @return {@link String} the opening, ending on a blank line

@@ -17,8 +17,7 @@ import java.util.List;
  *
  * <p>The engines each narrow by their own type, and the conversions here are where one of these
  * becomes one of those. Each throws on every case it cannot carry, rather than falling back on a
- * default. Where a conversion has an arm that widens to everything, that is what stops a scope
- * naming no work from landing in it.
+ * default.
  */
 sealed interface RunScope {
 
@@ -51,7 +50,7 @@ sealed interface RunScope {
             case Everything _ -> "everything in Sorted";
             case Undated _ -> "whatever nothing could date";
             // Neither can reach a started job: the button is dead over both. Answered anyway, since
-            // a switch over a sealed set that throws for two of six is one added case away from
+            // a switch over a sealed set that throws for any arm is one added case away from
             // throwing on a screen.
             case Refused _, Nothing _ -> ran.verb();
         };

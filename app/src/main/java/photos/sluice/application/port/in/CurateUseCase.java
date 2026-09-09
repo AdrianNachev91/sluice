@@ -10,7 +10,7 @@ import photos.sluice.domain.model.SortScope;
  * separate calls to {@link SortUseCase} and {@link CullUseCase}. It never commits Sorted to the
  * library; that stays a distinct, explicit step.
  */
-// Nothing implements this port, and no surface offers curate for one to be written against.
+// Nothing implements this port yet.
 @SuppressWarnings("unused")
 public interface CurateUseCase {
 

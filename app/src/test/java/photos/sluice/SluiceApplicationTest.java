@@ -29,8 +29,8 @@ class SluiceApplicationTest {
         assertThat(SluiceApplication.commandIn(new String[]{"sort", "2019"})).containsExactly("sort", "2019");
     }
 
-    // A settings override carries no verb, and still does not open the window. The window would
-    // have taken it before this branch existed, so the choice is deliberate rather than incidental.
+    // A settings override carries no verb, and running it as a command rather than opening the
+    // window is deliberate.
     @Test
     void aSettingsOverrideAloneRunsAsACommandToo() {
         assertThat(SluiceApplication.opensTheWindow(new String[]{"--sluice.paths.inbox=/photos"})).isFalse();

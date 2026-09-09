@@ -27,12 +27,14 @@ import java.util.function.Function;
  * metadata where possible. A decode via ImageIO backs that up, either when no usable metadata
  * exists or when the metadata answer is small enough to change a routing decision.
  *
- * <p>Camera and container formats can expose more than one directory that might carry dimensions.
- * A RAW file's multi-image chain can carry multiple Exif SubIFDs, and a HEIC/AVIF file can carry
- * multiple HEIF directories. Not every directory found holds the real capture resolution.
- * Every candidate directory is checked, and the largest reported dimensions win. A small embedded
- * preview therefore loses to any sibling directory carrying the true size. Where no sibling
- * carries it, the decode described on {@link #read} is the second opinion instead.
+ * <p>Camera and container formats can expose more than one directory that might carry dimensions,
+ * and not every one holds the real capture resolution. Every candidate directory is checked, and
+ * the largest reported dimensions win, so a small embedded preview loses to any sibling carrying
+ * the true size. Where no sibling carries it, the decode described on {@link #read} is the second
+ * opinion instead.
+ *
+ * <p>Flowchart, the real-fixture evidence and the scenario table:
+ * {@code app/docs/design/adapter/imaging/image-dimensions-reader.md}.
  */
 @Component
 public class ImageDimensionsReader implements ImageDimensionsPort {
@@ -41,10 +43,9 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
      * Reads an image's pixel dimensions. Embedded metadata answers first. A decode via ImageIO
      * cross-checks that answer whenever it comes out small.
      *
-     * <p>Any single metadata directory can describe a sub-image rather than the capture. Two real
-     * shapes do exactly that. An editor can resize a photo and leave the EXIF pixel-dimension tags
-     * behind at the old size. A tiled HEIC stores its picture as a grid of small tiles. The
-     * container box a metadata parse reaches there can carry one tile's size, not the grid's.
+     * <p>Any single metadata directory can describe a sub-image rather than the capture. An editor
+     * can resize a photo and leave the EXIF pixel-dimension tags behind at the old size, and a
+     * tiled HEIC's container box can carry one tile's size rather than the grid's.
      *
      * <p>At or above {@link LowResGate#MIN_DIMENSION} the exact number changes no routing decision,
      * so the metadata answer stands and the decode is skipped. Below it the number decides whether a
@@ -68,12 +69,10 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
     }
 
     /**
-     * A file really does carry dimensions in both directory types at once. A real iPhone HEIC is
-     * one: its HeifDirectory reads a 512x512 tile, its Exif SubIFD reads the true 4032x3024
-     * capture. Comparing across both rather than trusting whichever type appears first extends
-     * the same largest-wins safety margin largestAcross already applies within a single type.
-     * Ties keep the first argument, an arbitrary but pinned-down choice - it doesn't matter which
-     * equally-large candidate is reported, only that a real one is.
+     * A file can carry dimensions in both directory types at once, one of them a tile or a preview.
+     * Comparing across both, rather than trusting whichever type appears first, extends the same
+     * largest-wins safety margin {@link #largestAcross} applies within a single type. Ties keep the
+     * first argument, an arbitrary but pinned-down choice.
      *
      * @param a {@link Dimensions} the first candidate dimensions, or null
      * @param b {@link Dimensions} the second candidate dimensions, or null
@@ -91,15 +90,11 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
     }
 
     /**
-     * A SubIFD's dimensions can be tagged either way depending on the manufacturer, verified
-     * against real fixtures. Canon uses the EXIF-specific pixel-dimension tags (0xA002/0xA003).
-     * Nikon instead leaves those empty on the SubIFD holding the true capture resolution, and uses
-     * the generic TIFF ImageWidth/ImageHeight tags (0x0100/0x0101) there instead. Both are trusted
-     * equally here, since both live on a SubIFD, not the container's own top-level directory (the
-     * untrusted case the class comment above describes).
-     * Package-private (not private) so ImageDimensionsReaderTest can exercise the tag-priority
-     * order directly with hand-built directories, without needing a crafted real file for every
-     * branch combination.
+     * A SubIFD's dimensions can be tagged either way depending on the manufacturer: the
+     * EXIF-specific pixel-dimension tags, or the generic TIFF ImageWidth/ImageHeight pair. Both are
+     * trusted equally, since both live on a SubIFD rather than on the container's own top-level
+     * directory. Package-private so a test can exercise the tag-priority order with hand-built
+     * directories, rather than needing a crafted real file per branch.
      *
      * @param directory {@link ExifSubIFDDirectory} the SubIFD directory to inspect
      * @return {@link Dimensions} the directory's width/height as dimensions, or null if neither
@@ -137,9 +132,9 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
     }
 
     /**
-     * A HEIF/AVIF file can expose more than one HeifDirectory. A real AVIF fixture verified this:
-     * one instance carries only brand info, a separate instance carries the actual width/height.
-     * Every instance is checked here too, not just the first.
+     * One HeifDirectory's width/height, where it has them. A HEIF/AVIF file can expose several, one
+     * carrying only brand info and another the real size, which is why the caller runs this across
+     * every instance rather than the first.
      *
      * @param directory {@link HeifDirectory} the HEIF directory to inspect
      * @return {@link Dimensions} the directory's width/height as dimensions, or null if not
@@ -152,29 +147,17 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
     }
 
     /**
-     * A RAW file's multi-image IFD chain (thumbnail, preview, full capture) can expose more than
-     * one Exif SubIFD directory. Verified against a real Nikon NEF fixture: its first SubIFD (the
-     * embedded preview's own) carries no width/height tags at all, while a later SubIFD holds the
-     * true native capture resolution. getFirstDirectoryOfType alone would silently miss it and
-     * fall through to the ImageIO path's much smaller embedded thumbnail. Every SubIFD with usable
-     * tags is checked here, and the largest is trusted - the same largest-not-first principle
-     * largestImage() below already applies to the ImageIO fallback.
+     * The largest dimensions any Exif SubIFD or HeifDirectory reports. A RAW file's multi-image IFD
+     * chain can expose several SubIFDs where only a later one holds the true capture. A HEIF or
+     * AVIF file can carry its size in a HeifDirectory instead of, or alongside, a SubIFD. Taking
+     * the first of either type silently loses those.
      *
-     * <p>Trusting the largest is a one-directional safety margin. LowResGate only ever flags a file
-     * low-res when its reported dimensions are small, so under-reporting a real capture's size
-     * (the verified Nikon failure mode) is the risk this guards against. A corrupted file whose
-     * non-primary SubIFD happens to report an inflated bogus value could in principle cause a
-     * genuinely low-res file to escape that flag. Picking the larger candidate only ever raises the
-     * reported size, so this rule on its own cannot push a photo below the flag. It also cannot
-     * lift a file whose every directory under-reports, which is why read() cross-checks a small
-     * result against a decode.
-     *
-     * <p>HEIC/HEIF/AVIF files can carry their dimensions in a separate HeifDirectory, instead of or
-     * alongside an Exif SubIFD. A real AVIF fixture verified this: it has no embedded EXIF at all,
-     * only the container's own native width/height box. A plain AVIF conversion with no EXIF needs
-     * this second check to be found at all. A real iPhone HEIC carries both directory types. Its
-     * HEIF side reads a 512x512 tile rather than the assembled picture, so the SubIFD's larger
-     * value is the one that has to win.
+     * <p>Trusting the largest is a one-directional safety margin. {@link LowResGate} only ever flags
+     * a file low-res on small reported dimensions, so under-reporting a real capture is the risk
+     * this guards against. Picking the larger candidate can only raise the reported size, so this
+     * rule alone cannot push a photo below the flag. It also cannot lift a file whose every
+     * directory under-reports, which is why {@link #read} cross-checks a small result against a
+     * decode.
      *
      * @param file {@link Path} the image file to inspect
      * @return an {@link Optional} {@link Dimensions}, the largest trusted dimensions found across
@@ -199,11 +182,10 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
     }
 
     /**
-     * A tag that is present but zero is as good as absent, and has to be rejected the same way. Real
-     * phone exports carry zeroed pixel-dimension tags. Treating a zero as a real answer reports a
-     * dimension of 0, which reads as the smallest possible image rather than as no answer at all.
-     * That skips the decode fallback that finds the true size. It also makes a full-resolution photo
-     * look low-resolution to every caller downstream.
+     * A tag that is present but zero is as good as absent, and real phone exports carry zeroed
+     * pixel-dimension tags. Taking a zero as an answer reports the smallest possible image rather
+     * than no answer, which skips the decode fallback and makes a full-resolution photo look
+     * low-resolution downstream.
      *
      * @param width {@link Integer} the width tag's value, or null if the tag is absent
      * @param height {@link Integer} the height tag's value, or null if the tag is absent

@@ -75,8 +75,7 @@ class DisasterDrawerTest {
         final Path drawer1 = cullPrepRoot.resolve("2019-06/disasters");
         final Path oldEntry = writeFile(drawer1.resolve("2019-01-01_00-00-00-move-records-log.log"), "old");
         final Path freshEntry = writeFile(drawer1.resolve(recentStampedName()), "fresh");
-        // A sibling non-drawer file at the same nesting depth, to prove the sweep doesn't wander
-        // outside disasters/ folders.
+        // A sibling non-drawer file at the same nesting depth.
         final Path unrelated = writeFile(cullPrepRoot.resolve("2019-06/index.json"), "{}");
 
         final int deleted = drawer().sweepExpired(cullPrepRoot);
@@ -110,8 +109,7 @@ class DisasterDrawerTest {
         final Path graveyardRoot = root.resolve("logs/archives");
         final Path oldGraveyard = graveyardRoot.resolve("scope1-2019-01-01_00-00-00");
         writeFile(oldGraveyard.resolve("index.json"), "{}");
-        // Preserves a nested disasters/ subfolder's own structure - proves the whole tree is swept,
-        // not just the graveyard's top-level files.
+        // Nested a level down, so the assertion covers the whole tree rather than the top level.
         writeFile(oldGraveyard.resolve("disasters/2019-01-01_00-00-01-corrupt-original.json"), "?");
         final Path freshGraveyard = graveyardRoot.resolve(recentStampedGraveyardName());
         final Path freshEntry = writeFile(freshGraveyard.resolve("index.json"), "{}");
@@ -123,8 +121,7 @@ class DisasterDrawerTest {
         assertThat(Files.exists(freshEntry)).isTrue();
     }
 
-    // The sweep deletes every listed file then prunes the folder, and removeIfEmptyOfFiles walks
-    // raw. A listFiles that hid a half-written transfer would leave the folder standing while this
+    // A listFiles that hid a half-written transfer would leave the folder standing while the sweep
     // still counted it deleted.
     @Test
     void sweepExpiredGraveyardClearsAFolderHoldingATransferThatNeverLanded(@TempDir final Path root)
@@ -143,9 +140,8 @@ class DisasterDrawerTest {
     @Test
     void sweepExpiredGraveyardParsesTheTimestampEvenWhenTheScopeTagItselfContainsHyphens(@TempDir final Path root)
             throws IOException {
-        // A Year scope narrowed to specific months tags itself "2020-06-07-08" (CullScope.tag()) -
-        // exactly the shape TIMESTAMP_SUFFIX's trailing anchor exists to parse correctly regardless
-        // of how many hyphens the scope segment itself contributes.
+        // A Year scope narrowed to months tags itself "2020-06-07-08", so the scope segment alone
+        // contributes three hyphens.
         final Path oldGraveyard = root.resolve("logs/archives/2020-06-07-08-2019-01-01_00-00-00");
         writeFile(oldGraveyard.resolve("index.json"), "{}");
 
@@ -173,7 +169,7 @@ class DisasterDrawerTest {
         assertThat(deleted).isZero();
     }
 
-    // A timestamp comfortably inside the 30-day retention window, so this entry must survive a sweep.
+    // A timestamp comfortably inside the retention window, so this entry must survive a sweep.
     private static String recentStampedName() {
         final DateTimeFormatter format = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").withZone(ZoneOffset.UTC);
         return format.format(Instant.now().minus(Duration.ofDays(1))) + "-move-records-log.log";

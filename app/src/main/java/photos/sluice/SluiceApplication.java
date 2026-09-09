@@ -24,8 +24,8 @@ import java.nio.file.Path;
 public class SluiceApplication {
 
     /**
-     * The verb that opens the window. A class on the command surface carries the help entry and the
-     * refusal. So the name is spelled in two places, and a test holds them equal.
+     * The verb that opens the window. The command surface spells the same name for its help entry
+     * and its refusal, and a test holds the two equal.
      */
     static final String APP = "app";
 
@@ -73,8 +73,7 @@ public class SluiceApplication {
     /**
      * What the command surface is asked to run.
      *
-     * <p>An empty invocation asks for help. Somebody who typed the name on its own wanted to know
-     * what it does, and this is the surface that can tell them.
+     * <p>An empty invocation asks for help.
      *
      * @param args {@link String}[] command-line arguments
      * @return {@link String}[] the arguments to run

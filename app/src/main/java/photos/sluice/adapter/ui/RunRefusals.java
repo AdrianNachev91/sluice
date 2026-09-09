@@ -125,7 +125,7 @@ final class RunRefusals {
             // Says nothing about which answer is wrong. What this carries is the engine's own list,
             // written for a report rather than for a reader.
             case final ApplyException _ -> refusalWithoutLocation("This sift's answers do not hold together, "
-                    + "so nothing was moved. Your photos are still in Sorted.");
+                    + "so nothing was moved.");
             case final NoteIsNotTextException note -> refusalWithoutLocation(noteNotTextSentence(note.file()));
             case final UnrecognisedProviderException unrecognised -> providerUnrecognised(unrecognised);
             // Above the arm below it, since a file whose bytes are not text was reached, and
@@ -229,10 +229,7 @@ final class RunRefusals {
      * <p>The exception's own message names the prep dir and the raw state, which is what a log
      * needs. A reader needs to know their earlier sift is still there, and why this one stopped.
      *
-     * <p>Names the runs screen, where that earlier sift can be carried on or thrown away. The
-     * launcher offers the same thing on its own button wherever it can see the run coming. A reader
-     * meeting this sentence has usually arrived another way. A press on a finished sort's card, or
-     * a run that appeared between the screen being drawn and the button being pressed.
+     * <p>Names the runs screen, where that earlier sift can be carried on or thrown away.
      *
      * @param occupied {@link Pipeline.ScopeOccupiedException} the refusal, carrying the run
      * @return {@link Refusal} the sentence, and the runs screen to deal with it from

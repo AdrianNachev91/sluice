@@ -17,6 +17,12 @@ final class AppearanceCard {
 
     private AppearanceCard() {}
 
+    /**
+     * The built card, and the control a save has to read the chosen look back off.
+     *
+     * @param card {@link VBox} the card itself, for the page to lay out
+     * @param themeBox {@link HBox} the radio buttons
+     */
     record Result(VBox card, HBox themeBox) {
     }
 
@@ -38,6 +44,7 @@ final class AppearanceCard {
      * <p>On one line rather than stacked, each option being one or two words.
      *
      * @param view {@link SettingsView} the state to draw
+     * @param presenter {@link SettingsPresenter} stores the look the moment a radio is picked
      * @param reportRefusal a {@link Consumer} of {@link String} puts a refused save on the page
      * @return {@link HBox} the choices, each button carrying the option it stands for
      */

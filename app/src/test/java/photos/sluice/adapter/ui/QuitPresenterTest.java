@@ -43,8 +43,7 @@ class QuitPresenterTest {
             new RunLauncherPresenter(this.pipeline, new FxProgressPort(Runnable::run));
 
     // Short enough that a test asking about a run which never ends is not paying the real
-    // 2.5-second wait. Nearly every test in this file waits it out, so what is spent here is spent
-    // about twenty times over.
+    // 2.5-second wait. Nearly every test in this file waits it out.
     private static final Duration A_SHORT_BEAT = Duration.ofMillis(20);
 
     // A sleep costs its own granularity on top of what it asks for. That overhead is a fixed number
@@ -73,10 +72,10 @@ class QuitPresenterTest {
         assertThat(this.presenter.quitDialog()).isNull();
     }
 
-    // On a beat of its own, and the only test here that needs one. What it turns on is the wait
-    // asking a third time, which takes two sleeps of a quarter of the beat. Windows rounds a sleep
-    // up to its timer's own granularity. On the shared beat above, those two can outlast the
-    // deadline on a loaded machine, and the third question is then never put.
+    // On a beat of its own, since what this turns on is the wait asking a third time, after two
+    // sleeps of a quarter of the beat. Windows rounds a sleep up to its timer's own granularity.
+    // On the shared beat above, those two can outlast the deadline on a loaded machine, and the
+    // third question is then never put.
     @Test
     void aRunThatEndsWhileTheCloseWaitsIsNeverAskedAbout() {
         final var waiting = new QuitPresenter(this.pipeline, this.startup, this.launcher,
@@ -103,8 +102,7 @@ class QuitPresenterTest {
         verify(this.startup, never()).windDownWithin(any());
     }
 
-    // A discard, a sweep of the finished runs and a troubleshoot pass all reach here. The dashboard
-    // started none of them, so there is no mode to name.
+    // A discard, a sweep of the finished runs and a troubleshoot pass all reach here.
     @Test
     void aJobTheDashboardNeverStartedIsNamedWithoutAMode() {
         when(this.pipeline.isBusy()).thenReturn(true);
@@ -115,8 +113,8 @@ class QuitPresenterTest {
         assertThat(asked.question()).startsWith("Something is still running.");
     }
 
-    // The other two are held apart from the sift's line itself rather than from a phrase inside it.
-    // Rewording that phrase would otherwise leave them passing over nothing.
+    // The other two are held apart from the sift's line itself rather than from a phrase inside it,
+    // which a reword there would leave them passing over.
     @Test
     void aSiftAFileAndAJobWithNoModeEachGetTheirOwnWaitingLine() {
         when(this.pipeline.isBusy()).thenReturn(true);
@@ -142,16 +140,13 @@ class QuitPresenterTest {
         assertThat(asked.forceQuit()).isEqualTo("Force quit now");
     }
 
-    // The progress area does branch on the import kind, so this line not branching is a property
-    // rather than an accident. A reader who chose Copy would otherwise be told their file is moved.
+    // A reader who chose Copy would otherwise be told their file is moved.
     @Test
     void bothImportKindsGetTheSameWaitingLine() {
         assertThat(this.importWaitingLine(RunLauncherPresenter::startImportCopying))
                 .isEqualTo(this.importWaitingLine(RunLauncherPresenter::startImportMoving));
     }
 
-    // Quitting stops a run and on a sift throws away a sheet already paid for. Keeping costs
-    // nothing, and the window closes again on a second press.
     @Test
     void keepRunningIsTheChoiceTheQuestionLeadsWith() {
         assertThat(this.quitView(RunMode.SORT, "").stopAndQuitLeads()).isFalse();
@@ -173,8 +168,7 @@ class QuitPresenterTest {
         verify(this.startup).windDownWithin(StartupSequence.ATTENDED_DRAIN_WAIT);
     }
 
-    // The order carries it. Asking after the wind-down would reach a runner already shut, with
-    // nothing left to escalate.
+    // Asking after the wind-down would reach a runner already shut, with nothing left to escalate.
     @Test
     void forceQuittingGivesUpOnTheFileBeforeItWindsDown() {
         this.presenter.forceQuit();

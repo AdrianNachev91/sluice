@@ -28,6 +28,10 @@ import java.nio.file.StandardCopyOption;
  * A process killed between the two leaves a temporary file no cleanup could have run for. The next
  * prep of that scope clears the directory wholesale.
  *
+ * <p>On Linux and macOS the published file carries the temporary file's permissions rather than the
+ * umask's. {@link Files#createTempFile} restricts a new file to its owner, and the rename moves that
+ * mode across, so a prep artifact that read 644 reads 600 after the first write through here.
+ *
  * <p>{@code adapter.imaging} carries its own copy of this class. The two adapter subpackages may not
  * depend on each other, the same constraint that keeps their {@code index.json} DTOs separate.
  */

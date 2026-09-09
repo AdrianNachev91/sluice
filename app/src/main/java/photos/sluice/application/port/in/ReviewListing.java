@@ -7,10 +7,8 @@ import java.util.List;
 /**
  * Every folder Sluice has filled with photos it will not touch again until somebody looks at them.
  *
- * <p>Three roots hold such folders, and they are listed together because a reader has one question
- * about all three. What is waiting for me, and where is it. Review holds the categories somebody
- * configured, plus what a sort would not put in Sorted. Duplicates holds one folder per
- * near-duplicate group. Unreviewable holds what a sift could not render a judgeable tile for.
+ * <p>The three roots of {@link Root} are listed together because a reader has one question about
+ * all three. What is waiting for me, and where is it.
  *
  * <p>A folder here is one that directly holds files, whatever depth that sits at under its root.
  *
@@ -53,9 +51,8 @@ public record ReviewListing(List<Folder> folders, List<Path> unreadable) {
     /**
      * Which job filed a folder.
      *
-     * <p>Only the Review root has both. A sort files what it would not put in Sorted, and a sift
-     * files the categories somebody configured. The two answer different questions, so a reader
-     * meets them under headings of their own.
+     * <p>Only the Review root has both. The two answer different questions, so a reader meets them
+     * under headings of their own.
      */
     public enum FiledBy {
 

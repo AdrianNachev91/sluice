@@ -84,7 +84,6 @@ class YamlSettingsStoreTest {
                 .allSatisfy(temporary -> assertThat(temporary.getParent()).isEqualTo(dir));
     }
 
-    // The write dies once the temporary file exists, which is the mess a volume filling up leaves.
     @Test
     void aFailedWriteLeavesNeitherALeftoverNorAChangedConfigFile(@TempDir final Path dir) throws IOException {
         final Path file = dir.resolve("config.yml");
@@ -270,8 +269,6 @@ class YamlSettingsStoreTest {
         assertThat(reloaded(file).paths()).isEqualTo(settings().paths());
     }
 
-    // Each provider keeps its own block, and a save carries whichever ones the settings hold. A
-    // provider this install does not have is one of them, so its block has to come back untouched.
     @Test
     void aBlockBelongingToAnotherProviderSurvivesASave(@TempDir final Path dir) throws IOException {
         final Path file = dir.resolve("config.yml");
@@ -294,9 +291,8 @@ class YamlSettingsStoreTest {
         assertThat(asMap(providerSettings.get("anthropic"))).containsEntry("model", "claude-sonnet-5");
     }
 
-    // The one shape no other test reaches: what this writer produces, read back by the binder that
-    // reads it at launch. An install where nobody has configured a provider saves an empty map, and
-    // a mapping with nothing under it is not a mapping the binder accepts.
+    // An install where nobody has configured a provider saves an empty map, and a mapping with
+    // nothing under it is not a mapping the binder accepts.
     @Test
     void whatASaveWritesStillBindsWhenNoProviderIsConfigured(@TempDir final Path dir) {
         final Path file = dir.resolve("config.yml");
@@ -345,8 +341,6 @@ class YamlSettingsStoreTest {
         return raw == null ? List.of() : List.copyOf((List<String>) raw);
     }
 
-    // Reads a saved file back the way config binding would, so a test compares settings values
-    // rather than YAML text.
     private static Settings reloaded(final Path file) {
         final var loaded = new Yaml().<Map<String, Object>>load(read(file));
         final var sluice = asMap(loaded.get("sluice"));

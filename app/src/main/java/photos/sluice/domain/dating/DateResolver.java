@@ -1,5 +1,6 @@
 package photos.sluice.domain.dating;
 
+import org.jspecify.annotations.Nullable;
 import photos.sluice.domain.model.Confidence;
 import photos.sluice.domain.model.DateResult;
 import photos.sluice.domain.model.MediaFile;
@@ -46,7 +47,7 @@ public class DateResolver {
      * @param sidecar {@link TakeoutSidecar} the file's Takeout sidecar, if any
      * @return {@link DateResult} the resolved date, confidence, and source
      */
-    public DateResult resolve(final MediaFile file, final TakeoutSidecar sidecar) {
+    public DateResult resolve(final MediaFile file, final @Nullable TakeoutSidecar sidecar) {
         final DateResult result = tryResolve(this.sidecarSource, "sidecar", Confidence.TRUSTED, file, sidecar)
                 .or(() -> tryResolve(this.exifSource, "exif", Confidence.TRUSTED, file, sidecar))
                 .or(() -> tryResolve(this.filenameSource, "filename", Confidence.TRUSTED, file, sidecar))
@@ -73,7 +74,8 @@ public class DateResolver {
      */
     private static Optional<DateResult> tryResolve(final DateSource source, final String name,
                                                    final Confidence confidence,
-                                                   final MediaFile file, final TakeoutSidecar sidecar) {
+                                                   final MediaFile file,
+                                                   final @Nullable TakeoutSidecar sidecar) {
         return source.resolve(file, sidecar).map(when -> new DateResult(when, confidence, name));
     }
 

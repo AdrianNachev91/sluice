@@ -249,10 +249,10 @@ class RefusalCoverageTest {
                     || candidate.getName().startsWith(Pipeline.class.getName() + "$"));
     }
 
-    // The fragment pins the desktop only. That is where this chunk changed what reaches a switch,
-    // and where a deleted arm falls through to a broader one that answers plausibly and wrongly. The
-    // command line's own classifier has its type-family ordering pinned by its own tests, so here it
-    // is asked only whether it recognises the type at all.
+    // The fragment pins the desktop only, that being where a deleted arm falls through to a
+    // broader one answering plausibly and wrongly. The command line's own classifier has its
+    // type-family ordering pinned elsewhere, so here it is asked only whether it recognises the
+    // type at all.
     private static Refusal worded(final Throwable thrown, final String desktopSays) {
         return new Refusal(thrown, Handling.words(desktopSays), Handling.recognised());
     }

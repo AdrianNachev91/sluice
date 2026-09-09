@@ -257,11 +257,9 @@ public class CsvSpendLedger implements SpendLedgerPort {
 
     /**
      * Hand-rolled instead of pulling in a CSV library: every field is always quoted, so this is a
-     * small character-by-character state machine rather than a general-purpose parser.
-     * {@code inQuotes} tracks whether we are inside a quoted field. A {@code "} seen while inside
-     * one is either an escaped literal quote or the field's closing quote. Peeking at the next
-     * character disambiguates: a second quote means the doubled pair, so consume both and stay in
-     * the field.
+     * small state machine rather than a general-purpose parser. A {@code "} inside a field is
+     * either an escaped literal quote or the field's closing one, and peeking at the next character
+     * is what tells them apart.
      *
      * @param line {@link String} CSV row to split into fields
      * @return a {@link List} of {@link String}, the row's field values, in order

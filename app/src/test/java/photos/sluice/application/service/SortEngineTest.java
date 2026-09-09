@@ -74,9 +74,9 @@ class SortEngineTest {
 
     @Test
     void nearZeroPairingRateWithSidecarsPresentTripsThePairingCanary(@TempDir final Path root) throws IOException {
-        // Simulates a changed Takeout export shape: a JSON sidecar exists (takeoutMode true), but
-        // its name doesn't prefix-match the media file's, so nothing pairs. Before this fix, that
-        // failure mode was silent - every file just falls through to mtime with no warning at all.
+        // A changed Takeout export shape. A JSON sidecar exists, so takeout mode is on. Its name
+        // does not prefix-match the media file's, so nothing pairs and every file falls back to
+        // mtime.
         final Path inbox = inboxOf(root);
         writeFile(inbox.resolve("20210315_photo.jpg"), padded("keeper"));
         Files.writeString(inbox.resolve("print-subscriptions.json"), "{}");
@@ -116,9 +116,8 @@ class SortEngineTest {
 
     @Test
     void sharedSidecarBetweenOriginalAndEditedCopyIsDeletedExactlyOnce(@TempDir final Path root) throws IOException {
-        // TakeoutSidecarPairer maps an "-edited" copy to its original's sidecar. Both media files
-        // in scope resolve their date via the same JSON path, so it must be consumed once, not
-        // once per file.
+        // An "-edited" copy pairs to its original's sidecar, so both media files in scope resolve
+        // their date through the same JSON path.
         final Path inbox = inboxOf(root);
         writeFile(inbox.resolve("photo1.jpg"), padded("original"));
         writeFile(inbox.resolve("photo1-edited.jpg"), padded("edited"));
@@ -142,10 +141,8 @@ class SortEngineTest {
 
         final SortSummary summary = this.sortEngine(root).sort(new SortScope.OldestYear());
 
-        // Mechanism 1 (inline consumption) never touches it. Its date came from filename, not
-        // this sidecar, so sidecarsDeleted stays 0. But the whole-Inbox sweep (mechanism 2) is
-        // independent of why the media left. Once the photo is sorted away, nothing in the
-        // sidecar's directory owns it anymore, so the sweep deletes it anyway.
+        // Its date came from the filename rather than this sidecar, so the inline consumption
+        // never touched it and the count stays 0. The sweep still takes it once the photo is gone.
         assertThat(summary.sidecarsDeleted()).isEqualTo(0);
         assertThat(Files.exists(sidecar)).isFalse();
         assertThat(Files.exists(root.resolve("Sorted/Photos/2021/03/20210315_photo.jpg"))).isTrue();
@@ -184,11 +181,8 @@ class SortEngineTest {
         assertThat(Files.exists(albumDir)).isTrue();
     }
 
-    // The other half of the incremental promise. The sidecar the first run correctly left behind
-    // gets swept by the run that finally takes its media, not consumed inline. The sidecar is
-    // invalid JSON, so it cannot win the date race - the filename source wins instead. Only
-    // mechanism 2 (the whole-Inbox sweep) can be what deletes it, proving a later run sweeps it
-    // rather than letting it pile up.
+    // The sidecar is invalid JSON, so it cannot win the date race and the filename source wins
+    // instead. The sweep is therefore the only thing that could have deleted it.
     @Test
     void aLaterYearsSortSweepsTheSidecarTheEarlierRunLeftBehind(@TempDir final Path root) throws IOException {
         final Path inbox = inboxOf(root);
@@ -218,8 +212,8 @@ class SortEngineTest {
         final Path libraryFile = root.resolve("LibraryFixture").resolve("existing.jpg");
         writeFile(libraryFile, content);
         final HashIndexPort hashIndex = seededIndex(root, hash, libraryFile);
-        // Invalid, so mechanism 1 never wins the date-resolution race for it. Any cleanup here can
-        // only be mechanism 2 (the sweep) noticing the media is gone, not the inline consumption.
+        // Invalid, so it never wins the date-resolution race and inline consumption cannot be what
+        // removes it. Only the sweep noticing the media is gone can.
         final Path sidecar = inbox.resolve("20190101_dup.jpg.supplemental-metadata.json");
         Files.writeString(sidecar, "{not valid json");
 
@@ -406,8 +400,8 @@ class SortEngineTest {
         assertThat(Files.exists(inbox.resolve("20210101_newest.jpg"))).isTrue();
     }
 
-    // The property CurateEngine leans on to read "the" year off a summary. Both scopes narrow to
-    // one year before anything is routed, so a second year cannot reach Sorted in the same run.
+    // Reading "the" year off a summary rests on this: a second year cannot reach Sorted in the
+    // same run.
     @Test
     void anOldestYearSortReportsOnlyTheYearItPicked(@TempDir final Path root) throws IOException {
         final Path inbox = inboxOf(root);
@@ -419,8 +413,6 @@ class SortEngineTest {
         assertThat(summary.yearsSorted()).containsExactly(2018);
     }
 
-    // Mirrors anOldestYearSortReportsOnlyTheYearItPicked for the other scope shape that narrows to
-    // one year up front: an explicit Year scope, over the same two-year fixture.
     @Test
     void anExplicitYearSortReportsOnlyThatYear(@TempDir final Path root) throws IOException {
         final Path inbox = inboxOf(root);
@@ -449,10 +441,9 @@ class SortEngineTest {
 
     @Test
     void mixedBatchCountsSatisfyTheProcessedInvariant(@TempDir final Path root) throws IOException {
-        // One file engineered per outcome bucket, run together. This checks the
-        // processed-equals-sum-of-buckets invariant against a real mixed batch, not six isolated
-        // single-file cases. Isolated cases could each pass independently while a cross-file
-        // interaction - e.g. one file's routing changing another's counters - went unnoticed.
+        // One file per outcome bucket, run together as one batch. Six isolated single-file cases
+        // could each pass while a cross-file interaction, one file's routing changing another's
+        // counters, went unnoticed.
         final Path inbox = inboxOf(root);
 
         // Bucket 1: reimport. Its bytes are seeded into a "library" hash index entry that still
@@ -475,11 +466,9 @@ class SortEngineTest {
         writeFile(inbox.resolve("20190103_lowres.jpg"), "tiny");
 
         // Bucket 4: unsorted. No filename date pattern and no EXIF, so it falls through to an
-        // implausible mtime (pre-2000), which DateResolver demotes to UNSORTABLE. Its resolved
-        // date is therefore 1990, not 2019 like every other file here. That's why the scope below
-        // is OldestN(7) rather than Year(2019, null) or OldestYear(). A year-based scope would
-        // select only this one file - the actual oldest year present - and leave the 2019 files
-        // out of the batch entirely.
+        // implausible pre-2000 mtime and is demoted to UNSORTABLE. Its resolved date is 1990,
+        // which is why the scope below is OldestN(7). A year-based scope would select this file
+        // alone, as the oldest year present, and leave the 2019 files out of the batch.
         final Path unsortedFile = inbox.resolve("nodatepattern.jpg");
         writeFile(unsortedFile, padded("mystery"));
         setMtime(unsortedFile, LocalDateTime.of(1990, 1, 1, 0, 0));
@@ -488,8 +477,8 @@ class SortEngineTest {
         writeFile(inbox.resolve("20190104_photo.jpg"), padded("photo"));
         writeFile(inbox.resolve("20190105_video.mp4"), "video");
 
-        // All 7 files fit within OldestN(7), so every one is in scope regardless of the 1990/2019
-        // date spread. No truncation, no ordering to reason about.
+        // All 7 fit within OldestN(7), so every one is in scope whatever the date spread. No
+        // truncation, and no ordering to reason about.
         final SortSummary summary = this.sortEngine(root, hashIndex).sort(new SortScope.OldestN(7));
 
         assertThat(summary.processed()).isEqualTo(7);
@@ -537,8 +526,6 @@ class SortEngineTest {
                 "cut-short:Finding dates...", "finished:Finding dates...");
     }
 
-    // Every stage is counted. None of the three can quietly become the indeterminate one covering
-    // the slow work while a measured bar covers the fast one.
     private static final class RecordingPhases implements ProgressPort {
 
         private final List<String> events = new ArrayList<>();
@@ -570,9 +557,8 @@ class SortEngineTest {
         writeFile(inbox.resolve("20210101_a.jpg"), padded("a"));
         writeFile(inbox.resolve("20210102_b.jpg"), padded("b"));
 
-        // Dating is checked before each file, so the first poll (for file 1) still runs and the
-        // second (before file 2) cancels - proving the abort happens mid-pass, not merely when
-        // already cancelled going in.
+        // Dating is checked before each file. The first poll runs and the second cancels, so the
+        // abort happens mid-pass rather than on a run already cancelled going in.
         final AtomicInteger polls = new AtomicInteger();
         final CancellationSignal cancelBeforeSecondFile = () -> polls.incrementAndGet() > 1;
 
@@ -593,8 +579,8 @@ class SortEngineTest {
         writeFile(inbox.resolve("20210102_b.jpg"), padded("b"));
         writeFile(inbox.resolve("20210103_c.jpg"), padded("c"));
 
-        // Cancels once the first survivor's move has already ticked, so routing stops before the
-        // remaining two are even looked at.
+        // Cancels once the first survivor's move has ticked, so routing stops before the remaining
+        // two are looked at.
         final AtomicBoolean cancelled = new AtomicBoolean(false);
         final SortSummary summary = this.sortEngine(root, cancelOnFirstFileRouted(cancelled))
                 .sort(new SortScope.OldestYear(), cancelled::get);
@@ -623,10 +609,9 @@ class SortEngineTest {
         final Path sidecarB = inbox.resolve("20210102_b.jpg.supplemental-metadata.json");
         writeSidecar(sidecarB, LocalDateTime.of(2021, 1, 2, 12, 0, 0));
 
-        // Cancels once the first survivor routed, whichever of a/b that turns out to be - scan
-        // order is filesystem-dependent, not alphabetical. Sidecar consumption must only spend the
-        // routed file's sidecar; the other file's media never left the Inbox, so its own sidecar
-        // has to survive for a future run.
+        // Cancels once the first survivor routed, whichever of a and b that turns out to be. Scan
+        // order is filesystem-dependent rather than alphabetical. The other file's media never
+        // left the Inbox, so its own sidecar has to survive for a future run.
         final AtomicBoolean cancelled = new AtomicBoolean(false);
         final SortSummary summary = this.sortEngine(root, cancelOnFirstFileRouted(cancelled))
                 .sort(new SortScope.OldestYear(), cancelled::get);
@@ -707,8 +692,7 @@ class SortEngineTest {
     void aJsonThatWasNeverAPerPhotoSidecarSurvivesTheSweepAndKeepsItsDirectoryAlive(@TempDir final Path root)
             throws IOException {
         // Real Takeout exports ship a per-album metadata.json, and any dump can carry an unrelated
-        // app's JSON. Neither ever described a photo, so neither is the sweep's to delete - not
-        // even in an album the run emptied of media.
+        // app's JSON. This album is emptied of media, so both sit where the sweep looks.
         final Path inbox = inboxOf(root);
         final Path albumDir = inbox.resolve("Takeout").resolve("Album");
         writeFile(albumDir.resolve("20190101_a.jpg"), padded("in-scope"));
@@ -919,11 +903,10 @@ class SortEngineTest {
         Files.writeString(file, content);
     }
 
-    // 60,000 bytes clears LowResGate's 50KB threshold. A fixture built from this never gets
-    // classified as low-res, even though its content is garbage, not a real image. Most tests
-    // here aren't testing low-res routing. They use this fixture instead of real image bytes to
-    // keep other outcomes (dedup, dating, sorting) independent of it. The marker prefix keeps
-    // otherwise-identical padding distinguishable by content/hash within one test.
+    // Enough bytes to clear LowResGate's size threshold. A fixture built from this is never
+    // classified as low-res, though its content is garbage rather than a real image. That keeps
+    // dedup, dating and sorting outcomes independent of low-res routing. The marker prefix
+    // keeps otherwise-identical padding distinguishable by hash within one test.
     private static String padded(final String marker) {
         return marker + "x".repeat(60_000);
     }

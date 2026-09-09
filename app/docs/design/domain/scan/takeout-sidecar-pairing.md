@@ -28,8 +28,11 @@ after any suffix. Both `IMG_1234.jpg(1)` and `IMG_1234.jpg.supplemental-metadata
 `IMG_1234(1).jpg`. Stripping the suffix before lifting the number off would lose it, and the sidecar
 would then claim the unnumbered original instead.
 
-If two sidecars in the same directory derive the same owner key, the first one encountered wins;
-the second is ignored.
+Keys are indexed by their lowercased form, and every sidecar deriving one is kept rather than only
+the first. Two sidecars can share a lowercased key for two different reasons. They are
+differently-suffixed sidecars for one photo, or they belong to two media files whose names differ
+only in case. A lone candidate is taken whatever its case. Among several, only the one whose raw
+owner key equals the queried filename wins, and none matching leaves the media unpaired here.
 
 ## 2. Matching a media file against the index
 
@@ -96,4 +99,5 @@ must not enter that decision at all. See `sidecar-sweep.md`.
   Inline consumption spends only a sidecar whose parsed date actually won for its file, but the
   orphan sweep decides from names alone. The sweep's safety is structural instead: it deletes only
   `.json` files, never media, and only once nothing left in the sidecar's own directory owns it.
-  See `sidecar-sweep.md` for the rules and the accepted residual, a long-named stray `.json`.
+  See `sidecar-sweep.md` for the rules, and its section 2 for the accepted residual, a long-named
+  stray `.json`.

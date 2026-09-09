@@ -30,11 +30,9 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 
-// Shared fixtures for every test that drives a real prep directory. It writes the on-disk artifacts
-// a cull produces - index.json, sidecars, shards, a move-record log - and builds the services that
-// read them. The apply side spans several collaborators, so a test usually needs two or three of
-// them wired to the same roots. Building that graph in one place keeps each test file about
-// behavior rather than construction.
+// Shared fixtures for every test that drives a real prep directory. It writes the on-disk
+// artifacts a cull produces, and builds the services that read them. The apply side spans several
+// collaborators, so a test usually needs two or three of them wired to the same roots.
 //
 // Everything writes through the real adapters against a @TempDir, so the assertions are about what
 // actually lands on disk.
@@ -184,9 +182,8 @@ final class CullPrepTestSupport {
         return applyPlanner(SettingsFixture.workingRoot(repoRoot), mediaStore);
     }
 
-    // Lets a test inject a prep-dir reader that fails the way it wants to test, at a seam this code
-    // owns rather than through the filesystem. A real NioMediaStore backs every other read, so the
-    // sidecar and shard reads this port covers are the only ones a test can fail.
+    // A real NioMediaStore backs every other read, so the sidecar and shard reads this port covers
+    // are the only ones a test can fail.
     static ApplyPlanner applyPlanner(final Path repoRoot, final CullPrepPort cullPrepPort) {
         return applyPlanner(SettingsFixture.workingRoot(repoRoot), new NioMediaStore(), cullPrepPort);
     }
@@ -219,8 +216,6 @@ final class CullPrepTestSupport {
         return prepDirRemedies(repoRoot, libraryRoot, new JsonCullPrepStore());
     }
 
-    // Lets a test inject a prep-dir reader that fails the way it wants to test, at a seam this code
-    // owns rather than through the filesystem.
     static PrepDirRemedies prepDirRemedies(final Path repoRoot, final Path libraryRoot, final CullPrepPort cullPrepPort) {
         final var mediaStore = new NioMediaStore();
         return new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig(repoRoot, libraryRoot), fixedSettings(),
@@ -231,10 +226,9 @@ final class CullPrepTestSupport {
         return prepDirDoctor(repoRoot, new JsonCullPrepStore());
     }
 
-    // Lets a test inject a prep-dir reader that fails the way it wants to test, at a seam this code
-    // owns. Provoking a read failure through the filesystem instead means testing the OS. Putting a
-    // directory where a file belongs fails at the open on Windows and at the first read on Linux.
-    // Those are two different code paths in the reader.
+    // A read failure is injected at a seam this code owns rather than through the filesystem.
+    // Putting a directory where a file belongs fails at the open on Windows and at the first read
+    // on Linux. Those are two different code paths in the reader.
     //
     // The planner reads through the same port, matching production, where both take the one bean.
     // Handing it a separate real store would leave every read past the index working normally, so

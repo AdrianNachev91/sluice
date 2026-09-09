@@ -34,16 +34,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * descriptor for that file closes in the same process. A refusal that opened the marker and closed
  * it again would therefore release the lock the first claim still believes it holds.
  *
- * <p>The registry recognises a root by the path it resolves to, so any spelling of a claimed
- * directory is refused. Renaming that directory while its claim is live defeats that, since the new
- * name resolves somewhere the registry has never seen. The claim is still refused, by the lock
- * itself rather than the registry, at the cost of one leaked descriptor.
- *
  * <p>Second, the channel of a live claim stays open for the whole of that claim, and its path is
  * never reopened.
  *
  * <p>The marker file itself is left on disk after a release. Deleting it would race a process that
  * is opening it at that moment. An abandoned marker is an empty file and costs nothing.
+ *
+ * <p>Flowchart, root identity, the renamed-root gap and what the claim is worth:
+ * {@code app/docs/design/adapter/fs/working-root-lock.md}.
  */
 @Component
 public class FileChannelWorkingRootLock implements WorkingRootLock {
@@ -66,8 +64,8 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
     // still held, so a write that fails leaves the old claim exactly where it was.
     //
     // Keyed by path. A claimed directory renamed or deleted underneath its claim stops matching that
-    // key, so release() misses it and the descriptor is held until the process ends. The class
-    // Javadoc describes the same effect on the registry. The kernel still drops the lock at exit.
+    // key, so release() misses it and the descriptor is held until the process ends. The kernel
+    // still drops the lock at exit.
     private final Map<Path, Held> claims = new HashMap<>();
 
     /**
@@ -87,9 +85,8 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
      * One claim and how many callers are holding it.
      *
      * <p>The count exists because two paths a caller reads as different roots can canonicalise to
-     * one. A settings save moving between two spellings of the same folder acquires and releases
-     * what it believes are two roots. The folder has to come out of that still claimed, so a claim
-     * is given up when its last holder does, rather than on the first release.
+     * one, and the folder has to survive a caller releasing what it believes is the other. So a
+     * claim is given up when its last holder does, rather than on the first release.
      *
      * @param claim {@link Claim} the held claim
      * @param holders int how many acquires are outstanding against it
@@ -112,9 +109,9 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
      * running, and all three touch the same claims.
      *
      * <p>A root already held gains a holder and nothing else. No marker file is opened and no lock
-     * is taken, so the count is the only thing that moves. That is the point rather than a
-     * shortcut. A second channel on a marker this process already holds would hand the first claim's
-     * lock away as soon as either descriptor closed, per the Linux behaviour described above.
+     * is taken, and that is the point rather than a shortcut. A second channel on a marker this
+     * process already holds would hand the first claim's lock away as soon as either descriptor
+     * closed.
      *
      * @param workingRoot {@link Path} the working root to claim
      */
@@ -216,9 +213,8 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
     /**
      * Keeps one failure of a run to report and hangs every later one off it as suppressed.
      *
-     * <p>Which one is kept is whichever the map handed back first, and that order is arbitrary. It
-     * makes no difference to a caller: all of them are carried either way, and nothing acts on a
-     * close failure beyond reporting it.
+     * <p>Which one is kept is whichever the map handed back first, and that order is arbitrary. All
+     * of them are carried either way, and nothing acts on a close failure beyond reporting it.
      *
      * @param kept {@link UncheckedIOException} the failure kept so far, null until one happens
      * @param next {@link UncheckedIOException} the failure just caught
@@ -243,9 +239,8 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
      * can then detect that. The alternative strands the root until the process exits, which is
      * worse and far easier to hit.
      *
-     * <p>An instance method, and package-private, so a test can make giving up a claim fail. No
-     * portable way to make a real channel refuse to close is available, and both callers above
-     * document what they do when one does.
+     * <p>An instance method, and package-private, so a test can make giving up a claim fail. There
+     * is no portable way to make a real channel refuse to close.
      *
      * @param claim {@link Claim} the claim to give up
      */
@@ -264,8 +259,8 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
      * same folder. A relative step, a symlink and a junction all disappear here.
      *
      * <p>Everything this class stores or compares goes through it first. Without that, saving a
-     * path in a slightly different form would read as a different root. The user would then be
-     * refused the folder they are already working in.
+     * path in a slightly different form would refuse the user the folder they are already working
+     * in.
      *
      * @param workingRoot {@link Path} the working root as configured
      * @return {@link Path} the form this class stores and compares by

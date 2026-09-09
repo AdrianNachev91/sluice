@@ -298,8 +298,8 @@ class RunLauncherPresenterTest {
         assertThat(this.finishedView().detail()).contains("Run the import again");
     }
 
-// Every import refusal is something the person choosing did. Left to the fallback arm they reach
-    // the reader as a class name and an invitation to file a bug against Sluice.
+    // Every import refusal is something the person choosing did. Left to the fallback arm they
+    // reach the reader as a class name and an invitation to file a bug.
     @Test
     void aRefusedImportIsReportedInTheWordsTheRefusalItselfUsed() {
         doThrow(new ImportSourceException(
@@ -373,7 +373,7 @@ class RunLauncherPresenterTest {
         assertThat(this.finishedView().tone()).isEqualTo(RunResultView.Tone.UNFINISHED);
         assertThat(requireNonNull(this.finishedView().detail()))
                 .doesNotContain("Report this as a bug")
-                .contains("Your photos are still in Sorted");
+                .contains("nothing was moved");
         assertThat(this.finishedView().counts()).extracting(RunResultView.Count::label)
                 .contains("Calls to your provider", "Tokens used");
     }
@@ -828,9 +828,8 @@ class RunLauncherPresenterTest {
         assertThat(this.runningView().cancelPressable()).isFalse();
     }
 
-    // Each of these was reaching the screen as "no plain words for why... report this as a bug",
-    // because the presenter had no arm for its type. The refusal is deliberate and the app knows
-    // exactly what is wrong, so the bug line is the one thing none of them may say.
+    // The refusal is deliberate and the app knows exactly what is wrong, so the bug line is the
+    // one thing none of these may say.
     @Test
     void aTimeframeAlreadyHoldingAnUnfinishedSiftIsRefusedInWordsRatherThanAsABug() {
         this.choose(RunMode.SIFT, "2019");
@@ -1130,7 +1129,7 @@ class RunLauncherPresenterTest {
     }
 
     // Nothing moved, so no photo rows follow and there is no change of unit for the sheets row to
-    // mark. The same tally and report as the test above, bar the category it filed nothing under.
+    // mark.
     @Test
     void theSheetsRowNamesNoPhotosWhereNothingBelowItCountsAny() {
         this.choose(RunMode.SIFT, "2019");

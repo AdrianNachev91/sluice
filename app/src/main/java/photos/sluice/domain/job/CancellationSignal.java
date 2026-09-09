@@ -9,11 +9,10 @@ package photos.sluice.domain.job;
  * <p>Two levels, asked at different rates. {@link #isCancelled()} is cooperative: a caller sees it
  * at the next poll point, so a stop lands between items and the item in flight finishes.
  * {@link #isAbandonRequested()} is the escalation, for the one wait long enough to read as a button
- * doing nothing. That is a single large file being transferred. Only a transfer asks it, and only
- * mid-file.
+ * doing nothing: a single large file being transferred.
  *
- * <p>Nothing polls the second except a transfer. A signal that escalated without also cancelling
- * would abandon one file and let the loop around it carry straight on to the next.
+ * <p>An escalation implies a cancellation. A signal answering true to the second alone would
+ * abandon one file and let the loop around it carry straight on to the next.
  */
 @FunctionalInterface
 public interface CancellationSignal {

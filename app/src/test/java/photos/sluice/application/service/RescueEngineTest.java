@@ -477,9 +477,8 @@ class RescueEngineTest {
 
     @Test
     void progressCallbackTicksOnceForEveryFileWhereverItLands(@TempDir final Path root) throws IOException {
-        // "Food" names no month, so each file's destination depends solely on dateForOnly. One
-        // lands under a year, the other undated. A dated folder would differ: its own name would
-        // date both whatever the DateSource says.
+        // "Food" names no month, so each file's destination depends solely on dateForOnly. A dated
+        // folder's own name would date both, whatever the DateSource says.
         writeFile(root.resolve("Review/Food/dated.jpg"), "keeper");
         writeFile(root.resolve("Review/Food/undated.jpg"), "no date");
 
@@ -501,8 +500,8 @@ class RescueEngineTest {
         writeFile(reasonsFile, "b.jpg - low-res");
 
         // Cancels once the first entry has ticked, so the loop stops before the other two are even
-        // looked at. Scan order across the three entries isn't guaranteed, so which one ticks first
-        // varies; every assertion below holds regardless of which it is.
+        // looked at. Scan order decides which one that is, so every assertion below is written to
+        // hold whichever it turns out to be.
         final AtomicBoolean cancelled = new AtomicBoolean(false);
         final ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
 
@@ -512,25 +511,19 @@ class RescueEngineTest {
         assertThat(summary.moved()).isBetween(0, 1);
         assertThat(summary.folderRemoved()).isFalse();
         assertThat(Files.exists(root.resolve("Review/2019-06"))).isTrue();
-        // The actual claim: a pass that stopped early must not be treated as safe to dissolve. It
-        // would otherwise delete this marker with two of the three entries never reached.
         assertThat(Files.exists(reasonsFile)).isTrue();
         assertThat(regularFileCount(root.resolve("Review/2019-06"))).isEqualTo(3 - summary.moved());
         assertThat(regularFileCount(root.resolve("Sorted"))).isEqualTo(summary.moved());
     }
 
-    // regularFileCount()'s own regression test: the cancellation test above calls it on the Sorted
-    // root, which NioMediaStore only creates as a side effect of an actual move. When scan order
-    // puts _reasons.txt first, nothing moves before cancellation and Sorted never exists on disk. A
-    // bare Files.walk() throws NoSuchFileException in exactly that case.
+    // The Sorted root only exists once something has moved into it. A cancellation stopping before
+    // the first move leaves the helper counting a directory that is not there.
     @Test
     void regularFileCountTreatsAMissingDirectoryAsZeroFilesInsteadOfThrowing(@TempDir final Path root)
             throws IOException {
         assertThat(regularFileCount(root.resolve("never-created"))).isZero();
     }
 
-    // Treats a missing root as zero files rather than throwing NoSuchFileException. Callers may
-    // pass a directory that a test scenario never ends up creating.
     private static long regularFileCount(final Path root) throws IOException {
         if (!Files.exists(root)) {
             return 0;
@@ -583,8 +576,7 @@ class RescueEngineTest {
     }
 
     // A real store in every respect but one: the note in a folder cannot be read. Which failure it
-    // reports is the whole point, the port's contract splitting damaged bytes from a file nobody
-    // reached.
+    // reports is the whole point, the port splitting damaged bytes from a file nobody reached.
     private static final class UnreadableNote extends NioMediaStore {
         private final String refusing;
         private final UncheckedIOException failure;
@@ -607,8 +599,7 @@ class RescueEngineTest {
         }
     }
 
-    // Wraps the real NioMediaStore but throws after a fixed number of successful move() calls,
-    // which is RescueEngine's own move step. Deterministically simulates a crash mid-run.
+    // A crash mid-run, made deterministic: it fails on a counted move rather than on a clock.
     // listFiles() sorts the delegate's result so which file counts as "first" doesn't depend on
     // filesystem walk order.
     private static final class FailingAfterMoves implements MediaStore {

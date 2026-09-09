@@ -148,27 +148,21 @@ final class CullEngine {
      * Re-arms a watcher for every resumable run found on disk. There is no persistent job store, so
      * restarting the app would otherwise stop watching every run armed before it.
      *
-     * <p>Resumable means WAITING or READY: the two states a run can leave without a person. WAITING
-     * still expects shards, which is what a watcher watches for. READY has them all already, the
-     * ordinary shape of a restart where the agent finished while the app was closed.
+     * <p>Which states count as resumable, and why BLOCKED and DAMAGED are left alone:
+     * {@code app/docs/design/application/service/cull-engine.md}.
      *
-     * <p>BLOCKED and DAMAGED are left alone. A blocked run would resume and block again on the same
-     * findings. That spends a job slot at every launch to reach a verdict only the user can change.
-     * A damaged run never reads as ready, so its watcher would poll for good.
-     *
-     * <p>Also a no-op while a job is running. A prep dir mid-job never diagnoses COMPLETE, since
-     * decisions.json is written only near the end of a successful apply. So it can still look like
-     * something to arm. JobRunner runs one job at a time, so a busy runner means that job is this
-     * dir's own. Arming it would leave a phantom watcher for a job about to resolve by itself.
-     * Anything genuinely waiting is picked up on the next run once the app is idle.
+     * <p>Also skipped entirely while a job is running. A prep dir mid-job never diagnoses COMPLETE,
+     * since decisions.json is written only near the end of a successful apply, so it can still look
+     * like something to arm. The busy check is a plain read rather than a claim on the job slot, so
+     * a job starting just after it can still leave a watcher for a run about to resolve by itself.
+     * Anything genuinely waiting is picked up on the next pass once the app is idle.
      */
     void armWatchesForResumableRuns() {
         if (this.jobRunner.isBusy()) {
             return;
         }
-        // A root nobody could list arms nothing, which is what an empty one does too. Said out
-        // loud because the two are the same action for opposite reasons, and only one of them
-        // means there was nothing to arm.
+        // A root nobody could list arms nothing, the same action an empty one produces for the
+        // opposite reason.
         if (this.prepDirDoctor.runs(this.cullPrepRoot()) instanceof CullRuns.Listed(final List<CullRunSummary> runs)) {
             runs.stream()
                     .filter(run -> run.health().state() == State.WAITING || run.health().state() == State.READY)
@@ -177,16 +171,15 @@ final class CullEngine {
     }
 
     /**
-     * Prep always runs fresh: a scope's montages are rebuilt from Sorted every call.
+     * Prep always runs fresh: a scope's montages are rebuilt from Sorted every call, and
      * MontageRenderer.build() clears whatever a prior run left in the same prep dir first. That
-     * would destroy everything the prior run still held. Shards an agent was paid to produce, a
-     * move-record log, the answers a user gave a troubleshoot screen. refuseIfScopeOccupied()
-     * guards against that and fails loud instead.
+     * would destroy shards an agent was paid to produce, a move-record log, and the answers a user
+     * gave a troubleshoot screen. refuseIfScopeOccupied() fails loud instead.
      *
      * <p>Refused here, synchronously before submit(), for the earliest possible fail-fast.
      * claimScope() inside buildFreshAndDispatch() below asks the same question again once actually
-     * running. The archive of a completed occupant happens only there, on the job's own thread.
-     * Only that call can put the resulting graveyard path into the outcome.
+     * running. Only that call, on the job's own thread, can archive a completed occupant and put
+     * the resulting graveyard path into the outcome.
      *
      * @param scope {@link CullScope} the media scope to cull
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running or waiting cull job
@@ -216,17 +209,13 @@ final class CullEngine {
      * by the one caller nobody is watching. Apply moves files, and an unusable working root gets
      * silently recreated the moment a move resolves a path under it.
      *
-     * <p>Taking the job slot can mean waiting, and the roots can move during that wait. So where
-     * the prep dir sits is asked again inside the job, once this call is certain to be the next one
-     * to run. Asking only before the wait would answer about roots that a settings save then
-     * replaces. That admits a run belonging to a folder the app has since moved off.
-     *
      * @param prepDir {@link Path} the existing prep dir to resume
      * @param allowPartial boolean whether a partial shard set is acceptable
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running or waiting cull job
-     * @throws PathsMisconfiguredException if the folder roots are unset, missing, or overlapping.
-     *         Thrown from this call for roots already unusable, and delivered on the returned
-     *         handle for roots that became so while this call waited for the job slot
+     * @throws PathsMisconfiguredException if any of the three roots is unset, unparsable, missing,
+     *         unreadable, or overlapping another. Thrown from this call for roots already unusable,
+     *         and delivered on the returned handle for roots that became so while this call waited
+     *         for the job slot
      */
     JobHandle<CullJobOutcome> resume(final Path prepDir, final boolean allowPartial) {
         this.rootsGuard.requireUsable();
@@ -427,10 +416,8 @@ final class CullEngine {
      */
     CullJobOutcome buildFreshAndDispatch(final CullScope scope, final CancellationSignal cancellation) throws Exception {
         final Path archivedPriorRun = this.claimScope(scope);
-        // phaseRunner.run/PhaseWork are shared with sort/commit/rescue, which always return non-null -
-        // keeping T itself non-null there avoids leaking a spurious "might be null" possibility
-        // into those callers. Wrapping the result in Optional here instead keeps that shared
-        // contract clean while still letting this call site express a real null case.
+        // PhaseWork's own T is non-null, so a render that can answer nothing is expressed here
+        // rather than by loosening that shared contract.
         final Optional<PrepDir> prep = this.phaseRunner.run(PREPPING,
                 progress -> Optional.ofNullable(this.montageRenderer.build(scope, this.cullSettings.montage(),
                         progress, cancellation)));
@@ -477,8 +464,7 @@ final class CullEngine {
      * has no answer at all until that case is ruled out.
      *
      * <p>Refusing costs the run nothing. Nothing has been read or moved at this point, and the run
-     * stays on disk exactly as it was. Pointing the working root back at its folder makes it
-     * reachable again.
+     * stays on disk exactly as it was.
      *
      * @param prepDir {@link Path} the prep dir this call was asked for
      * @throws PathsMisconfiguredException if the folder roots stopped being usable during the wait
@@ -522,8 +508,7 @@ final class CullEngine {
      * Every run on disk that has not finished.
      *
      * <p>A sift-prep root nobody could list answers none rather than throwing. A failure here would
-     * otherwise refuse a scope on the strength of a read that established nothing. The exact-tag
-     * guard reads the one prep dir it cares about, and refuses on its own terms.
+     * otherwise refuse a scope on the strength of a read that established nothing.
      *
      * @return a {@link List} of {@link CullRunSummary} the unfinished runs
      */
@@ -584,16 +569,14 @@ final class CullEngine {
     /**
      * Whether prepDir holds a file, holds none, or could not be read at all.
      *
-     * <p>A boolean has no way to say "I do not know". {@link Occupancy.Unreadable} gives that third
-     * answer its own vocabulary, distinct from occupied. {@link #occupantOf} can then refuse over an
-     * unreadable dir without fabricating a diagnosis or a remedy to justify it. Conflating the two
-     * would route a dropped network mount to DAMAGED's locked Discard, the same as a genuinely stuck
-     * run. If the failure clears between the refusal and the discard, that destroys a healthy run.
+     * <p>{@link Occupancy.Unreadable} keeps the third answer distinct from occupied, so
+     * {@link #occupantOf} can refuse over an unreadable dir without fabricating a diagnosis or a
+     * remedy to justify it. Conflating the two would route a dropped network mount to DAMAGED's
+     * locked Discard, the same as a genuinely stuck run, and a failure clearing between the refusal
+     * and the discard then destroys a healthy run.
      *
-     * <p>Not knowing what is in prepDir is not the same as knowing it is empty, and the two possible
-     * mistakes cost wildly different amounts. A needless refusal costs one confusing message.
-     * Proceeding clears the dir. So an unreadable prep dir is never treated as empty here - refusing
-     * is the one safe direction, whichever of the two unresolved cases caused it.
+     * <p>An unreadable prep dir is never treated as empty. A needless refusal costs one confusing
+     * message; proceeding clears the dir.
      *
      * <p>Guarded by a catch-all over both port calls. {@link MediaStore} constrains nothing about
      * what a read may throw, and the safe answer is the same whatever came back.
@@ -810,10 +793,6 @@ final class CullEngine {
      * <p>Zero means there is nothing for a culler to judge, so dispatching would only produce an
      * empty report. A scope with no montages at all answers zero for the same reason.
      *
-     * <p>Anything above zero is what the spend ceiling is sized against. It bounds the work this
-     * call will pay for rather than matching it. A montage whose sidecar cannot be read has no
-     * shard, and is skipped rather than dispatched for.
-     *
      * @param prep {@link PrepDir} the prep dir to check
      * @return the number of montages still needing judgement
      */
@@ -866,8 +845,6 @@ final class CullEngine {
      *
      * <p>Worked out here rather than by the provider, because the half that cannot be counted comes
      * from what runs on this install have cost. The provider knows only its own request.
-     *
-     * <p>The two arms are sized on different counts, and the difference is the point.
      *
      * <p>The token arm charges per montage attempted. Its budget divides the estimate by the count
      * the estimate was built over, which reduces it to one montage's expected cost. So the two

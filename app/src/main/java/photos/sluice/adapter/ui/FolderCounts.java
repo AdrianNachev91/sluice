@@ -67,9 +67,6 @@ class FolderCounts {
     /**
      * Reads what is in the Inbox, what is staged in Sorted and what sifts are on disk.
      *
-     * <p>Blocks for as long as walking those three trees takes, which on a full Inbox is long
-     * enough to be felt.
-     *
      * <p>A refusal from the facade is kept rather than thrown on, and reported through
      * {@link #unreadable}.
      *

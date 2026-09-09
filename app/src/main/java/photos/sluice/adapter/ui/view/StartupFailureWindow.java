@@ -29,9 +29,6 @@ import photos.sluice.adapter.ui.StartupFailurePresenter;
  */
 final class StartupFailureWindow {
 
-    /**
-     * Prevents instantiation of this static factory class.
-     */
     private StartupFailureWindow() {
     }
 

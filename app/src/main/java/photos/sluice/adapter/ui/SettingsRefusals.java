@@ -26,13 +26,12 @@ final class SettingsRefusals {
     /**
      * What to put at the foot of a settings page for a refusal no field is carrying.
      *
-     * <p>Four of these are written for a user and are shown as they are. Each names its own
-     * condition and what to do about it, and rewording them here would leave two versions to keep
-     * in step.
+     * <p>A refusal already written for a user is shown as it is. Each names its own condition and
+     * what to do about it, and rewording them here would leave two versions to keep in step.
      *
-     * <p>The next two carry a message written for something other than a screen, so the words are
-     * composed here. A settings file that cannot be understood is a file to go and look at. A read
-     * or write that failed is the filesystem, and trying again is what clears it.
+     * <p>One carrying a message written for something other than a screen has its words composed
+     * here. A settings file that cannot be understood is a file to go and look at. A read or write
+     * that failed is the filesystem, and trying again is what clears it.
      *
      * <p>Anything else has no message written for a reader, or none at all. An unforeseen failure
      * says so in this app's voice instead, and offers the one thing a user can do about it. A

@@ -6,8 +6,7 @@ import picocli.CommandLine;
  * How a command ended, and the exit code that says so.
  *
  * <p>A script branches on the code, and everything finer sits in the document the command wrote.
- * One refusal code covers every reason a command can refuse, and the document carries which reason
- * it was.
+ * One refusal code covers every reason a command can refuse.
  *
  * <p>Arguments the parser could not understand have no value here. Nothing classified an outcome at
  * that point, so no document is written and the parser's own code is what the process leaves with.

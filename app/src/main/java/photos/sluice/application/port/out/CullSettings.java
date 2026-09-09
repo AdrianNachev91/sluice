@@ -24,8 +24,8 @@ public interface CullSettings {
 
     /**
      * The configured classification category cards. Every classification decision's category must
-     * be one of the card names; ShardValidator checks that. Automated vision providers also render
-     * each card's description into their culling prompt.
+     * be one of the card names. Automated vision providers also render each card's description into
+     * their culling prompt.
      *
      * @return a {@link List} of {@link CullCategory} the configured category cards
      */
@@ -35,14 +35,11 @@ public interface CullSettings {
      * The configured cards a cull actually routes to, which is every card the user has not switched
      * off. Read at prep time, where the set is recorded into the run's own prep directory.
      *
-     * <p>Prep time is the only place this is asked for. That is what makes the switch mean "leave
-     * it out of runs from now on" rather than "retract it". The prompt and the validator both read
-     * the recorded set rather than live configuration. So a card switched off after a run was
-     * prepped stays valid for that run, and one switched on does not join it.
+     * <p>Asked for nowhere else, which is what makes the switch mean "leave it out of runs from now
+     * on" rather than "retract it". A card switched off after a run was prepped stays valid for that
+     * run, and one switched on does not join it.
      *
-     * <p>A repair reads {@link #categoriesForRepair()} instead, deliberately. It is reconstructing
-     * a lost index for work already done, and filtering there would invalidate a decision written
-     * under a card the user has since switched off.
+     * <p>A repair reads {@link #categoriesForRepair()} instead, deliberately.
      *
      * <p>Junk is appended last, so a reader of the prompt meets the configured cards first.
      *
@@ -77,9 +74,8 @@ public interface CullSettings {
     /**
      * Connection settings for one named provider, whichever one is in force.
      *
-     * <p>What a culler reads about itself. A screen can offer to test a selection the user has not
-     * saved yet. A provider asking for "the settings in force" would then read another provider's
-     * endpoint.
+     * <p>What a culler reads about itself. A provider asking instead for "the settings in force"
+     * would read another provider's endpoint whenever a screen is trying an unsaved selection.
      *
      * @param providerId {@link String} the provider whose settings to read
      * @return {@link CullProviderSettings} that provider's settings, every field null when nothing

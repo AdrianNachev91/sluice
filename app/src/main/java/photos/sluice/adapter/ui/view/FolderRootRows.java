@@ -12,9 +12,6 @@ import photos.sluice.adapter.ui.SettingsView;
  */
 final class FolderRootRows {
 
-    /**
-     * Prevents instantiation of this static factory class.
-     */
     private FolderRootRows() {
     }
 

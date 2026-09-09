@@ -32,8 +32,8 @@ import java.util.Set;
  * Every already-validated decision and unreviewable file is checked against the exact destination
  * applying it would have produced, recording the hash of whatever is found there.
  *
- * <p>The choices file is left exactly where it is. Rebuilding from disk is only honest for
- * evidence disk can carry, and an answer somebody gave is not that. So a user's answers survive a
+ * <p>The choices file is left exactly where it is. A rebuild can only recover evidence disk itself
+ * carries, and an answer somebody gave is not that. So a user's answers survive a
  * reconcile untouched, and a file they had already given up on is reported skipped rather than
  * swept again. The one exception is a choices file whose bytes do not decode. Its answers are
  * already gone, so it is filed away too and the report says so.
@@ -140,11 +140,9 @@ public class ReconcileEngine {
     }
 
     /**
-     * One decision's step in the sweep, dispatched by decision type. A NearDupChosen decision is a
-     * copy, so it is checked for existence directly - see {@link #reconcileNearDupChosen}. A
-     * NearDupReject resolves its destination from the group's chosen keeper, not its own file - see
-     * {@link CullDestinations#duplicatesDir}. A Classification defers both checks to
-     * reconcileFile().
+     * One decision's step in the sweep, dispatched by decision type. A NearDupReject resolves its
+     * destination from the group's chosen keeper, not its own file - see
+     * {@link CullDestinations#duplicatesDir}.
      *
      * @param decision {@link Decision} the decision to reconcile
      * @param nearDupAnchors a {@link Map} of {@link String} to {@link Path} each near-dup group's keeper file, by
@@ -278,9 +276,8 @@ public class ReconcileEngine {
     }
 
     /**
-     * A file the sweep could not find still sitting at its original location. destDir is the exact
-     * directory a real apply would have moved it into. It is carried alongside so
-     * resolvePendingMoves() can group and search without looking the decision back up.
+     * A file the sweep could not find still sitting at its original location, carrying the exact
+     * directory a real apply would have moved it into.
      *
      * @param file {@link Path} the source file that could not be found at its original location
      * @param destDir {@link Path} the directory a real apply would have moved file into
@@ -289,12 +286,9 @@ public class ReconcileEngine {
     }
 
     /**
-     * The sweep's accumulating outcome as it walks every decision and unreviewable file in turn.
-     * prepDirPath, moveRecordLog and skippedByUser are carried here rather than threaded through
-     * every call. The first lets a freshly reconstructed record be appended. The second lets a
-     * MissingSource finding name the ledger it failed to find its proof in. The third is the
-     * snapshot's own skip set, which every per-file step consults before reporting anything
-     * missing.
+     * The sweep's accumulating outcome as it walks every decision and unreviewable file in turn. It
+     * carries prepDirPath, moveRecordLog and the snapshot's own skip set rather than threading them
+     * through every call.
      */
     private static final class ReconcileSweep {
         final List<PendingMove> pendingMoves = new ArrayList<>();

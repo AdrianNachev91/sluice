@@ -17,8 +17,7 @@ import java.util.SequencedMap;
  *
  * <p>The commonest of these come from a config file the user edited by hand, so they are the most
  * answerable failures this app has. Left to the framework they arrive as a stack trace with no
- * document at all, which is what a scripted caller can do nothing with. Named properly, somebody
- * who can open a text editor is one edit away.
+ * document at all, which is what a scripted caller can do nothing with.
  *
  * <p>It writes the same two shapes every command writes. A caller cannot be expected to parse one
  * thing when the app started and another when it did not. What it cannot fill in is the verb, since

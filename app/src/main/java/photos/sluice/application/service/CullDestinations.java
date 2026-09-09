@@ -142,8 +142,7 @@ public class CullDestinations {
      * <p>{@code ApplyPlanner} already reports a file outside Sorted as a finding, which aborts the
      * whole run before this can be reached. The check stays because that argument is only as
      * durable as the caller that makes it, and this method cannot notice a future one skipping
-     * validation. It sits here rather than in the engine for the same reason every root resolution
-     * does: the engines are deliberately given no {@link PathsPort} of their own.
+     * validation.
      *
      * @param source {@link Path} the file about to be moved or copied
      * @throws IllegalStateException if source does not sit strictly inside the Sorted root
@@ -166,10 +165,10 @@ public class CullDestinations {
      * exists. What does not survive is the guarantee: the remaining copy sits outside everything
      * that would preserve it.
      *
-     * <p>{@link ApplyEngine} appends to the index at two places. One resolves its destination
-     * through this class and is already covered by {@link #under}. The other backfills a row for a
-     * move an earlier run made, taking the path from the move-record log on disk. That one is what
-     * this guards, and nothing else stands between it and the index.
+     * <p>{@link ApplyEngine} appends to the index at two places. One resolves its destination here,
+     * as a fixed folder name under the library root that nothing can steer. The other backfills a
+     * row for a move an earlier run made, taking the path from the move-record log on disk. That one
+     * is what this guards, and nothing else stands between it and the index.
      *
      * @param dest {@link Path} the path about to be recorded as library content
      * @throws IllegalStateException if dest does not sit strictly inside the library root

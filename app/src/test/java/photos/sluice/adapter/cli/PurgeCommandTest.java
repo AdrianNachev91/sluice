@@ -113,8 +113,7 @@ class PurgeCommandTest {
     }
 
     // The rarer race: readable when confirmed() checked, unreadable by the time the job's own
-    // sweep runs. PurgeReport models this as a value rather than a throw inside the job. The
-    // outcome here stays DONE with an honest line, not a second refusal.
+    // sweep runs.
     @Test
     void aRootThatBecomesUnreadableDuringTheJobReportsItRatherThanFailing() {
         when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of()));

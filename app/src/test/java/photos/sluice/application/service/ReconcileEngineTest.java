@@ -44,8 +44,7 @@ class ReconcileEngineTest {
             throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - stands in for an
-        // already-moved file
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         final Path dest = root.resolve("Review/junk/a.jpg");
         writeFile(dest, "already-moved-content");
         writeIndex(prepDir, 1, List.of("montage-001"));
@@ -77,7 +76,7 @@ class ReconcileEngineTest {
 
         assertThat(report.stillPending()).isEqualTo(1);
         assertThat(report.reconstructed()).isZero();
-        // Nothing to reconstruct means no log line to append - the file is never even recreated.
+        // Nothing to reconstruct means no log line to append, so the file is never recreated.
         assertThat(Files.exists(prepDir.resolve("move-records.log"))).isFalse();
     }
 
@@ -98,8 +97,6 @@ class ReconcileEngineTest {
         assertThat(report.reconstructed()).isZero();
     }
 
-    // Even when a copy already sits at the near-dup group's Duplicates/ destination, a NearDupChosen
-    // decision's missing source is never reconstructed from it - see the rationale below.
     @Test
     void reconcileNeverReconstructsANearDupChosenDecision(@TempDir final Path root)
             throws IOException, ApplyException {
@@ -176,8 +173,8 @@ class ReconcileEngineTest {
             assertThat(filed).hasSize(1);
             assertThat(filed.getFirst().getFileName().toString()).contains("move-records-log");
         }
-        // photo is still pending (source untouched), so the sweep has nothing to append - the filed-
-        // away log is not replaced by an empty one.
+        // The source is untouched, so the sweep has nothing to append and the filed-away log is
+        // not replaced by an empty one.
         assertThat(Files.exists(prepDir.resolve("move-records.log"))).isFalse();
     }
 
@@ -464,8 +461,7 @@ class ReconcileEngineTest {
             throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - a lost log after a
-        // real move
+        final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/a.jpg");
         final Path pending = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(pending, "y");
         writeFile(root.resolve("Review/junk/a.jpg"), "already-moved");
@@ -478,9 +474,8 @@ class ReconcileEngineTest {
 
         final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
-        // The reconciled decision is recognized as already done, not reprocessed. Only the pending
-        // one counts as this run's own work. Its reasons line is still backfilled, though, since
-        // reconcile() never writes one itself.
+        // Only the pending decision counts as this run's own work. The reconciled one's reasons
+        // line is still backfilled, reconcile() never writing one itself.
         assertThat(report.byCategory()).containsEntry("junk", 1);
         assertThat(Files.readAllLines(root.resolve("Review/junk/_reasons.txt")))
                 .containsExactlyInAnyOrder("a.jpg (2019-06) - blurry", "b.jpg (2019-06) - also blurry");
@@ -495,8 +490,7 @@ class ReconcileEngineTest {
             throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - moved by a run whose log
-        // was lost
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(root.resolve("Review/junk/a.jpg"), "already-moved");
         writeIndex(prepDir, 1, List.of(photo), List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));

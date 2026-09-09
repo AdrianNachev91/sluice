@@ -27,10 +27,6 @@ import java.util.function.Consumer;
  */
 final class FirstRunCard {
 
-
-    /**
-     * Prevents instantiation of this static factory class.
-     */
     private FirstRunCard() {
     }
 
@@ -103,6 +99,24 @@ final class FirstRunCard {
         }
     }
 
+    /**
+     * Takes a press on Save: hands the three folders and the provider over, then shows what the
+     * presenter made of them.
+     *
+     * @param presenter {@link SettingsPresenter} judges the values and stores them
+     * @param firstRun {@link FirstRunPresenter} says whether the card has done its job yet
+     * @param onFinished {@link Consumer} of {@link String} shows the Dashboard once all three
+     *     folders are set
+     * @param workingRoot {@link SettingsRows.FolderRow} the working root field and its mark
+     * @param libraryRoot {@link SettingsRows.FolderRow} the library root field and its mark
+     * @param inbox {@link SettingsRows.FolderRow} the inbox field and its mark
+     * @param provider {@link SettingsView.ProviderChoice} the provider the dropdown is on
+     * @param container {@link VBox} the card's own body, which a report is put at the top of
+     * @param status {@link TextArea} the header's own line
+     * @param dismissBanner {@link Runnable} takes the last save's report off the page
+     * @param redraw {@link Consumer} of {@link FirstRunPresenter.IncompleteSave} draws this card
+     *     again, with a line saying what is still needed
+     */
     private static void onSave(final SettingsPresenter presenter, final FirstRunPresenter firstRun,
                                final Consumer<@Nullable String> onFinished, final SettingsRows.FolderRow workingRoot,
                                final SettingsRows.FolderRow libraryRoot, final SettingsRows.FolderRow inbox,
@@ -189,8 +203,10 @@ final class FirstRunCard {
      * fills, and taking them somewhere else would move them away from the control they just used.
      * Which field is at fault is said by the mark on that field.
      *
+     * @param container {@link VBox} the card's own body, which the report is put at the top of
      * @param status {@link TextArea} the header's own line
      * @param message what was refused, or null where nothing was
+     * @param warning boolean true where this is a caution rather than a refusal
      */
     private static void showRefusal(final VBox container, final TextArea status,
                                     final @Nullable String message, final boolean warning) {

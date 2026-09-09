@@ -62,7 +62,6 @@ public class StartupSequence {
      *
      * <p>Sized for the one wait no cancellation shortens, which is a sift inside a call to a model.
      * Nothing polls a stop until that call comes back.
-     *
      */
     public static final Duration ATTENDED_DRAIN_WAIT = Duration.ofSeconds(90);
 

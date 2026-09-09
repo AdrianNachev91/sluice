@@ -16,9 +16,8 @@ public final class LowResGate {
     // 1024-based (KiB), not a decimal 50000-byte threshold.
     private static final long SMALL_FILE_BYTES = 50 * 1024;
 
-    // Public so other classes asking a related but distinct question - not "is this photo
-    // low-res" but "is this specific recovered preview big enough to trust a vision judgment on"
-    // (TileRenderer) - share the same bar instead of duplicating the literal.
+    // Public so a related but distinct question reads the same bar rather than duplicating the
+    // literal. That question is whether a recovered preview is big enough to judge from.
     public static final int MIN_DIMENSION = 640;
 
     /**

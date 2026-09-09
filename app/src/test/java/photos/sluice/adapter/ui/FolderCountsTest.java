@@ -60,8 +60,8 @@ class FolderCountsTest {
 
         counts.refresh();
 
-        // The walk is what carries the assertion above, so a read that never reached the tally
-        // would pass this test having checked nothing.
+        // A read that never reached the tally would pass the assertion above having checked
+        // nothing.
         assertThat(walks.get()).isEqualTo(1);
         assertThat(counts.isCounting()).isFalse();
     }
@@ -96,7 +96,7 @@ class FolderCountsTest {
         afterTheRun.join(5_000);
 
         // The flag defaults to the passing value, so a walk that never happened would read as a
-        // pass. This is what says it was actually looked at.
+        // pass.
         assertThat(walks.get()).isEqualTo(2);
         assertThat(countingDuringTheAskedForWalk).isTrue();
     }
@@ -117,7 +117,6 @@ class FolderCountsTest {
             return new InboxTally(300, 1_000_000L);
         });
         // A first read that lands, so this is past the state it opens in having read nothing.
-        // Without it the count is up for a reason that has nothing to do with the queue below.
         counts.refreshUnprompted();
         assertThat(counts.isCounting()).isFalse();
 

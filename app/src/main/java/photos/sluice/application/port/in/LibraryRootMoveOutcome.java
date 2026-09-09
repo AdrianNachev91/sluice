@@ -18,10 +18,11 @@ public sealed interface LibraryRootMoveOutcome {
      * folder is untouched and still holds everything, which is what a caller tells the user before
      * they delete anything by hand.
      *
-     * <p>A destination that already held photos keeps them, and the arriving copies land beside
-     * them under a suffixed name. So moving into an occupied folder duplicates rather than
-     * overwrites. That is the accepted direction here, the same one the fresh-index resolution
-     * takes: a duplicate is something a later cull can resolve, and an overwrite is not.
+     * <p>A destination that already held photos keeps them, and an arriving copy that is not
+     * already there lands beside them under a suffixed name. So moving into an occupied folder
+     * duplicates rather than overwrites. That is the accepted direction here, the same one the
+     * fresh-index resolution takes: a duplicate is something a later cull can resolve, and an
+     * overwrite is not.
      *
      * @param filesCopied int how many files were written into the new library
      * @param filesFound int how many the old library held; any above the copied count were already

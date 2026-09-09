@@ -47,8 +47,6 @@ class ShardCodecTest {
         assertThat(this.codec.read(shardPath)).isEqualTo(shard);
     }
 
-    // The validator is what refuses a shard answering for nothing. The codec's job is to carry it
-    // there intact, so it reads and writes one rather than judging it.
     @Test
     void roundTripsAShardCarryingNoVerdictsAtAll(@TempDir final Path dir) throws IOException {
         final var shard = new DecisionShard("montage-008", List.of());
@@ -191,10 +189,8 @@ class ShardCodecTest {
                 .hasMessageContaining(shardPath.toString());
     }
 
-    // An absent file string becomes the empty path and the validator reports it alongside the run's
-    // other problems. A string no filesystem can accept is different: nothing downstream can do
-    // anything with it, so it is malformed content. A NUL character is illegal on every mainstream
-    // platform, and left unconverted it would escape as an unchecked InvalidPathException.
+    // A NUL character is the one path character Path.of refuses on every platform, so the fixture
+    // reaches InvalidPathException wherever the suite runs.
     @Test
     void readsAFileNameThisPlatformRejectsAsMalformedContent(@TempDir final Path dir) throws IOException {
         final Path shardPath = dir.resolve("decisions-011.json");
@@ -212,9 +208,8 @@ class ShardCodecTest {
                 .hasMessageContaining("unusable file");
     }
 
-    // The third way the field can be unusable, and the one that parses cleanly. A filesystem root
-    // has no file name at all, so every later step that asks for one gets null back. "/" is a root
-    // on every platform this ships to, which is why the fixture needs no escaping to reach one.
+    // "/" parses cleanly into a path with no name elements, on every platform the suite runs on.
+    // So the fixture needs no escaping to reach one.
     @Test
     void readsAFileNamingAFilesystemRootAsMalformedContent(@TempDir final Path dir) throws IOException {
         final Path shardPath = dir.resolve("decisions-012.json");
@@ -314,9 +309,8 @@ class ShardCodecTest {
         }
     }
 
-    // A shard is what a billed model call produced, so a rename that fails must not take it with it.
-    // The failure is induced through Files.move's own specified contract rather than an OS quirk: a
-    // non-empty directory at the destination fails the move on every platform.
+    // The failure is induced through Files.move's own specified contract rather than an OS quirk.
+    // A non-empty directory at the destination fails the move on every platform.
     @Test
     void aShardSurvivesInThePrepDirWhenOnlyTheRenameFails(@TempDir final Path dir) throws IOException {
         final Path shardPath = dir.resolve("decisions-011.json");
@@ -348,18 +342,14 @@ class ShardCodecTest {
 
     @Test
     void readOnAMissingShardThrowsMalformedPrepJsonException(@TempDir final Path dir) {
-        // Absent entirely is diagnosed the same as corrupt, never as a transient read failure - it
-        // will never resolve on retry.
         assertThatThrownBy(() -> this.codec.read(dir.resolve("decisions-011.json")))
                 .isInstanceOf(MalformedPrepJsonException.class);
     }
 
     @Test
     void readOnAReadFailureThrowsPlainUncheckedIOExceptionNotMalformed(@TempDir final Path dir) throws IOException {
-        // A directory where the shard file belongs stands in for a read that fails while the
-        // content itself is fine. A lock held by a backup process, a permission denial, and a cloud
-        // placeholder that never hydrated all land the same way. That distinction is what keeps a
-        // merely-unreadable shard from being reported as the culling agent's mistake.
+        // A directory where the shard file belongs is what makes the open itself fail, rather than
+        // the content parse.
         final Path shardPath = dir.resolve("decisions-012.json");
         Files.createDirectory(shardPath);
 
@@ -374,9 +364,8 @@ class ShardCodecTest {
     @SuppressWarnings("unchecked")
     void readOnAWrappedReadFailureThrowsPlainUncheckedIOExceptionNotMalformed(@TempDir final Path dir)
             throws IOException {
-        // The directory seam above only ever exercises one platform's failure path. This proves the
-        // classification directly. Whenever a stream opens fine and fails on a later read, Jackson
-        // wraps the underlying IOException into a JacksonIOException rather than letting it propagate.
+        // A stream that opens fine and then fails mid-read has no portable fixture, so the mapper
+        // is stubbed to throw the JacksonIOException that shape produces.
         final Path shardPath = dir.resolve("decisions-013.json");
         Files.writeString(shardPath, "{}");
         final var wrapped = new IOException("simulated mid-stream read failure");

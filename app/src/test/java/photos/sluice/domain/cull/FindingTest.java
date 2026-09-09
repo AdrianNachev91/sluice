@@ -13,6 +13,8 @@ import photos.sluice.domain.cull.Finding.MissingMontageField;
 import photos.sluice.domain.cull.Finding.MissingReason;
 import photos.sluice.domain.cull.Finding.MissingShard;
 import photos.sluice.domain.cull.Finding.MissingSource;
+import photos.sluice.domain.cull.Finding.PhotoFromAnotherSheet;
+import photos.sluice.domain.cull.Finding.PhotosNotJudged;
 import photos.sluice.domain.cull.Finding.SourceOutsideSorted;
 import photos.sluice.domain.cull.Finding.StrayShard;
 import photos.sluice.domain.cull.Finding.TooFewRejects;
@@ -20,12 +22,12 @@ import photos.sluice.domain.cull.Finding.UnreadablePrepDir;
 import photos.sluice.domain.cull.Finding.WrongChosenCount;
 
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-// Proves describe() for 17 of Finding's 22 shapes. ShardValidatorTest covers the other 5. Four of
-// those sit in its own describe() sample, and one in a test of its own. The two sets are disjoint,
-// so between them every shape has its rendered prose checked exactly once.
+// Proves describe() renders the exact prose an aggregated ApplyException reports. The shapes here
+// and the ones ShardValidatorTest renders are disjoint, so none is checked twice.
 class FindingTest {
 
     // Paths are built into the expected strings rather than written out, since their rendering
@@ -93,8 +95,6 @@ class FindingTest {
         assertThat(finding.remedy()).isEqualTo(Finding.Remedy.CHOICE);
     }
 
-    // NONE, where CorruptSidecar carries CHOICE: the shard is the culling agent's own output, and
-    // no engine-level repair can invent judgements it failed to record.
     @Test
     void corruptShardNamesTheShardFileAndOffersNoRemedy() {
         final var finding = new CorruptShard("montage-001", "decisions-001.json");
@@ -103,16 +103,32 @@ class FindingTest {
         assertThat(finding.remedy()).isEqualTo(Finding.Remedy.NONE);
     }
 
-    // NONE for a different reason than CorruptShard's. There the output is known to be bad. Here
-    // nothing has been established about the run at all, so there is no repair to name.
-    // The expected path is built from the input, since its rendering differs across platforms.
     @Test
     void unreadablePrepDirNamesTheDirAndOffersNoRemedy() {
         final var prepDir = Path.of("sift-prep", "2019");
         final var finding = new UnreadablePrepDir(prepDir);
 
         assertThat(finding.describe())
-                .isEqualTo(prepDir + ": could not be read far enough to diagnose - see the log for what failed");
+                .isEqualTo(prepDir + ": could not be read far enough to diagnose");
+        assertThat(finding.remedy()).isEqualTo(Finding.Remedy.NONE);
+    }
+
+    @Test
+    void photosNotJudgedCountsThemAndNamesEveryOne() {
+        final var finding = new PhotosNotJudged("montage-007", List.of("IMG_1.jpg", "IMG_2.jpg"));
+
+        assertThat(finding.describe())
+                .isEqualTo("montage-007: no verdict for 2 of its photos (IMG_1.jpg, IMG_2.jpg)");
+        assertThat(finding.remedy()).isEqualTo(Finding.Remedy.NONE);
+    }
+
+    @Test
+    void photoFromAnotherSheetNamesTheTileItSatIn() {
+        final var file = Path.of("Sorted", "Photos", "2019", "06", "IMG_9.jpg");
+        final var finding = new PhotoFromAnotherSheet("montage-008", 4, file);
+
+        assertThat(finding.describe())
+                .isEqualTo("montage-008[#4]: names a photo another sheet showed: " + file);
         assertThat(finding.remedy()).isEqualTo(Finding.Remedy.NONE);
     }
 }

@@ -121,8 +121,6 @@ class MonthsTest {
                 .doesNotContain("  ");
     }
 
-    // A verb that narrows to a span still refuses a gap, and says so in its own words rather than
-    // in the parser's. The two refusals answer different questions.
     @Test
     void aGappedSetIsRefusedByTheVerbThatNeedsASpanRatherThanByTheReading() {
         assertThat(Months.of("6-8,11")).containsExactly(6, 7, 8, 11);

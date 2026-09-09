@@ -24,9 +24,8 @@ public class MontageBuilder {
     private static final Color LABEL_COLOR = Color.WHITE;
     private static final int CELL_PADDING = 3;
 
-    // A fixed absolute size, not scaled by tileSize like placeholder()'s tileSize/10f. That ratio
-    // fills a whole tile with bold stand-in text. This is a small caption below a real photo. It
-    // should stay a consistent, legible size regardless of how big tileSize is configured.
+    // A fixed absolute size, not scaled by tileSize. A caption below a real photo should stay one
+    // consistent legible size whatever tileSize is configured to.
     private static final float LABEL_FONT_SIZE = 9f;
     private static final int LABEL_VERTICAL_MARGIN = 2;
 
@@ -119,9 +118,9 @@ public class MontageBuilder {
 
     /**
      * Font metrics need a Graphics context to measure, but the canvas height must be known before
-     * one exists. A throwaway 1x1 probe image breaks that chicken/egg problem. Package-private so
-     * the test class can compute the same expected height rather than hardcoding a JDK/OS-dependent
-     * pixel value (this project's CI runs both Ubuntu and Windows).
+     * one exists. A throwaway 1x1 probe image breaks that chicken/egg problem. Package-private so a
+     * test can compute the same expected height rather than hardcoding a pixel value that varies
+     * by JDK and OS.
      *
      * @return int the label band height in pixels
      */

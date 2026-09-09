@@ -147,15 +147,14 @@ public class SortEngine implements SortUseCase {
      */
     public SortSummary sort(final SortScope scope,
                             final CancellationSignal cancellation) {
-        // Every scanned file is dated before scope narrows anything, not just the files a caller
-        // is about to process. OldestYear and OldestN need to compare dates across the whole
-        // Inbox to pick the right subset. Scoping on partial date knowledge would pick the wrong
-        // files.
+        // Every scanned file is dated before scope narrows anything. OldestYear and OldestN need to
+        // compare dates across the whole Inbox to pick the right subset, and scoping on partial
+        // date knowledge would pick the wrong files.
         //
-        // Dating is pure in-memory computation. Nothing is moved, deleted, or written yet. A
-        // cancellation seen here is a clean abort with zero side effects. The check exists only to
-        // stop wasted work quickly on the pass most likely to run long: it spans the whole Inbox,
-        // not just the requested scope.
+        // Dating is pure in-memory computation. Nothing is moved, deleted, or written yet, so a
+        // cancellation seen here is a clean abort with zero side effects. The check is only there
+        // to stop wasted work on the longest pass.
+        //
         // Three stages rather than one, because the two before routing are where a sort spends most
         // of its time and neither moves a file. Reported as one phase, the bar ran indeterminate
         // through the reading and the hashing and then measured only the fast part.
@@ -443,9 +442,9 @@ public class SortEngine implements SortUseCase {
     }
 
     /**
-     * Checked in this order, and only this order. An undatable file is routed to Review before
-     * anything else even looks at it - "where should this land by date" is meaningless without
-     * a usable date. The low-res gate only ever runs on a file that already has one.
+     * Routes one survivor to Sorted or to Review. An undatable file is routed to Review before
+     * anything else even looks at it - "where should this land by date" is meaningless without a
+     * usable date. The low-res gate only ever runs on a file that already has one.
      *
      * @param file {@link MediaFile} the survivor being routed
      * @param date {@link DateResult} its resolved date
@@ -591,9 +590,7 @@ public class SortEngine implements SortUseCase {
     }
 
     /**
-     * Accumulates one routing pass's tallies as it goes. Counts per outcome bucket, file names
-     * worth flagging back to the caller (low-confidence dates, unsorted files), the distinct
-     * years actually sorted, and every file the pass routed.
+     * Accumulates one routing pass's tallies as it goes.
      */
     private static final class RoutingResult {
         int photosSorted;

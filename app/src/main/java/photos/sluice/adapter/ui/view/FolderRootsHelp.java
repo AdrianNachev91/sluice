@@ -29,9 +29,6 @@ final class FolderRootsHelp {
                     + "later means copying the whole Library across.",
     };
 
-    /**
-     * Prevents instantiation of this static factory class.
-     */
     private FolderRootsHelp() {
     }
 
@@ -58,8 +55,7 @@ final class FolderRootsHelp {
      * One rule, behind its own bullet.
      *
      * <p>The bullet is drawn rather than typed. No bullet character can be relied on across the
-     * three desktops this app runs on, the same reason the caution and info marks are shapes. A font
-     * without it would draw a box in front of every rule.
+     * three desktops this app runs on, and a font without it draws a box in front of every rule.
      *
      * <p>The dot sits against the top of the row rather than its middle. A rule that wraps to two
      * lines would otherwise centre its bullet on the pair, pointing at the gap between them.
@@ -87,8 +83,7 @@ final class FolderRootsHelp {
      *
      * <p>Worked out from the font rather than set to a number that looks right. The middle of a
      * lowercase letter is half an x-height above the baseline, and the x-height is the ink of an
-     * "x", which is what {@link TextBoundsType#VISUAL} measures. The layout bounds of the same
-     * letter are a whole line tall and would put the dot nowhere near it.
+     * "x".
      *
      * <p>The circle sits in the row itself rather than in a label of its own. A label places a
      * graphic inside a box it sizes from its own font, so moving the dot means fighting that box
@@ -103,9 +98,9 @@ final class FolderRootsHelp {
     private static void sitOnTheLetter(final Circle dot, final TextArea line) {
         line.fontProperty().addListener((_, _, _) -> place(dot, line));
         // The rule's baseline is only known once it has a skin and has been laid out. Asking a Text
-        // node for the font's ascent instead lands a pixel high: a label puts its own leading above
-        // the first line, and that pixel is the difference between the middle of a letter and the
-        // top of one.
+        // node for the font's ascent instead lands a pixel high, because a label puts its own
+        // leading above the first line. That pixel is the difference between the middle of a letter
+        // and the top of one.
         line.layoutBoundsProperty().addListener((_, _, _) -> place(dot, line));
         place(dot, line);
     }

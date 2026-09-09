@@ -22,8 +22,7 @@ public record MontageConfig(int tileSize, int tilesPerRow) {
 
     /**
      * 224px tiles, 5x5 grid: image-token cost scales with tile pixel count, not grid size, so this
-     * is the recall/cost balance point. A caller can size up tilesPerRow when a scope is known to
-     * be all-keepers and round-trips matter more than per-tile recall.
+     * is the recall/cost balance point. A denser grid trades per-tile recall for fewer round trips.
      *
      * @return {@link MontageConfig} the default montage configuration
      */

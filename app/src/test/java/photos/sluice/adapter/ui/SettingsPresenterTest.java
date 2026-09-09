@@ -148,8 +148,6 @@ class SettingsPresenterTest {
         assertThat(saved.categories()).containsExactly(category);
     }
 
-    // Swapping provider rewrites the model field, so a save carrying only the edited block would
-    // destroy the model configured for the provider just left, with no way back to it.
     @Test
     void savingOneProvidersSettingsLeavesAnothersAlone() {
         final var settingsUseCase = new FixedSettingsUseCase(new Settings(new PathSettings(null, null, null),
@@ -185,8 +183,6 @@ class SettingsPresenterTest {
                 .isEqualTo(new CullProviderSettings("claude-haiku-4-5", "https://mine.invalid", 3));
     }
 
-    // The screen falls back to a provider this install has, so the fields under the dropdown have
-    // to be that provider's rather than the ones saved under a name nothing recognises.
     @Test
     void theFieldsShownBelongToTheProviderTheDropdownFellBackTo() {
         final var settings = new Settings(new PathSettings(null, null, null), "gone-provider",
@@ -201,8 +197,8 @@ class SettingsPresenterTest {
         assertThat(view.modelUnrecognised()).isNull();
     }
 
-    // Every provider in this fixture offers models, so a check made against the configured id
-    // instead would find no catalog and ask nothing. That is what tells the two apart.
+    // Every provider left in this fixture offers models, so a check made against the configured id
+    // instead would find no catalog and ask nothing.
     @Test
     void theStartUpCheckFollowsTheProviderTheDropdownFellBackTo() {
         final var settings = new Settings(new PathSettings(null, null, null), "gone-provider", Map.of(),
@@ -258,8 +254,8 @@ class SettingsPresenterTest {
         assertThat(note).isNull();
     }
 
-    // The one screen that can correct a broken working root, asked to draw itself while one is in
-    // force. A config file is hand-editable, so nothing stops that value reaching a launch.
+    // A config file is hand-editable, so an unusable root can reach a launch, and this is the one
+    // screen that can correct it.
     @Test
     void theScreenStillDrawsWhenTheWorkingRootIsNotAPathThisSystemCouldHave() {
         final var presenter = presenterOver(settings(UNUSABLE_PATH, "/library", null),
@@ -272,8 +268,6 @@ class SettingsPresenterTest {
                 .doesNotContain(UNUSABLE_PATH);
     }
 
-    // The refusal for an unusable root belongs to the save seam, so the presenter's job is to reach
-    // it. Throwing on the way leaves a pressed button with nothing to show for it.
     @Test
     void aWorkingRootThatIsNotAPathReachesTheSaveSeamRatherThanThrowing() {
         final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
@@ -303,7 +297,6 @@ class SettingsPresenterTest {
     }
 
     // The thrown message names configuration properties, which nobody using this screen has seen.
-    // Once a row says what is wrong, the summary only has to send the reader to it.
     @Test
     void aRefusedSaveKeepsTheThrownMessageOutOfTheSummaryOnceARowCarriesIt() {
         final var settingsUseCase = new FixedSettingsUseCase(settings("/repo", "/library", "/inbox"));
@@ -318,8 +311,6 @@ class SettingsPresenterTest {
         assertThat(outcome.libraryRoot()).doesNotContain("sluice.paths");
     }
 
-    // The one refusal already written for a user, so it reaches the summary as it is. No row can
-    // carry it, and rewording it would tell them less than the seam already does.
     @Test
     void aBusyJobIsReportedInTheWordsTheSeamAlreadyChose() {
         final var settingsUseCase = new FixedSettingsUseCase(settings("/repo", "/library", "/inbox"));
@@ -332,8 +323,6 @@ class SettingsPresenterTest {
         assertThat(outcome.message()).isEqualTo("Sluice is running a job. Finish it first.");
     }
 
-    // Anything else carries a message written for a log, or none. What reaches the foot of the page
-    // says what happened in this app's voice and what to do, keeping the thrown text only to quote.
     @Test
     void anUnforeseenRefusalIsWordedForAUserRatherThanShownRaw() {
         final var settingsUseCase = new FixedSettingsUseCase(settings("/repo", "/library", "/inbox"));
@@ -392,8 +381,6 @@ class SettingsPresenterTest {
                 refused -> assertThat(refused.model()).contains("Retry"));
     }
 
-    // The same blank field, and the other provider saves on it. That is the whole point of asking
-    // per provider rather than per field.
     @Test
     void theExternalAgentSavesWithNoModelAtAll() {
         final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
@@ -429,8 +416,6 @@ class SettingsPresenterTest {
         assertThat(saved.theme()).isEqualTo(ThemeChoice.DARK);
     }
 
-    // Starts from an explicit LIGHT, so a save that changed nothing would leave LIGHT behind and
-    // fail. Starting from the SYSTEM default would pass on a light desktop against an empty save.
     @Test
     void savingAThemePutsItInForceForWindowsAlreadyOpen() throws Exception {
         final var presenter = presenter(new FixedSettingsUseCase(settings(null, null, null)), new FixedSecretStore(new Absent()), noViolations());
@@ -442,8 +427,8 @@ class SettingsPresenterTest {
         })).isEqualTo(Theme.DARK);
     }
 
-    // Starts from an explicit LIGHT rather than the default, so this cannot pass by accident on a
-    // machine whose desktop is already light.
+    // Seeded with an explicit LIGHT rather than the SYSTEM default, so the assertion cannot pass by
+    // accident on a machine whose desktop is already light.
     @Test
     void aRefusedSaveLeavesTheLookAlone() throws Exception {
         final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
@@ -457,9 +442,6 @@ class SettingsPresenterTest {
         })).isEqualTo(Theme.LIGHT);
     }
 
-    // Saved DARK against a LIGHT starting point, so an applySavedTheme that did nothing at all
-    // fails. Seeding LIGHT and asserting LIGHT would hold against an empty method on a light
-    // desktop, since SYSTEM already resolves there.
     @Test
     void applySavedThemePutsTheStoredChoiceInForce() throws Exception {
         final var presenter = presenterOver(settingsWithTheme(ThemeChoice.DARK), new FixedSecretStore(new Absent()));
@@ -508,10 +490,8 @@ class SettingsPresenterTest {
         assertThat(outcome).isInstanceOf(SettingsPresenter.SaveOutcome.NeedsLibraryRootResolution.class);
         final var resolution = (SettingsPresenter.SaveOutcome.NeedsLibraryRootResolution) outcome;
         assertThat(resolution.newLibraryRoot()).isEqualTo(Path.of("/new-library"));
-        // The refusal's own message is written for a log. Handing it to a dialog is what this asks
-        // about, so the fixture's message is text no user should ever be shown. The path is compared
-        // as a Path renders it, since a literal separator is right on one platform and wrong on the
-        // other.
+        // The path is compared as a Path renders it, since a literal separator is right on one
+        // platform and wrong on the other.
         assertThat(resolution.message())
                 .contains(libraryRoot.toString())
                 .doesNotContain("refused, for a log");
@@ -544,8 +524,7 @@ class SettingsPresenterTest {
         assertThat(outcome).isEqualTo(new SettingsPresenter.SaveOutcome.Refused("Sluice is busy"));
     }
 
-    // Which resolution each named method sends, asserted together so swapping the two is a failure.
-    // One keeps the record of what the library holds; the other files it aside and starts over.
+    // Both asserted together, so swapping the two resolutions is a failure.
     @Test
     void eachNamedMoveSendsItsOwnResolution() {
         final Path destination = Path.of("/new-library");
@@ -662,7 +641,6 @@ class SettingsPresenterTest {
 
         assertThat(outcome).isInstanceOf(SettingsPresenter.SaveOutcome.Saved.class);
         assertThat(settingsUseCase.saved).isNotNull();
-        // The catalog's own recommendation rather than any value this class could invent.
         assertThat(settingsUseCase.saved.providerSettings("anthropic").model())
                 .isEqualTo(MODELS.recommended());
     }
@@ -810,8 +788,8 @@ class SettingsPresenterTest {
                 typed.tileSize(), typed.tilesPerRow() + 1))).isTrue();
     }
 
-    // Built from view() the way the screen's controls are filled from it. So what this compares is
-    // the round trip a reader who changes nothing would make.
+    // Built from view() the way the screen's controls are filled from it, so this is the round trip
+    // a reader who changes nothing would make.
     private static SettingsPresenter.SettingsEdits drawnBy(final SettingsPresenter presenter) {
         final SettingsView view = presenter.view();
         final String model = view.model() instanceof final SettingsView.ModelPicker.Options options
@@ -878,15 +856,11 @@ class SettingsPresenterTest {
                         Set.of(), Set.of(), null, null, null, null));
     }
 
-    // The presenter pair over settings this file's cross-seam tests read and write through.
     private record Presenters(SettingsPresenter settings, VisionProviderPresenter vision) {
     }
 
-    // A presenter pair over the same anthropic/external-agent pair twoProviders() offers, but with a
-    // real answer for a credential check.
-    //
-    // catalogOf's own fixture throws AssertionError there instead; refreshModels and
-    // testConnection are the only two callers that reach this one.
+    // The same anthropic/external-agent pair twoProviders() offers, but with a real answer for a
+    // credential check, where catalogOf's own fixture throws AssertionError instead.
     private static Presenters presenterChecking(final Settings settings,
                                                 final Function<String, ProviderCheck> checkById) {
         final var settingsUseCase = new FixedSettingsUseCase(settings);

@@ -128,6 +128,6 @@ its collaborators.
 **Every verb is constructed when the tree is built**, whether or not it is the one that runs. So a
 verb whose dependencies cannot be satisfied stops the whole surface rather than only itself.
 
-**`app` is registered and never runs.** The window is opened in `main`, before this surface exists.
+**`app` is registered but opens nothing.** The window is opened in `main`, before this surface exists.
 The class is declared so that picocli lists the verb in the help, which it cannot do for a name it
 does not know. It is reached only when the verb carried something else, and that is what it refuses.

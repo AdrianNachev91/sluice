@@ -15,8 +15,7 @@ import java.util.Locale;
  * Turns the numbers and lists behind a run into the words the dashboard says them in.
  *
  * <p>Static and holding nothing. Every face of the dashboard counts something, and a count reads the
- * same way whichever face it appears on. The launcher's cards, the progress bars and the result card
- * all separate their thousands through {@link #grouped}.
+ * same way whichever face it appears on.
  */
 final class RunWords {
 
@@ -57,7 +56,7 @@ final class RunWords {
     }
 
     /**
-     * How long ago something happened, at the coarsest honest precision.
+     * How long ago something happened, in the coarsest unit that does not overstate it.
      *
      * <p>A thing nobody could stat is dated as the epoch. That reads here as not known, rather than
      * as a date in 1970.

@@ -7,9 +7,8 @@ import photos.sluice.domain.paths.SortFolderNames;
  * Funny, or the undated folder a rescue fills. Sorted-relative and library-relative paths are
  * equivalent here, since both trees share the same top-level layout.
  *
- * <p>A tally rather than a decision: nothing branches on the answer. {@code OTHER} is a fallback
- * for a first segment that isn't one of those four. Nothing in the pipeline produces one today,
- * but {@code ofFirstSegment} must still return some value for every possible input.
+ * <p>A tally rather than a decision: nothing branches on the answer. {@code OTHER} is the fallback
+ * for a first segment that is none of those four, the classification being total.
  */
 public enum LibraryBucket {
     PHOTOS, VIDEOS, FUNNY, UNDATED, OTHER;

@@ -54,8 +54,7 @@ public class TroubleshootPresenter {
 
     private static final Logger log = LoggerFactory.getLogger(TroubleshootPresenter.class);
 
-    // Named for the screen it goes back to, the way the other way back on a screen with no sidebar
-    // entry of its own is.
+    // Named for the screen it goes back to, this one having no sidebar entry of its own.
     private static final String BACK = "Back to Runs";
 
     private static final String CHECKING = "Looking through this sift's records...";

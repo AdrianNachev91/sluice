@@ -164,11 +164,8 @@ class PipelineTest {
         assertThat(told.await(30, TimeUnit.SECONDS)).isTrue();
     }
 
-    // Proves cancellation reaches SortEngine's own mid-routing check through Pipeline's real
-    // handle.stopSignal() wiring, not just through a hand-built CancellationSignal -
-    // SortEngineTest already covers SortEngine's own cancellation semantics directly. BlockingMoves
-    // synchronizes the request with the exact moment the first file's move is in flight, so it lands
-    // mid-pass rather than before the pass even starts.
+    // BlockingMoves synchronizes the request with the exact moment the first file's move is in
+    // flight, so it lands mid-pass rather than before the pass even starts.
     @Test
     void sortStopsMidRoutingWhenCancellationIsRequestedWhileAFileIsInFlight(@TempDir final Path root) throws Exception {
         writeFile(inboxOf(root).resolve("20210101_a.jpg"), padded("a"));
@@ -243,10 +240,6 @@ class PipelineTest {
                 "finished:Rescuing...");
     }
 
-    // The ProgressPort doc says phaseStarted/phaseFinished always bracket a phase. This proves that
-    // holds on the failure path too, not only the happy path a normal engine test would exercise.
-    // Without it, a job that dies mid-engine-call would leave a listener's progress bar showing
-    // "in progress" forever with no signal the phase ever ended.
     @Test
     void phaseFinishedFiresEvenWhenTheEngineThrows(@TempDir final Path root) throws IOException {
         final var progress = new RecordingProgressPort();
@@ -306,8 +299,6 @@ class PipelineTest {
         final RescueSummary summary = handle.join();
 
         assertThat(summary.rescued()).isEqualTo(1);
-        // The dissolve gate keeps the folder, the pass never having reached every entry, so this
-        // marker survives.
         assertThat(summary.folderRemoved()).isFalse();
         assertThat(Files.exists(root.resolve("Review/2019-06"))).isTrue();
         assertThat(Files.exists(reasonsFile)).isTrue();
@@ -327,10 +318,6 @@ class PipelineTest {
         assertThat(Files.exists(freshEntry)).isTrue();
     }
 
-    // Pipeline.sweepExpiredDisasterDrawers() sweeps two places: every per-prep-dir drawer, and the
-    // global graveyard folders PrepDirRemedies.discard() writes. DisasterDrawerTest already covers
-    // sweepExpiredGraveyard()'s own logic in full, so this only needs one expired and one fresh
-    // graveyard folder to prove the wiring reaches it too.
     @Test
     void sweepExpiredDisasterDrawersAlsoSweepsTheDiscardGraveyard(@TempDir final Path root) throws IOException {
         final Path oldGraveyard = root.resolve("logs/archives/scope1-2019-01-01_00-00-00");
@@ -344,9 +331,6 @@ class PipelineTest {
         assertThat(Files.exists(freshEntry)).isTrue();
     }
 
-    // Proves troubleshoot() actually runs through JobRunner rather than calling Troubleshooter
-    // directly. TroubleshooterTest already covers the diagnose/reconcile/report logic itself in
-    // full, so this only needs one real prep dir to prove the wiring returns its report.
     @Test
     void troubleshootRunsAsABackgroundJobAndReturnsTheReport(@TempDir final Path root) throws IOException {
         final var progress = new RecordingProgressPort();
@@ -380,9 +364,6 @@ class PipelineTest {
         assertThat(progress.events).containsExactly("planned:");
     }
 
-    // Mirrors CullEngineTest's resumeRefusesARunOutsideTheWorkingRootInForce: a prep dir built
-    // under one working root is handed to a pipeline configured against another. Nothing is read
-    // and nothing moves, so the run stays exactly as it was.
     @Test
     void troubleshootRefusesARunOutsideTheWorkingRootInForce(@TempDir final Path root, @TempDir final Path movedTo)
             throws IOException {
@@ -400,10 +381,6 @@ class PipelineTest {
         assertThat(prepDir.resolve("decisions.json")).doesNotExist();
     }
 
-    // Proves purgeCompleted() actually runs through JobRunner and reaches PrepDirDoctor, rather
-    // than being wired to nothing. PrepDirDoctorTest already covers purgeCompleted()'s own
-    // diagnose/delete logic in full, so this only needs one completed run to prove the wiring
-    // deletes it.
     @Test
     void purgeCompletedRunsAsABackgroundJobAndDeletesTheCompletedRun(@TempDir final Path root) throws IOException {
         final var progress = new RecordingProgressPort();
@@ -502,9 +479,6 @@ class PipelineTest {
         assertThat(pipeline(root, new RecordingProgressPort()).setAsideUnreadableSpendLedger()).isNull();
     }
 
-    // The repair exists for a record no parser accepts. Asked about a healthy one it has to leave
-    // it alone. This is the user's only history of what past sifts cost, and filing it away
-    // degrades every later estimate to the shipped seed.
     @Test
     void aSpendLedgerThatReadsIsLeftWhereItIs(@TempDir final Path root) throws IOException {
         final String recorded = "\"2026-08-22T10:00:00Z\",\"2018\",\"anthropic\",\"claude-sonnet-5\","
@@ -518,9 +492,6 @@ class PipelineTest {
         assertThat(ledger).hasContent(recorded);
     }
 
-    // Proves discard() actually runs through JobRunner and reaches PrepDirRemedies.discard().
-    // PrepDirRemediesTest already covers the graveyard-filing/image-deletion logic itself in full,
-    // so this only needs a still-waiting prep dir to prove the wiring returns its report.
     @Test
     void discardRunsAsABackgroundJobAndFilesEverythingIntoTheGraveyard(@TempDir final Path root) throws IOException {
         final var progress = new RecordingProgressPort();
@@ -552,8 +523,6 @@ class PipelineTest {
                 "finished:Discarding...");
     }
 
-    // Refusing a COMPLETE run is the gate PrepDirRemedies.discard() itself deliberately doesn't apply -
-    // purgeCompleted() is that state's own verb, not discard().
     @Test
     void discardRefusesACompletedRun(@TempDir final Path root) throws IOException {
         final var progress = new RecordingProgressPort();
@@ -571,9 +540,6 @@ class PipelineTest {
         assertThat(Files.exists(prepDir)).isTrue();
     }
 
-    // Mirrors CullEngineTest's resumeRefusesARunOutsideTheWorkingRootInForce: a prep dir built
-    // under one working root is handed to a pipeline configured against another. Nothing is read
-    // and nothing moves, so the run stays exactly as it was.
     @Test
     void discardRefusesARunOutsideTheWorkingRootInForce(@TempDir final Path root, @TempDir final Path movedTo)
             throws IOException {
@@ -589,9 +555,6 @@ class PipelineTest {
         assertThat(Files.exists(prepDir)).isTrue();
     }
 
-    // Regression: a still-armed watcher must never fire an auto-resume against a prep dir mid- or
-    // post-discard. disarmWatch() itself is proven in isolation by CullEngineTest's own
-    // manualResumeDisarmsAnAlreadyArmedWatcher; this proves Pipeline.discard() actually calls it.
     @Test
     void discardDisarmsAnAlreadyArmedWatcher(@TempDir final Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));

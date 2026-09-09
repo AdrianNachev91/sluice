@@ -106,8 +106,8 @@ class SelectableTextTest {
         assertThat(heights[1]).isCloseTo(heights[0], within(ONE_PIXEL));
     }
 
-    // The tests above hand the block its width before it is ever laid out, which is the one case
-    // that worked. A column that changes width is what every screen actually does.
+    // The block is laid out first and the column narrowed afterwards, which is what a real screen
+    // does. Handing it the width up front is the easier case and the one that proves less.
     @Test
     void proseRewrapsWhenTheColumnHoldingItNarrows() throws Exception {
         final double[] heights = onFxThread(() -> {
@@ -169,9 +169,9 @@ class SelectableTextTest {
         assertThat(traversable).isFalse();
     }
 
-    // Screens restate what a line is dressed as on every save, refusal and clear. Doing that with
-    // setAll took the disguise and the toolkit's own classes off with it, and the line drew as a
-    // field from that press on.
+    // Screens restate what a line is dressed as on every save, refusal and clear. A restate written
+    // as setAll takes the disguise and the toolkit's own classes off with it, and the line draws as
+    // a field from that press on.
     @Test
     void beingDressedForAStateKeepsTheClassesThatDrawItAsText() throws Exception {
         final TextArea line = onFxThread(() -> {

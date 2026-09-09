@@ -16,8 +16,7 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>The presenter can hold a finished run's report and a launcher refusal at once, and that is
  * fine. A sift applies decisions that empty the year its scope named, so the launcher behind a
- * finished run's card really does refuse that scope. What stops the two being read as one statement
- * is that nobody sees them together.
+ * finished run's card really does refuse that scope.
  */
 public sealed interface RunStage {
 

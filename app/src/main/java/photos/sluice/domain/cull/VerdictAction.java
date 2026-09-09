@@ -7,9 +7,7 @@ import java.util.Set;
  * fixed by {@link Verdict}'s own shapes. Any other word a verdict carries is a classification
  * category name.
  *
- * <p>Here so the classes that have to agree on these words read one definition. A schema asks a
- * model for them, a codec reads them back off disk, and {@link CategoryName} refuses a category
- * named after one.
+ * <p>Here so everything that has to agree on these words reads one definition.
  *
  * <p>A category sharing a word with a verdict would be unreachable. The word resolves to the
  * verdict wherever a response is read, so nothing could route a photo to the category of that

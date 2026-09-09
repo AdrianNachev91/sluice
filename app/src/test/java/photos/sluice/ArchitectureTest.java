@@ -29,9 +29,9 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
 @AnalyzeClasses(packages = "photos.sluice", importOptions = ImportOption.DoNotIncludeTests.class)
 class ArchitectureTest {
 
-    // The core owns the ports and models it needs; it must never reach outward to use cases, effect
-    // implementations, or framework wiring. This is the arrow that keeps the domain testable in
-    // isolation.
+    // The core owns the ports and models it needs. It must never reach outward to use cases,
+    // effect implementations or framework wiring, which is the arrow that keeps the domain
+    // testable in isolation.
     @ArchTest
     static final ArchRule domainIsAnIsland =
             noClasses().that().resideInAPackage("..domain..")
@@ -64,7 +64,7 @@ class ArchitectureTest {
                     .as("application must depend on ports, not adapters or config");
 
     // The application layer reaches the filesystem only through ports. Path as a value type is
-    // fine; opening a file or a stream is an adapter's job.
+    // fine, and opening a file or a stream is an adapter's job.
     @ArchTest
     static final ArchRule applicationDoesNoFileIo =
             noClasses().that().resideInAPackage("..application..")

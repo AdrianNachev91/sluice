@@ -9,8 +9,7 @@ import java.time.Instant;
 /**
  * One cull run as it currently sits on disk: which scope it belongs to, how
  * {@link photos.sluice.application.service.PrepDirDoctor#diagnose} reads it, and how far its shards
- * have got. A dashboard renders one card per summary, and the unresolved-run banner names the ones
- * that still need somebody.
+ * have got.
  *
  * <p>There is no persistent job store. The whole list is derived by enumerating the sift-prep root
  * and diagnosing each prep dir in it. Enumerating is what makes a damaged run visible. A run whose

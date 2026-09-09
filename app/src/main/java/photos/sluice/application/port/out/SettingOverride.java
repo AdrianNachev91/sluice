@@ -6,7 +6,7 @@ package photos.sluice.application.port.out;
  *
  * <p>Two variants because a screen says different things for them. An exported variable is
  * something the user can go and unset. A value passed on the command line belongs to however this
- * copy of the app was started, and naming it is all a screen can honestly do.
+ * copy of the app was started, and naming it is all a screen can do.
  */
 public sealed interface SettingOverride {
 

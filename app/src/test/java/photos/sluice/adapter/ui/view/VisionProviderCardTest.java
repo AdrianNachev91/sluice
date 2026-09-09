@@ -59,10 +59,9 @@ import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.settledAtThe
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.textsOfClass;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.threeProviders;
 
-// A handful of structural claims rather than a second copy of VisionProviderPresenterTest. What
-// the screen says is the vision presenter's, and is asserted there. This file guards the wiring
-// only a built scene graph can be wrong about. Which controls a provider shows, which parent a
-// block ends up in, and whether a refusal or a credential change reaches the row it belongs to.
+// The wiring only a built scene graph can be wrong about. Which controls a provider shows, which
+// parent a block ends up in, whether a refusal or a credential change reaches its own row. What
+// the screen says is the vision presenter's, asserted there.
 //
 // Everything runs on the FX thread. Building the pane reads the desktop's colour preferences, and
 // that call refuses any other thread.
@@ -115,15 +114,8 @@ class VisionProviderCardTest {
     }
 
     // Unlike a text field, the model picker cannot carry an arbitrary unsaved value across a
-    // provider it does not belong to. "a-model" is external-agent's id for nothing at all.
-    //
-    // Switching provider and back therefore re-resolves the picker from that provider's own saved
-    // model, rather than preserving whatever the control last showed. This proves the round trip
-    // lands back on anthropic's own saved choice, not on empty or some stale carry-over.
-    // Two models rather than MODELS' single one, and the saved id is the one NOT recommended.
-    // With only one choice, "the saved model" and "the recommended model" are the same string.
-    // A round trip would then pass even if picked() ignored the saved model and always fell back
-    // to the recommendation.
+    // provider it does not belong to. "a-model" is external-agent's id for nothing at all, so the
+    // picker has to re-resolve from each provider's own saved model.
     @Test
     void switchingProviderAndBackReselectsThisProvidersSavedModel() throws Exception {
         final Parent pane = onFxThread(() -> built(presenterOn("anthropic"),
@@ -211,8 +203,6 @@ class VisionProviderCardTest {
         assertThat(onFxThread(() -> testResultText(pane))).isEmpty();
     }
 
-    // A failed check draws an empty, disabled picker with the provider's own words and a Retry.
-    // Pressing Retry against a now-working answer proves the row redraws rather than staying stuck.
     @Test
     void aFailedCheckDrawsAnUnavailablePickerAndRetrySucceeds() throws Exception {
         final var succeeding = new AtomicBoolean(false);
@@ -234,8 +224,8 @@ class VisionProviderCardTest {
         assertThat(onFxThread(() -> selectedModelId(pane))).isEqualTo("a-model");
     }
 
-    // The check answering is the one thing that changes this row without a user touching anything,
-    // so a screen that only reads the picker when it is built would say it was checking for good.
+    // The check answering is the one thing that changes this row with nobody touching anything. A
+    // screen that only read the picker when it was built would say it was checking for good.
     @Test
     void aPickerWaitingOnTheStartUpCheckRedrawsItselfOnceTheAnswerLands() throws Exception {
         final var checking = new CountDownLatch(1);
@@ -434,9 +424,8 @@ class VisionProviderCardTest {
         assertThat(textsOfClass(pane, "settings-confirmation")).isEmpty();
     }
 
-    // A stored key changes which models this account can actually run. A save has to ask the
-    // provider again, not leave the picker showing whatever an earlier or absent key gave.
-    // The count is what proves this: the pane's own build never checks on its own.
+    // A stored key changes which models this account can actually run. The count is what proves
+    // the save asked again, the pane's own build never checking on its own.
     @Test
     void savingAKeyAsksTheProviderAgainForWhatItCanRun() throws Exception {
         final var checks = new AtomicInteger(0);
@@ -602,9 +591,8 @@ class VisionProviderCardTest {
         return (top + bottom) / 2 - ring.getBoundsInParent().getCenterY();
     }
 
-    // visionProviderPresenterOn's own catalog is threeProviders(), whose check() and check(id, candidate)
-    // both throw. A test that presses Test or Retry needs a real answer instead, so it builds its
-    // vision presenter over this one rather than visionProviderPresenterOn.
+    // threeProviders()'s own check() and check(id, candidate) both throw, so a test that presses
+    // Test or Retry needs this one instead.
     private static VisionProviderPresenter checkingVisionProviderOn(final String provider,
                                                                      final Function<String, ProviderCheck> checkById) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),

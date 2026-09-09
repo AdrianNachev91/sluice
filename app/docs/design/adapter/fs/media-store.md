@@ -17,7 +17,7 @@ flowchart TD
     G -- yes --> H["n++"]
     H --> F
     G -- no --> D
-    D --> I["Files.move or Files.copy(source, candidate)"]
+    D --> I["place the bytes at candidate<br/>(see Placing the bytes)"]
 ```
 
 `base`/`ext` split on the last `.` in the leaf name. A leaf with no extension (or a leading-dot
@@ -25,12 +25,34 @@ dotfile) keeps the whole name as `base` and an empty `ext`. The loop only ever i
 once a free numbered candidate is found it is used immediately, matching first-free-wins.
 
 `move` is this whole flow end to end: resolve a candidate, then move straight to it. `copy` is the
-same, but with `Files.copy` in the last step. The candidate-finding part above, with no file
-movement, is also exposed on its own as `resolveDestination`. The final move-to-a-path step is
-exposed as `moveTo`. `ApplyEngine` calls them separately. It needs to know a move's exact
-destination before performing it, to durably record a decision's source hash against that
-destination first - see `apply-planner.md`'s move-record section. `moveTo` trusts its caller to
-have already reserved that exact path and does no collision handling of its own.
+same, ending in a copy rather than a move. The candidate-finding part above, with no file movement,
+is also exposed on its own as `resolveDestination`, and the final placement step as `moveTo` and
+`copyTo`. `ApplyEngine` calls them separately. It needs to know a move's exact destination before
+performing it, to durably record a decision's source hash against that destination first - see
+`apply-planner.md`'s move-record section. `moveTo` and `copyTo` trust the caller to have already
+reserved that exact path and do no collision handling of their own.
+
+## Placing the bytes
+
+Nothing here ever passes `REPLACE_EXISTING`, at any step. An occupied destination is a failure, and
+a failure is what the collision loop above exists to make unreachable.
+
+A move within one file store is a plain rename, instant and with nothing to interrupt. A move across
+stores is a full read and write, so it becomes the interruptible copy below and the source is
+deleted once the copy has landed. Which of the two it is, is decided up front by comparing the file
+stores rather than by catching a failure. `Files.move` does the cross-volume copy itself, silently
+and uninterruptibly, so there is nothing to catch. `ATOMIC_MOVE` would throw, and on POSIX it also
+overwrites an occupied destination.
+
+A copy, and the copy half of a cross-store move, runs block by block through a `.part` file beside
+the destination, then renames that into place. Two properties follow. An abandoned transfer leaves
+no truncated photo under a name a later scan would read. And the stop signal is answered between
+blocks rather than at the end. The part file is removed on either failure path. Timestamps are
+restored by hand onto the part file before the rename, because a block-by-block copy preserves none
+and the date chain falls back to mtime.
+
+`listFiles` answers a leftover part file like any other, since a caller clearing a directory out has
+to be handed it. `MediaStore.isIncompleteTransfer` is what tells one apart from media.
 
 ## Scenarios
 
@@ -87,14 +109,11 @@ itself uses.
   `size`, and `appendLine`. `listFiles` walks a directory's whole subtree for its regular files;
   `listChildDirectories` lists only root's immediate subdirectories, non-recursive.
 - The main consumer of `move`, `delete`, `exists`, `size`, and `appendLine` is `sort-engine.md` in
-  the `application/service` design folder. `listFiles` is used by both `CommitEngine` (walking
-  `Sorted/`) and `RescueEngine` (walking a Review folder). Neither warrants a design doc for this
-  port method itself - what's worth diagramming is each engine's own scope/branching logic, not
-  `listFiles`. Only `rescue-engine.md` cleared that bar, for `RescueEngine`'s own logic.
-  `listChildDirectories` is used by `PrepDirDoctor`, covered in `prep-dir-doctor.md`, to shallow-list
-  the sift-prep root so one candidate's own read failing cannot cost every other one. `copy`,
-  `resolveDestination`, `moveTo`, and `write` are used by `apply-engine.md`'s `ApplyEngine` for
-  near-dup handling and crash-safe resume.
+  the `application/service` design folder. `RescueEngine`'s own scope logic is in
+  `rescue-engine.md`. `listChildDirectories` is used by `PrepDirDoctor`, covered in
+  `prep-dir-doctor.md`, to shallow-list the sift-prep root so one candidate's own read failing
+  cannot cost every other one. `copy`, `resolveDestination`, `moveTo`, and `write` are used by
+  `apply-engine.md`'s `ApplyEngine` for near-dup handling and crash-safe resume.
 - `removeEmptyDirectories` is invoked as the second step of `SortEngine`'s post-run sweep; the
   first step (which sidecars count as orphaned) is `sidecar-sweep.md` in the `domain/scan` design
   folder.

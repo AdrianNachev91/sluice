@@ -23,9 +23,8 @@ class SettingsRefusalsTest {
 
     private static final Path CONFIG = Path.of("AppData", "Sluice", "config.yml");
 
-    // The four carry-through arms all pass under an implementation that answers getMessage() for
-    // everything, which was the defect. What rules that out is the composed arms below, so these
-    // four are only half the check and are worth reading as such.
+    // The carry-through arms all pass under an implementation that answers getMessage() for
+    // everything. What rules that out is the composed arms below, so these are only half the check.
     @Test
     void aRunHoldingTheSlotSaysToFinishItFirst() {
         assertThat(worded(new JobInProgressException("Something is running now. Finish it first.")))
@@ -45,15 +44,12 @@ class SettingsRefusalsTest {
                 .doesNotContain(NOT_KNOWN_WHY);
     }
 
-    // Its own message is written for whoever meets it, a startup window having nothing else to show.
-    // So this page shows it as it is rather than composing a second version.
     @Test
     void aSettingTheAppWillNotRunOnSaysWhatIsWrongWithIt() {
         assertThat(worded(new UnusableSettingsException("More than the 12 categories allowed.")))
                 .isEqualTo("More than the 12 categories allowed.");
     }
 
-    // The file is the thing to act on, and the message the exception carries is written for a log.
     @Test
     void aSettingsFileThatCannotBeUnderstoodNamesTheFileToGoAndLookAt() {
         final String said = worded(new MalformedSettingsException(CONFIG, "not valid YAML at line 4"));
@@ -71,8 +67,6 @@ class SettingsRefusalsTest {
         assertThat(said).doesNotContain(NOT_KNOWN_WHY).contains("Try again");
     }
 
-    // The one arm that has nothing to go on. It still says what did not happen and what did not
-    // change, and keeps the thrown text only so a bug report can carry it.
     @Test
     void anythingUnforeseenIsWordedInThisAppsVoiceAndQuotesTheRest() {
         final String said = worded(new IllegalStateException("writeAndApply: NoSuchFileException"));

@@ -20,10 +20,10 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
-// The Phase 7 commit parity gate: runs the reference commit engine and CommitEngine on two
-// identical copies of the same real Sorted tree, then asserts MoveDiffer sees no difference in
-// the resulting Library trees and both runs appended the same set of content hashes to their
-// index. Opt-in only - never runs on CI, and requires a real, already-sorted directory on disk
+// The commit parity gate. It runs the reference commit engine and CommitEngine on two identical
+// copies of the same real Sorted tree. It then asserts MoveDiffer sees no difference in the
+// resulting Library trees, and that both runs appended the same set of content hashes to their
+// index. Opt-in only, never running on CI. It requires a real, already-sorted directory on disk
 // that this test only ever copies from, never writes to.
 //
 // Unlike the sort parity gate, the fixture copy below doesn't need to preserve file timestamps.

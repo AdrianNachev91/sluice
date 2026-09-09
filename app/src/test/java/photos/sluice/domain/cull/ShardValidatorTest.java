@@ -85,8 +85,6 @@ class ShardValidatorTest {
         assertThat(report.findings()).contains(new Finding.PhotoFromAnotherSheet("montage-001", 2, B));
     }
 
-    // FileOutOfScope already says the file reached no sheet. Saying it twice would read as two
-    // faults on one verdict.
     @Test
     void aVerdictAboutAPhotoNoSheetShowedIsReportedOnceRatherThanTwice() {
         final Path stranger = Path.of("Sorted/Photos/2016/08/stranger.jpg");
@@ -434,8 +432,6 @@ class ShardValidatorTest {
                 new InvalidCategory("montage-001", 1, "junk", "no categories configured"));
     }
 
-    // A decision with several faults reports all of them at once, not just the first - a bad category
-    // does not mask the blank reason on the same decision. This is the whole point of aggregating.
     @Test
     void everyProblemIsReportedNotJustTheFirst() {
         final var report = this.validate(this.shardFile("montage-001",
@@ -459,9 +455,6 @@ class ShardValidatorTest {
                 new MissingFile("montage-002", 1));
     }
 
-    // Proves describe() renders the exact prose an aggregated ApplyException reports. A sample of
-    // four shapes, not every shape this validator raises. FindingTest covers the rest, and the two
-    // lists are disjoint, so no shape is checked twice.
     @Test
     void describeRendersTheExactProseApplyExceptionReports() {
         assertThat(new InvalidCategory("montage-001", 1, "meme", "allowed: junk, scenery, food, funny").describe())
@@ -492,7 +485,7 @@ class ShardValidatorTest {
     }
 
     // The sheet is whatever in-scope photos the verdicts name, so coverage is satisfied by
-    // construction and every test built on this one is about some other rule.
+    // construction.
     private ShardFile shardFile(final String montage, final Verdict... verdicts) {
         final List<Path> sheet = Stream.of(verdicts)
                 .map(Verdict::file)

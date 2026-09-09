@@ -45,8 +45,7 @@ class CullDispatcherTest {
     }
 
     // Two registered cullers whose types differ, so answering off the wrong one is a visible
-    // failure rather than a coincidence. CullEngine reads this to tell a manual pause from a
-    // failed run, and CullWatchers to decide whether a run is worth watching.
+    // failure rather than a coincidence.
     @Test
     void answersTheTypeOfTheCullerTheConfiguredProviderNames() {
         final List<VisionCuller> cullers = List.of(new RecordingCuller("waits-for-a-person", ProviderType.MANUAL),
@@ -61,8 +60,6 @@ class CullDispatcherTest {
         assertThat(calling.configuredProviderIs(ProviderType.MANUAL)).isFalse();
     }
 
-    // Both callers ask in order to decide whether to do something extra. An id this build cannot
-    // cull with is told no rather than refused, so a watcher declines to arm rather than failing.
     @Test
     void answersNoForAProviderNoRegisteredCullerClaims() {
         final var dispatcher = new CullDispatcher(

@@ -8,13 +8,12 @@ package photos.sluice.application.port.out;
  * the apply phase, the single validator of shard content, and a shard counted here may still be
  * refused there.
  *
- * <p>{@code montagesCulled} counts montages this run obtained fresh judgement for.
- * {@code montagesSkipped} counts montages that got none, for any reason. Three reach it: waived by
- * {@code allowPartial}, already holding a shard from an earlier interrupted run, and unculled for
+ * <p>{@code montagesSkipped} counts montages that got no judgement, for any reason: waived by
+ * {@code allowPartial}, already holding a shard from an earlier interrupted run, or unculled for
  * want of a readable sidecar.
  *
- * <p>The two need not sum to the montage count. A run stopped early by a cancellation or by the
- * spend ceiling reports only what it reached.
+ * <p>Culled and skipped need not sum to the montage count. A run stopped early by a cancellation or
+ * by the spend ceiling reports only what it reached.
  *
  * <p>{@code apiCalls} counts calls, not montages, so it is what says how often a montage needed a
  * second attempt. That ratio is the only way to turn an exact count of one call into what a montage

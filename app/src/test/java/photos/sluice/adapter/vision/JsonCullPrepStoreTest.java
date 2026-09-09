@@ -1,5 +1,6 @@
 package photos.sluice.adapter.vision;
 
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.imaging.PrepIndexWriter;
@@ -57,622 +58,6 @@ class JsonCullPrepStoreTest {
     }
 
     @Test
-    void readsBackAnIndexWrittenByPrepIndexWriter(@TempDir final Path dir) {
-        final var prepDir = new PrepDir("2019-06", List.of(JUNK, FOOD), dir.resolve("base"), 3,
-                List.of(dir.resolve("skip.jpg")), 1, dir, List.of("montage-001"));
-        new PrepIndexWriter().write(dir.resolve("index.json"), prepDir);
-
-        assertThat(this.store.readIndex(dir)).isEqualTo(prepDir);
-    }
-
-    @Test
-    void writesAndReadsBackACardsExamplesInOrder(@TempDir final Path dir) {
-        final var food = new CullCategory("food", "meals and menus",
-                List.of("restaurant plates", "home dinners"), Boolean.TRUE);
-        final var prepDir = new PrepDir("2019-06", List.of(food), dir.resolve("base"), 3,
-                List.of(), 1, dir, List.of("montage-001"));
-
-        this.store.writeIndex(dir, prepDir);
-
-        assertThat(this.store.readIndex(dir).categories()).containsExactly(food);
-    }
-
-    // A card that offers none writes no key, so what a reader meets is an absent field rather than
-    // an empty array. It has to answer the same as one carrying an empty list.
-    @Test
-    void aCardThatOffersNoExamplesWritesNoKeyAndReadsBackWithNone(@TempDir final Path dir) throws IOException {
-        final var prepDir = new PrepDir("2019-06", List.of(JUNK), dir.resolve("base"), 3,
-                List.of(), 1, dir, List.of("montage-001"));
-
-        this.store.writeIndex(dir, prepDir);
-
-        assertThat(Files.readString(dir.resolve("index.json"), StandardCharsets.UTF_8))
-                .doesNotContain("examples");
-        assertThat(this.store.readIndex(dir).categories().getFirst().examples()).isEmpty();
-    }
-
-    @Test
-    void readIndexDropsBlankAndNullExamplesRatherThanRefusingTheIndex(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [
-                    { "name": "junk", "description": "objectively worthless",
-                      "examples": ["  pocket shots ", "   ", null, "lens caps"] }
-                  ],
-                  "basePath": "%s",
-                  "photos": 0,
-                  "montages": 0,
-                  "entries": []
-                }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
-
-        assertThat(this.store.readIndex(dir).categories().getFirst().examples())
-                .containsExactly("pocket shots", "lens caps");
-    }
-
-    // The read path raises the type every caller's read-failure handling expects, rather than the
-    // IllegalArgumentException the domain throws on the same value.
-    @Test
-    void readIndexOnADescriptionPastItsCeilingThrowsMalformedPrepJsonException(@TempDir final Path dir)
-            throws IOException {
-        Files.writeString(dir.resolve("index.json"), oneCardIndex(dir,
-                "\"description\": \"" + "x".repeat(CullCategory.maxDescription() + 1) + "\""));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("description is longer than");
-    }
-
-    @Test
-    void readIndexOnAnExamplePastItsCeilingThrowsMalformedPrepJsonException(@TempDir final Path dir)
-            throws IOException {
-        Files.writeString(dir.resolve("index.json"), oneCardIndex(dir,
-                "\"description\": \"worthless\", \"examples\": [\""
-                        + "x".repeat(CullCategory.maxExample() + 1) + "\"]"));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("example longer than");
-    }
-
-    @Test
-    void readIndexOnMoreExamplesThanACardMayCarryThrowsMalformedPrepJsonException(@TempDir final Path dir)
-            throws IOException {
-        final String tooMany = IntStream.rangeClosed(0, CullCategory.maxExamples())
-                .mapToObj(i -> "\"e" + i + "\"")
-                .collect(Collectors.joining(", "));
-        Files.writeString(dir.resolve("index.json"), oneCardIndex(dir,
-                "\"description\": \"worthless\", \"examples\": [" + tooMany + "]"));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("offering more than");
-    }
-
-    @Test
-    void readIndexTreatsAMissingUnreviewableOrEntriesArrayAsEmpty(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [
-                    { "name": "junk", "description": "objectively worthless" }
-                  ],
-                  "basePath": "%s",
-                  "photos": 0,
-                  "montages": 0
-                }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
-
-        final PrepDir prepDir = this.store.readIndex(dir);
-
-        assertThat(prepDir.unreviewable()).isEmpty();
-        assertThat(prepDir.entries()).isEmpty();
-    }
-
-    // Absent categories is malformed rather than empty, unlike the two arrays above. No run is ever
-    // prepped without a category set. An empty one still serializes as []. So the field can only go
-    // missing on a damaged index.
-    @Test
-    void readIndexOnAMissingCategoriesArrayThrowsMalformedPrepJsonException(@TempDir final Path dir)
-            throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "basePath": "%s",
-                  "photos": 0,
-                  "montages": 0,
-                  "entries": []
-                }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("no categories");
-    }
-
-    // A null inside either array would otherwise reach PrepDir's defensive List.copyOf and escape as
-    // a NullPointerException, past every caller's read-failure handling.
-    @Test
-    void readIndexOnANullArrayElementThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [
-                    { "name": "junk", "description": "objectively worthless" },
-                    null
-                  ],
-                  "basePath": "%s",
-                  "photos": 0,
-                  "montages": 0,
-                  "entries": []
-                }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("null entry in categories");
-    }
-
-    @Test
-    void readIndexOnANullEntriesElementThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [
-                    { "name": "junk", "description": "objectively worthless" }
-                  ],
-                  "basePath": "%s",
-                  "photos": 0,
-                  "montages": 0,
-                  "entries": [
-                    "montage-001",
-                    null
-                  ]
-                }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("null entry in entries");
-    }
-
-    @Test
-    void readIndexOnACategoryThatCouldNotBecomeAFolderThrowsMalformedPrepJsonException(@TempDir final Path dir)
-            throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [
-                    { "name": "junk", "description": "objectively worthless" },
-                    { "name": "../Photos/2019/06", "description": "escapes the review root" }
-                  ],
-                  "basePath": "%s",
-                  "photos": 0,
-                  "montages": 0,
-                  "entries": []
-                }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("../Photos/2019/06")
-                .hasMessageContaining("lower-case");
-    }
-
-    @Test
-    void readIndexOnABlankCategoryThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [
-                    { "name": "", "description": "objectively worthless" }
-                  ],
-                  "basePath": "%s",
-                  "photos": 0,
-                  "montages": 0,
-                  "entries": []
-                }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("lower-case");
-    }
-
-    // Empty is legal where absent is malformed, and it is what a run prepped with nothing
-    // configured records. CullerPrompt is where that run is refused, before any billed call.
-    @Test
-    void readIndexAcceptsAnEmptyCategoriesArray(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [],
-                  "basePath": "%s",
-                  "photos": 0,
-                  "montages": 0,
-                  "entries": []
-                }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
-
-        assertThat(this.store.readIndex(dir).categories()).isEmpty();
-    }
-
-    @Test
-    void readIndexOnACategoryWithNoNameThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [
-                    { "description": "objectively worthless" }
-                  ],
-                  "basePath": "%s",
-                  "photos": 0,
-                  "montages": 0,
-                  "entries": []
-                }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("category with no name");
-    }
-
-    @Test
-    void readIndexOnACategoryWithABlankDescriptionThrowsMalformedPrepJsonException(@TempDir final Path dir)
-            throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [
-                    { "name": "junk", "description": "  " }
-                  ],
-                  "basePath": "%s",
-                  "photos": 0,
-                  "montages": 0,
-                  "entries": []
-                }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("category 'junk' with no description");
-    }
-
-    // A bare name where a card belongs reads as a damaged index, which routes to the rebuild
-    // remedy. That chain is the entire migration story for an index already sitting on a disk.
-    @Test
-    void readIndexOnABareCategoryNameThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [
-                    "junk"
-                  ],
-                  "basePath": "%s",
-                  "photos": 0,
-                  "montages": 0,
-                  "entries": []
-                }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class);
-    }
-
-    @Test
-    void readIndexOnARepeatedCategoryThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [
-                    { "name": "junk", "description": "objectively worthless" },
-                    { "name": "food", "description": "meals and menus" },
-                    { "name": "junk", "description": "a second card under one name" }
-                  ],
-                  "basePath": "%s",
-                  "photos": 0,
-                  "montages": 0,
-                  "entries": []
-                }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("repeats the category 'junk'");
-    }
-
-    @Test
-    void readIndexOnAnEntryThatIsNotAMontageIdThrowsMalformedPrepJsonException(@TempDir final Path dir)
-            throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [
-                    { "name": "junk", "description": "objectively worthless" }
-                  ],
-                  "basePath": "%s",
-                  "photos": 0,
-                  "montages": 1,
-                  "entries": [
-                    "../../../evil"
-                  ]
-                }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("is not a montage id");
-    }
-
-    @Test
-    void readIndexOnANullDocumentThrowsUnchecked(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), "null");
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class);
-    }
-
-    @Test
-    void readIndexOnMalformedJsonThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), "{ not valid json");
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class);
-    }
-
-    @Test
-    void readIndexOnAMissingIndexFileThrowsMalformedPrepJsonException(@TempDir final Path dir) {
-        // Absent entirely is diagnosed the same as corrupt, never as a transient read failure - it
-        // will never resolve on retry.
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class);
-    }
-
-    @Test
-    void readIndexOnANullBasePathThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [
-                    { "name": "junk", "description": "objectively worthless" }
-                  ],
-                  "basePath": null,
-                  "photos": 0,
-                  "montages": 0
-                }
-                """);
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("basePath");
-    }
-
-    @Test
-    void readIndexOnANullScopeThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": null,
-                  "categories": [
-                    { "name": "junk", "description": "objectively worthless" }
-                  ],
-                  "basePath": "%s",
-                  "photos": 0,
-                  "montages": 0
-                }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("scope");
-    }
-
-    @Test
-    void readIndexAnswersTheDirectoryItWasReadFromRatherThanTheOneTheFileNames(
-            @TempDir final Path dir, @TempDir final Path elsewhere) throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [
-                    { "name": "junk", "description": "objectively worthless" }
-                  ],
-                  "basePath": "%s",
-                  "photos": 0,
-                  "montages": 0,
-                  "prepDir": "%s"
-                }
-                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(elsewhere)));
-
-        assertThat(this.store.readIndex(dir).prepDir()).isEqualTo(dir);
-    }
-
-    @Test
-    void readIndexOnANullUnreviewableEntryThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [
-                    { "name": "junk", "description": "objectively worthless" }
-                  ],
-                  "basePath": "%s",
-                  "photos": 0,
-                  "unreviewable": [
-                    null
-                  ],
-                  "montages": 0
-                }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class);
-    }
-
-    // The sibling of a null required field, and the second way a path component can be unusable. A
-    // NUL character is rejected by every mainstream filesystem, so this is illegal on any platform.
-    // Left as a raw InvalidPathException it would escape every caller's read-failure handling.
-    @Test
-    void readIndexOnAPathComponentThisPlatformRejectsThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), """
-                {
-                  "scope": "2019-06",
-                  "categories": [
-                    { "name": "junk", "description": "objectively worthless" }
-                  ],
-                  "basePath": "bad\\u0000path",
-                  "photos": 0,
-                  "montages": 0
-                }
-                """);
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("basePath");
-    }
-
-    @Test
-    void readIndexOnAReadFailureThrowsPlainUncheckedIOExceptionNotMalformed(@TempDir final Path dir) throws IOException {
-        // A directory in place of index.json is a real read failure, not malformed content - the
-        // distinction PrepDirDoctor relies on to avoid a false corruption diagnosis.
-        Files.createDirectory(dir.resolve("index.json"));
-
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(UncheckedIOException.class)
-                .isNotInstanceOf(MalformedPrepJsonException.class);
-    }
-
-    @Test
-    // any(Class.class) is the only unambiguous matcher for the Class<T>-vs-TypeReference<T>
-    // readValue overload. The raw type it forces is a Mockito-generics artifact, not a real cast risk.
-    @SuppressWarnings("unchecked")
-    void readIndexOnAWrappedReadFailureThrowsPlainUncheckedIOExceptionNotMalformed(@TempDir final Path dir)
-            throws IOException {
-        // The directory seam above only ever exercises one platform's failure path. This proves the
-        // classification directly. Whenever a stream opens fine and fails on a later read, Jackson
-        // wraps the underlying IOException into a JacksonIOException rather than letting it propagate.
-        Files.writeString(dir.resolve("index.json"), "{}");
-        final var wrapped = new IOException("simulated mid-stream read failure");
-        final var jacksonIoException = mock(JacksonIOException.class);
-        when(jacksonIoException.getCause()).thenReturn(wrapped);
-        final var mapper = mock(JsonMapper.class);
-        doThrow(jacksonIoException).when(mapper).readValue(any(InputStream.class), any(Class.class));
-        final var storeWithFailingMapper = new JsonCullPrepStore(new ShardCodec(), new SidecarReader(), mapper);
-
-        assertThatThrownBy(() -> storeWithFailingMapper.readIndex(dir))
-                .isInstanceOf(UncheckedIOException.class)
-                .isNotInstanceOf(MalformedPrepJsonException.class)
-                .hasCause(wrapped);
-    }
-
-    @Test
-    void readsBackAShardWrittenByShardCodec(@TempDir final Path dir) {
-        final var shard = new DecisionShard("montage-002", List.of(
-                new Classification(dir.resolve("junk.jpg"), "junk", "phone photo of a monitor")));
-        new ShardCodec().write(dir.resolve("decisions-002.json"), shard);
-
-        assertThat(this.store.readShard(dir, "montage-002")).isEqualTo(shard);
-    }
-
-    @Test
-    void readShardOnMalformedContentThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("decisions-003.json"), "{ not valid json");
-
-        assertThatThrownBy(() -> this.store.readShard(dir, "montage-003"))
-                .isInstanceOf(MalformedPrepJsonException.class);
-    }
-
-    // readShardFile() is readShard()'s sibling for a stray shard, whose own filename names no real
-    // montage. So it reads by the file's own path directly, rather than a montage-derived name.
-    @Test
-    void readShardFileReadsBackAShardByItsOwnPath(@TempDir final Path dir) {
-        final var shard = new DecisionShard("montage-002", List.of(
-                new Classification(dir.resolve("junk.jpg"), "junk", "phone photo of a monitor")));
-        new ShardCodec().write(dir.resolve("decisions-003.json"), shard); // stray: no montage-003 entry anywhere
-
-        assertThat(this.store.readShardFile(dir.resolve("decisions-003.json"))).isEqualTo(shard);
-    }
-
-    @Test
-    void writeIndexRoundTripsThroughReadIndex(@TempDir final Path dir) {
-        final var prepDir = new PrepDir("2019-06", List.of(JUNK, FOOD), dir.resolve("base"), 3,
-                List.of(dir.resolve("skip.jpg")), 1, dir, List.of("montage-001"));
-
-        this.store.writeIndex(dir, prepDir);
-
-        assertThat(this.store.readIndex(dir)).isEqualTo(prepDir);
-    }
-
-    @Test
-    void writeIndexReplacesWhateverIndexJsonHeldBefore(@TempDir final Path dir) throws IOException {
-        Files.writeString(dir.resolve("index.json"), "not valid json");
-        final var rebuilt = new PrepDir("2019-06", List.of(JUNK), dir.resolve("base"), 1, List.of(), 1, dir,
-                List.of("montage-001"));
-
-        this.store.writeIndex(dir, rebuilt);
-
-        assertThat(this.store.readIndex(dir)).isEqualTo(rebuilt);
-    }
-
-    @Test
-    void wrapsAnIndexWriteFailureIntoUncheckedIOException(@TempDir final Path dir) {
-        final Path missingParent = dir.resolve("missing-parent");
-        final var prepDir = new PrepDir("2019-06", List.of(JUNK), dir.resolve("base"), 0, List.of(), 0, dir,
-                List.of());
-
-        assertThatThrownBy(() -> this.store.writeIndex(missingParent, prepDir))
-                .isInstanceOf(UncheckedIOException.class)
-                .hasMessageContaining(missingParent.resolve("index.json").toString());
-    }
-
-    @Test
-    void wrapsAJacksonExceptionDuringIndexWriteIntoUncheckedIOException(@TempDir final Path dir) {
-        final var mapper = mock(JsonMapper.class);
-        doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
-        final var storeWithFailingMapper = new JsonCullPrepStore(new ShardCodec(), new SidecarReader(), mapper);
-        final var prepDir = new PrepDir("2019-06", List.of(JUNK), dir.resolve("base"), 0, List.of(), 0, dir,
-                List.of());
-
-        assertThatThrownBy(() -> storeWithFailingMapper.writeIndex(dir, prepDir))
-                .isInstanceOf(UncheckedIOException.class)
-                .hasCauseInstanceOf(IOException.class)
-                .cause().hasCauseInstanceOf(JacksonException.class);
-    }
-
-    @Test
-    void aFailedIndexWriteLeavesThePreviousIndexIntactAndNoTemporaryFileBehind(@TempDir final Path dir)
-            throws IOException {
-        this.store.writeIndex(dir, new PrepDir("2019-06", List.of(JUNK), dir.resolve("base"), 3, List.of(), 0, dir,
-                List.of()));
-        final String before = Files.readString(dir.resolve("index.json"), StandardCharsets.UTF_8);
-        final var mapper = mock(JsonMapper.class);
-        doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
-        final var failing = new JsonCullPrepStore(new ShardCodec(), new SidecarReader(), mapper);
-
-        assertThatThrownBy(() -> failing.writeIndex(dir, new PrepDir("2019-06", List.of(FOOD), dir.resolve("base"), 9,
-                List.of(), 0, dir, List.of())))
-                .isInstanceOf(UncheckedIOException.class);
-
-        assertThat(Files.readString(dir.resolve("index.json"), StandardCharsets.UTF_8)).isEqualTo(before);
-        try (final var entries = Files.list(dir)) {
-            assertThat(entries).containsExactly(dir.resolve("index.json"));
-        }
-    }
-
-    @Test
-    void aFailedMergedWriteLeavesNoDecisionsFileBehindAtAll(@TempDir final Path dir) throws IOException {
-        final var mapper = mock(JsonMapper.class);
-        doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
-        final var failing = new JsonCullPrepStore(new ShardCodec(), new SidecarReader(), mapper);
-        final var report = new ApplyReport(0, Map.of(), 0, 0, 0, List.of());
-
-        assertThatThrownBy(() -> failing.writeMergedDecisions(dir, "2019-06", List.of(), report))
-                .isInstanceOf(UncheckedIOException.class);
-
-        try (final var entries = Files.list(dir)) {
-            assertThat(entries).isEmpty();
-        }
-    }
-
-    @Test
     void hasShardReflectsWhetherTheDecisionsFileExists(@TempDir final Path dir) {
         final var shard = new DecisionShard("montage-004", List.of());
         new ShardCodec().write(dir.resolve("decisions-004.json"), shard);
@@ -681,60 +66,669 @@ class JsonCullPrepStoreTest {
         assertThat(this.store.hasShard(dir, "montage-005")).isFalse();
     }
 
-    @Test
-    void writesTheMergedDecisionsShapeWithDynamicCategories(@TempDir final Path dir) throws IOException {
-        final Path junk = dir.resolve("a.jpg");
-        final Path chosen = dir.resolve("b.jpg");
-        final Path reject = dir.resolve("c.jpg");
-        final List<Decision> decisions = List.of(
-                new Classification(junk, "junk", "phone photo of a monitor"),
-                new NearDupChosen(chosen, "lake-jun20", "sharpest of the burst"),
-                new NearDupReject(reject, "lake-jun20", "softer focus"));
-        final var report = new ApplyReport(3, Map.of("junk", 1), 0, 1, 1, List.of());
+    @Nested
+    class ReadingTheIndex {
 
-        this.store.writeMergedDecisions(dir, "2019-06", decisions, report);
+        @Test
+        void readsBackWhatPrepIndexWriterWrote(@TempDir final Path dir) {
+            final var prepDir = new PrepDir("2019-06", List.of(JUNK, FOOD), dir.resolve("base"), 3,
+                    List.of(dir.resolve("skip.jpg")), 1, dir, List.of("montage-001"));
+            new PrepIndexWriter().write(dir.resolve("index.json"), prepDir);
 
-        final String json = Files.readString(dir.resolve("decisions.json"), StandardCharsets.UTF_8);
-        assertThat(json).isEqualToIgnoringWhitespace("""
-                {
-                  "scope": "2019-06",
-                  "decisions": [
-                    { "file": "%s", "action": "junk", "reason": "phone photo of a monitor" },
-                    { "file": "%s", "action": "near-dup-chosen", "group": "lake-jun20", "chosen_reason": "sharpest of the burst" },
-                    { "file": "%s", "action": "near-dup-reject", "group": "lake-jun20", "reason": "softer focus" }
-                  ],
-                  "summary": {
-                    "reviewed": 3,
-                    "categories": { "junk": 1 },
-                    "near_dup_groups": 1,
-                    "near_dup_rejects": 1,
-                    "unreviewable": 0
-                  }
-                }
-                """.formatted(jsonEscaped(junk), jsonEscaped(chosen), jsonEscaped(reject)));
+            assertThat(JsonCullPrepStoreTest.this.store.readIndex(dir)).isEqualTo(prepDir);
+        }
+
+        @Test
+        void dropsBlankAndNullExamplesRatherThanRefusingTheIndex(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        { "name": "junk", "description": "objectively worthless",
+                          "examples": ["  pocket shots ", "   ", null, "lens caps"] }
+                      ],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 0,
+                      "entries": []
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            assertThat(JsonCullPrepStoreTest.this.store.readIndex(dir).categories().getFirst().examples())
+                    .containsExactly("pocket shots", "lens caps");
+        }
+
+        @Test
+        void refusesADescriptionPastItsCeiling(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), oneCardIndex(dir,
+                    "\"description\": \"" + "x".repeat(CullCategory.maxDescription() + 1) + "\""));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("description is longer than");
+        }
+
+        @Test
+        void refusesAnExamplePastItsCeiling(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), oneCardIndex(dir,
+                    "\"description\": \"worthless\", \"examples\": [\""
+                            + "x".repeat(CullCategory.maxExample() + 1) + "\"]"));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("example longer than");
+        }
+
+        @Test
+        void refusesMoreExamplesThanACardMayCarry(@TempDir final Path dir) throws IOException {
+            final String tooMany = IntStream.rangeClosed(0, CullCategory.maxExamples())
+                    .mapToObj(i -> "\"e" + i + "\"")
+                    .collect(Collectors.joining(", "));
+            Files.writeString(dir.resolve("index.json"), oneCardIndex(dir,
+                    "\"description\": \"worthless\", \"examples\": [" + tooMany + "]"));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("offering more than");
+        }
+
+        @Test
+        void treatsAMissingUnreviewableOrEntriesArrayAsEmpty(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        { "name": "junk", "description": "objectively worthless" }
+                      ],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 0
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            final PrepDir prepDir = JsonCullPrepStoreTest.this.store.readIndex(dir);
+
+            assertThat(prepDir.unreviewable()).isEmpty();
+            assertThat(prepDir.entries()).isEmpty();
+        }
+
+        @Test
+        void refusesAnIndexWithNoCategoriesArray(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 0,
+                      "entries": []
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("no categories");
+        }
+
+        @Test
+        void refusesANullElementAmongTheCategories(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        { "name": "junk", "description": "objectively worthless" },
+                        null
+                      ],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 0,
+                      "entries": []
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("null entry in categories");
+        }
+
+        @Test
+        void refusesANullElementAmongTheEntries(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        { "name": "junk", "description": "objectively worthless" }
+                      ],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 0,
+                      "entries": [
+                        "montage-001",
+                        null
+                      ]
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("null entry in entries");
+        }
+
+        @Test
+        void refusesACategoryThatCouldNotBecomeAFolder(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        { "name": "junk", "description": "objectively worthless" },
+                        { "name": "../Photos/2019/06", "description": "escapes the review root" }
+                      ],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 0,
+                      "entries": []
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("../Photos/2019/06")
+                    .hasMessageContaining("lower-case");
+        }
+
+        @Test
+        void refusesABlankCategory(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        { "name": "", "description": "objectively worthless" }
+                      ],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 0,
+                      "entries": []
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("lower-case");
+        }
+
+        @Test
+        void acceptsAnEmptyCategoriesArray(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 0,
+                      "entries": []
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            assertThat(JsonCullPrepStoreTest.this.store.readIndex(dir).categories()).isEmpty();
+        }
+
+        @Test
+        void refusesACategoryWithNoName(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        { "description": "objectively worthless" }
+                      ],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 0,
+                      "entries": []
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("category with no name");
+        }
+
+        @Test
+        void refusesACategoryWithABlankDescription(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        { "name": "junk", "description": "  " }
+                      ],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 0,
+                      "entries": []
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("category 'junk' with no description");
+        }
+
+        @Test
+        void refusesABareCategoryName(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        "junk"
+                      ],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 0,
+                      "entries": []
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class);
+        }
+
+        @Test
+        void refusesARepeatedCategory(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        { "name": "junk", "description": "objectively worthless" },
+                        { "name": "food", "description": "meals and menus" },
+                        { "name": "junk", "description": "a second card under one name" }
+                      ],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 0,
+                      "entries": []
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("repeats the category 'junk'");
+        }
+
+        @Test
+        void refusesAnEntryThatIsNotAMontageId(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        { "name": "junk", "description": "objectively worthless" }
+                      ],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 1,
+                      "entries": [
+                        "../../../evil"
+                      ]
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("is not a montage id");
+        }
+
+        @Test
+        void refusesANullDocument(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), "null");
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class);
+        }
+
+        @Test
+        void refusesMalformedJson(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), "{ not valid json");
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class);
+        }
+
+        @Test
+        void refusesAMissingIndexFile(@TempDir final Path dir) {
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class);
+        }
+
+        @Test
+        void refusesANullBasePath(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        { "name": "junk", "description": "objectively worthless" }
+                      ],
+                      "basePath": null,
+                      "photos": 0,
+                      "montages": 0
+                    }
+                    """);
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("basePath");
+        }
+
+        @Test
+        void refusesANullScope(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": null,
+                      "categories": [
+                        { "name": "junk", "description": "objectively worthless" }
+                      ],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 0
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("scope");
+        }
+
+        @Test
+        void answersTheDirectoryItWasReadFromRatherThanTheOneTheFileNames(
+                @TempDir final Path dir, @TempDir final Path elsewhere) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        { "name": "junk", "description": "objectively worthless" }
+                      ],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 0,
+                      "prepDir": "%s"
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(elsewhere)));
+
+            assertThat(JsonCullPrepStoreTest.this.store.readIndex(dir).prepDir()).isEqualTo(dir);
+        }
+
+        @Test
+        void refusesANullUnreviewableEntry(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        { "name": "junk", "description": "objectively worthless" }
+                      ],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "unreviewable": [
+                        null
+                      ],
+                      "montages": 0
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class);
+        }
+
+        // A NUL character is the one path character Path.of refuses on every platform, so the fixture
+        // reaches InvalidPathException wherever the suite runs.
+        @Test
+        void refusesAPathComponentThisPlatformRejects(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        { "name": "junk", "description": "objectively worthless" }
+                      ],
+                      "basePath": "bad\\u0000path",
+                      "photos": 0,
+                      "montages": 0
+                    }
+                    """);
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("basePath");
+        }
+
+        @Test
+        void raisesAnUncheckedIOExceptionForAFailedOpenRatherThanCallingTheIndexMalformed(@TempDir final Path dir)
+                throws IOException {
+            // A directory in place of index.json is what makes the open itself fail, rather than the
+            // content parse.
+            Files.createDirectory(dir.resolve("index.json"));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(UncheckedIOException.class)
+                    .isNotInstanceOf(MalformedPrepJsonException.class);
+        }
+
+        @Test
+        // any(Class.class) is the only unambiguous matcher for the Class<T>-vs-TypeReference<T>
+        // readValue overload. The raw type it forces is a Mockito-generics artifact, not a real cast risk.
+        @SuppressWarnings("unchecked")
+        void raisesAnUncheckedIOExceptionForAFailureMidReadRatherThanCallingTheIndexMalformed(
+                @TempDir final Path dir) throws IOException {
+            // A stream that opens fine and then fails mid-read has no portable fixture, so the mapper
+            // is stubbed to throw the JacksonIOException that shape produces.
+            Files.writeString(dir.resolve("index.json"), "{}");
+            final var wrapped = new IOException("simulated mid-stream read failure");
+            final var jacksonIoException = mock(JacksonIOException.class);
+            when(jacksonIoException.getCause()).thenReturn(wrapped);
+            final var mapper = mock(JsonMapper.class);
+            doThrow(jacksonIoException).when(mapper).readValue(any(InputStream.class), any(Class.class));
+            final var storeWithFailingMapper = new JsonCullPrepStore(new ShardCodec(), new SidecarReader(), mapper);
+
+            assertThatThrownBy(() -> storeWithFailingMapper.readIndex(dir))
+                    .isInstanceOf(UncheckedIOException.class)
+                    .isNotInstanceOf(MalformedPrepJsonException.class)
+                    .hasCause(wrapped);
+        }
     }
 
-    @Test
-    void wrapsAMergedWriteFailureIntoUncheckedIOException(@TempDir final Path dir) {
-        final Path missingParent = dir.resolve("missing-parent");
-        final var report = new ApplyReport(0, Map.of(), 0, 0, 0, List.of());
+    @Nested
+    class WritingTheIndex {
 
-        assertThatThrownBy(() -> this.store.writeMergedDecisions(missingParent, "2019-06", List.of(), report))
-                .isInstanceOf(UncheckedIOException.class)
-                .hasMessageContaining(missingParent.resolve("decisions.json").toString());
+        @Test
+        void writesAndReadsBackACardsExamplesInOrder(@TempDir final Path dir) {
+            final var food = new CullCategory("food", "meals and menus",
+                    List.of("restaurant plates", "home dinners"), Boolean.TRUE);
+            final var prepDir = new PrepDir("2019-06", List.of(food), dir.resolve("base"), 3,
+                    List.of(), 1, dir, List.of("montage-001"));
+
+            JsonCullPrepStoreTest.this.store.writeIndex(dir, prepDir);
+
+            assertThat(JsonCullPrepStoreTest.this.store.readIndex(dir).categories()).containsExactly(food);
+        }
+
+        @Test
+        void aCardThatOffersNoExamplesWritesNoKeyAndReadsBackWithNone(@TempDir final Path dir) throws IOException {
+            final var prepDir = new PrepDir("2019-06", List.of(JUNK), dir.resolve("base"), 3,
+                    List.of(), 1, dir, List.of("montage-001"));
+
+            JsonCullPrepStoreTest.this.store.writeIndex(dir, prepDir);
+
+            assertThat(Files.readString(dir.resolve("index.json"), StandardCharsets.UTF_8))
+                    .doesNotContain("examples");
+            assertThat(JsonCullPrepStoreTest.this.store.readIndex(dir).categories().getFirst().examples()).isEmpty();
+        }
+
+        @Test
+        void roundTripsThroughReadIndex(@TempDir final Path dir) {
+            final var prepDir = new PrepDir("2019-06", List.of(JUNK, FOOD), dir.resolve("base"), 3,
+                    List.of(dir.resolve("skip.jpg")), 1, dir, List.of("montage-001"));
+
+            JsonCullPrepStoreTest.this.store.writeIndex(dir, prepDir);
+
+            assertThat(JsonCullPrepStoreTest.this.store.readIndex(dir)).isEqualTo(prepDir);
+        }
+
+        @Test
+        void replacesWhateverIndexJsonHeldBefore(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), "not valid json");
+            final var rebuilt = new PrepDir("2019-06", List.of(JUNK), dir.resolve("base"), 1, List.of(), 1, dir,
+                    List.of("montage-001"));
+
+            JsonCullPrepStoreTest.this.store.writeIndex(dir, rebuilt);
+
+            assertThat(JsonCullPrepStoreTest.this.store.readIndex(dir)).isEqualTo(rebuilt);
+        }
+
+        @Test
+        void wrapsAWriteFailureIntoUncheckedIOException(@TempDir final Path dir) {
+            final Path missingParent = dir.resolve("missing-parent");
+            final var prepDir = new PrepDir("2019-06", List.of(JUNK), dir.resolve("base"), 0, List.of(), 0, dir,
+                    List.of());
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.writeIndex(missingParent, prepDir))
+                    .isInstanceOf(UncheckedIOException.class)
+                    .hasMessageContaining(missingParent.resolve("index.json").toString());
+        }
+
+        @Test
+        void wrapsAJacksonExceptionIntoUncheckedIOException(@TempDir final Path dir) {
+            final var mapper = mock(JsonMapper.class);
+            doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
+            final var storeWithFailingMapper = new JsonCullPrepStore(new ShardCodec(), new SidecarReader(), mapper);
+            final var prepDir = new PrepDir("2019-06", List.of(JUNK), dir.resolve("base"), 0, List.of(), 0, dir,
+                    List.of());
+
+            assertThatThrownBy(() -> storeWithFailingMapper.writeIndex(dir, prepDir))
+                    .isInstanceOf(UncheckedIOException.class)
+                    .hasCauseInstanceOf(IOException.class)
+                    .cause().hasCauseInstanceOf(JacksonException.class);
+        }
+
+        @Test
+        void aFailedWriteLeavesThePreviousIndexIntactAndNoTemporaryFileBehind(@TempDir final Path dir)
+                throws IOException {
+            JsonCullPrepStoreTest.this.store.writeIndex(dir, new PrepDir("2019-06", List.of(JUNK),
+                    dir.resolve("base"), 3, List.of(), 0, dir, List.of()));
+            final String before = Files.readString(dir.resolve("index.json"), StandardCharsets.UTF_8);
+            final var mapper = mock(JsonMapper.class);
+            doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
+            final var failing = new JsonCullPrepStore(new ShardCodec(), new SidecarReader(), mapper);
+
+            assertThatThrownBy(() -> failing.writeIndex(dir, new PrepDir("2019-06", List.of(FOOD),
+                    dir.resolve("base"), 9, List.of(), 0, dir, List.of())))
+                    .isInstanceOf(UncheckedIOException.class);
+
+            assertThat(Files.readString(dir.resolve("index.json"), StandardCharsets.UTF_8)).isEqualTo(before);
+            try (final var entries = Files.list(dir)) {
+                assertThat(entries).containsExactly(dir.resolve("index.json"));
+            }
+        }
     }
 
-    @Test
-    void wrapsAJacksonExceptionDuringMergedWriteIntoUncheckedIOException(@TempDir final Path dir) {
-        final var mapper = mock(JsonMapper.class);
-        doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
-        final var storeWithFailingMapper = new JsonCullPrepStore(new ShardCodec(), new SidecarReader(), mapper);
-        final var report = new ApplyReport(0, Map.of(), 0, 0, 0, List.of());
+    @Nested
+    class ReadingAShard {
 
-        assertThatThrownBy(() -> storeWithFailingMapper.writeMergedDecisions(dir, "2019-06", List.of(), report))
-                .isInstanceOf(UncheckedIOException.class)
-                .hasCauseInstanceOf(IOException.class)
-                .cause().hasCauseInstanceOf(JacksonException.class);
+        @Test
+        void readsBackWhatShardCodecWrote(@TempDir final Path dir) {
+            final var shard = new DecisionShard("montage-002", List.of(
+                    new Classification(dir.resolve("junk.jpg"), "junk", "phone photo of a monitor")));
+            new ShardCodec().write(dir.resolve("decisions-002.json"), shard);
+
+            assertThat(JsonCullPrepStoreTest.this.store.readShard(dir, "montage-002")).isEqualTo(shard);
+        }
+
+        @Test
+        void refusesMalformedContent(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("decisions-003.json"), "{ not valid json");
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readShard(dir, "montage-003"))
+                    .isInstanceOf(MalformedPrepJsonException.class);
+        }
+
+        @Test
+        void readsOneBackByItsOwnPath(@TempDir final Path dir) {
+            final var shard = new DecisionShard("montage-002", List.of(
+                    new Classification(dir.resolve("junk.jpg"), "junk", "phone photo of a monitor")));
+            new ShardCodec().write(dir.resolve("decisions-003.json"), shard); // stray: no montage-003 entry anywhere
+
+            assertThat(JsonCullPrepStoreTest.this.store.readShardFile(dir.resolve("decisions-003.json")))
+                    .isEqualTo(shard);
+        }
+    }
+
+    @Nested
+    class WritingTheMergedDecisions {
+
+        @Test
+        void writesTheShapeWithDynamicCategories(@TempDir final Path dir) throws IOException {
+            final Path junk = dir.resolve("a.jpg");
+            final Path chosen = dir.resolve("b.jpg");
+            final Path reject = dir.resolve("c.jpg");
+            final List<Decision> decisions = List.of(
+                    new Classification(junk, "junk", "phone photo of a monitor"),
+                    new NearDupChosen(chosen, "lake-jun20", "sharpest of the burst"),
+                    new NearDupReject(reject, "lake-jun20", "softer focus"));
+            final var report = new ApplyReport(3, Map.of("junk", 1), 0, 1, 1, List.of());
+
+            JsonCullPrepStoreTest.this.store.writeMergedDecisions(dir, "2019-06", decisions, report);
+
+            final String json = Files.readString(dir.resolve("decisions.json"), StandardCharsets.UTF_8);
+            assertThat(json).isEqualToIgnoringWhitespace("""
+                    {
+                      "scope": "2019-06",
+                      "decisions": [
+                        { "file": "%s", "action": "junk", "reason": "phone photo of a monitor" },
+                        { "file": "%s", "action": "near-dup-chosen", "group": "lake-jun20", "chosen_reason": "sharpest of the burst" },
+                        { "file": "%s", "action": "near-dup-reject", "group": "lake-jun20", "reason": "softer focus" }
+                      ],
+                      "summary": {
+                        "reviewed": 3,
+                        "categories": { "junk": 1 },
+                        "near_dup_groups": 1,
+                        "near_dup_rejects": 1,
+                        "unreviewable": 0
+                      }
+                    }
+                    """.formatted(jsonEscaped(junk), jsonEscaped(chosen), jsonEscaped(reject)));
+        }
+
+        @Test
+        void aFailedWriteLeavesNoDecisionsFileBehindAtAll(@TempDir final Path dir) throws IOException {
+            final var mapper = mock(JsonMapper.class);
+            doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
+            final var failing = new JsonCullPrepStore(new ShardCodec(), new SidecarReader(), mapper);
+            final var report = new ApplyReport(0, Map.of(), 0, 0, 0, List.of());
+
+            assertThatThrownBy(() -> failing.writeMergedDecisions(dir, "2019-06", List.of(), report))
+                    .isInstanceOf(UncheckedIOException.class);
+
+            try (final var entries = Files.list(dir)) {
+                assertThat(entries).isEmpty();
+            }
+        }
+
+        @Test
+        void wrapsAWriteFailureIntoUncheckedIOException(@TempDir final Path dir) {
+            final Path missingParent = dir.resolve("missing-parent");
+            final var report = new ApplyReport(0, Map.of(), 0, 0, 0, List.of());
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store
+                    .writeMergedDecisions(missingParent, "2019-06", List.of(), report))
+                    .isInstanceOf(UncheckedIOException.class)
+                    .hasMessageContaining(missingParent.resolve("decisions.json").toString());
+        }
+
+        @Test
+        void wrapsAJacksonExceptionIntoUncheckedIOException(@TempDir final Path dir) {
+            final var mapper = mock(JsonMapper.class);
+            doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
+            final var storeWithFailingMapper = new JsonCullPrepStore(new ShardCodec(), new SidecarReader(), mapper);
+            final var report = new ApplyReport(0, Map.of(), 0, 0, 0, List.of());
+
+            assertThatThrownBy(() -> storeWithFailingMapper.writeMergedDecisions(dir, "2019-06", List.of(), report))
+                    .isInstanceOf(UncheckedIOException.class)
+                    .hasCauseInstanceOf(IOException.class)
+                    .cause().hasCauseInstanceOf(JacksonException.class);
+        }
     }
 
     private static String oneCardIndex(final Path dir, final String cardFieldsAfterTheName) {

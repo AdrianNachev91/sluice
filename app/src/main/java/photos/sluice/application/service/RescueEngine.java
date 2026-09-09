@@ -115,8 +115,7 @@ public class RescueEngine implements RescueUseCase {
 
         // Snapshotted once, before any move happens, and reused below to find the notes left
         // behind. The loop below only ever relocates recognized media files, never a note, so this
-        // list's note entries are still accurate afterward. No need to re-walk the directory a
-        // second time.
+        // list's note entries are still accurate afterward.
         final List<Path> allFiles = this.mediaStore.listFiles(target).stream()
                 .filter(file -> !MediaStore.isIncompleteTransfer(file))
                 .toList();
@@ -192,8 +191,8 @@ public class RescueEngine implements RescueUseCase {
     }
 
     /**
-     * Checked in this order, and only this order. A non-media file, a stray {@code _reasons.txt} or
-     * anything else left in the folder, is ignored outright. Only a real media file moves.
+     * Moves one file into Sorted, if it is media at all. A non-media file, a stray
+     * {@code _reasons.txt} or anything else left in the folder, is ignored outright.
      *
      * @param file {@link Path} candidate file from the folder
      * @param rootPath {@link Path} the root being rescued from, which the file's date is read against

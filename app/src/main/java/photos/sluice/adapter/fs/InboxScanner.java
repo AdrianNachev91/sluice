@@ -46,9 +46,8 @@ public final class InboxScanner implements InboxScannerPort {
         // closed, so it must stay inside try-with-resources rather than being consumed inline.
         try (final Stream<Path> walk = Files.walk(inboxRoot)) {
             walk.filter(Files::isRegularFile).forEach(path -> {
-                // A file that is neither a JSON sidecar nor a recognized media extension falls
-                // through untouched (no else branch) - it never reaches the pairer below and
-                // never appears in the scan result.
+                // No else branch. A file that is neither a JSON sidecar nor recognized media falls
+                // through untouched, never reaching the pairer and never appearing in the result.
                 if (isJson(path)) {
                     jsonPaths.add(path);
                 } else if (this.mediaTypeDetector.classify(path).isPresent()) {
@@ -72,8 +71,8 @@ public final class InboxScanner implements InboxScannerPort {
             media.add(new MediaFile(path));
         }
         final Map<MediaFile, TakeoutSidecar> sidecars = new LinkedHashMap<>();
-        // Pairing runs on raw Paths (TakeoutSidecarPairer's existing contract), so its result is
-        // translated into the domain-model MediaFile/TakeoutSidecar wrappers only at the end.
+        // TakeoutSidecarPairer works in raw Paths, so its result is wrapped into the domain types
+        // only here at the end.
         pairing.sidecarsByMedia().forEach((mediaPath, jsonPath) ->
                 sidecars.put(new MediaFile(mediaPath), new TakeoutSidecar(jsonPath)));
 

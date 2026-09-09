@@ -46,8 +46,8 @@ class ThemeTest {
         }
     }
 
-    // Everything that mentions the overlay calls it colour-only. Nothing made that true until this.
-    // A padding landing in it would let the two looks differ over something no reader expects.
+    // Everything that mentions the overlay calls it colour-only. A padding landing in it would let
+    // the two looks differ over something no reader expects.
     //
     // Three JavaFX look properties join the app's own -sluice-* tokens: -fx-base, -fx-background
     // and -fx-control-inner-background. JavaFX's own default look derives every stock control's

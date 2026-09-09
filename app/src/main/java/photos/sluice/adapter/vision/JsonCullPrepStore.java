@@ -36,19 +36,17 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * The {@link CullPrepPort} implementation. It lives alongside {@link ShardCodec} and
- * {@link SidecarReader} in the same package. That lets it reuse their montage-sidecar and
- * per-montage-shard reading at package-private visibility. Neither class's access needs widening,
- * and no cross-adapter-subpackage dependency is added.
+ * The {@link CullPrepPort} implementation. It sits in the same package as {@link ShardCodec} and
+ * {@link SidecarReader} so it can reuse their reading at package-private visibility, widening
+ * neither class's access and adding no cross-adapter-subpackage dependency.
  *
  * <p>The merged {@code decisions.json} this class writes, and the {@code index.json} it reads
  * back, are each a distinct artifact from a per-montage shard. They get their own small DTOs here
  * rather than reaching into {@link ShardCodec}'s private encoding.
  *
- * <p>This class is public, unlike {@link ShardCodec} and {@link SidecarReader}: the apply-side
- * engines' own tests live outside this package and need a real {@link CullPrepPort}. Other engine
- * tests wire real adapters ({@code NioMediaStore}, {@code CsvLibraryHashIndex}) the same way,
- * instead of a fake.
+ * <p>This class is public, unlike {@link ShardCodec} and {@link SidecarReader}, because the
+ * apply-side engines' own tests live outside this package and wire a real {@link CullPrepPort}
+ * rather than a fake.
  */
 @Component
 public class JsonCullPrepStore implements CullPrepPort {
@@ -61,9 +59,9 @@ public class JsonCullPrepStore implements CullPrepPort {
     private final JsonMapper mapper;
 
     /**
-     * Public and no-arg so a test in another package (ApplyPlannerTest) can build a real instance
-     * without depending on the package-private ShardCodec/SidecarReader constructor parameters.
-     * Unused by Spring, which resolves the @Autowired constructor below instead.
+     * Public and no-arg so a test outside this package can build a real instance without naming the
+     * package-private constructor parameters. Unused by Spring, which resolves the @Autowired
+     * constructor below instead.
      */
     public JsonCullPrepStore() {
         this(new ShardCodec(), new SidecarReader());
@@ -98,9 +96,9 @@ public class JsonCullPrepStore implements CullPrepPort {
      * The JSON shape {@link #readIndex} parses: one scope's prep directory index, as written by
      * this app's own prep step.
      *
-     * <p>There is no {@code prepDir} field. {@link PrepDir} carries one, and its only trustworthy
-     * source is the directory the index was read from. The file's own claim about where it lives is
-     * not that. An index written by an older build still carries the key, and it is ignored.
+     * <p>There is no {@code prepDir} field, since the file's own claim about where it lives is not
+     * a trustworthy source for one. An index written by an older build still carries the key, and
+     * it is ignored.
      */
     private record RawIndex(@Nullable String scope, @Nullable List<@Nullable RawCategory> categories,
                             @Nullable String basePath, int photos,
@@ -127,9 +125,8 @@ public class JsonCullPrepStore implements CullPrepPort {
      * Reads a prep directory's index.json into a {@link PrepDir}.
      *
      * <p>The returned record's own {@code prepDir} is this call's argument, never a value off disk.
-     * A culler is handed the record and nothing else, so that field is its only handle on the
-     * directory it is working in. Taking it from the file would let a doctored index in one
-     * directory send every downstream step to another.
+     * Taking it from the file would let a doctored index in one directory send every downstream
+     * step to another.
      *
      * @param prepDir {@link Path} the prep directory to read
      * @return {@link PrepDir} the parsed prep directory index
@@ -228,10 +225,8 @@ public class JsonCullPrepStore implements CullPrepPort {
 
     /**
      * The JSON shape {@link #writeIndex} serializes. Mirrors {@code PrepIndexWriter}'s own Index DTO
-     * one field at a time, kept as a distinct type rather than shared. This reader/writer pair and
-     * {@code CullMontageRenderer}'s own writer are separate call sites for the same JSON shape.
-     * They're free to diverge later without coupling adapter subpackages - neither may depend on
-     * the other's classes, per {@code ArchitectureTest.adaptersAreSiblings}.
+     * one field at a time, kept as a distinct type rather than shared: neither adapter subpackage
+     * may depend on the other's classes, per {@code ArchitectureTest.adaptersAreSiblings}.
      *
      * @param scope {@link String} the on-disk tag identifying this prep dir's scope
      * @param categories a {@link List} of {@link RawCategory} the category cards this run was prepped under
@@ -282,19 +277,15 @@ public class JsonCullPrepStore implements CullPrepPort {
      * substitution deliberately and says so.
      *
      * <p>Each name is checked against {@link CategoryName}, and the set against itself. A recorded
-     * name goes on to become a folder that media is moved into, and {@code ShardValidator} judges a
-     * shard's category against this very set. So a bad name recorded here would pass the one check
-     * that stands between it and the move. {@code CullDestinations} refuses an escaping destination
-     * as a second line, which is a guard on the resolved path rather than on the name. A repeat is
-     * refused for the reason {@code Settings} refuses one on the config side, since two cards under
-     * one name alias a single category.
+     * name goes on to become a folder that media is moved into, so a bad one recorded here would
+     * pass the one check that stands between it and the move. A repeat is refused because two cards
+     * under one name alias a single category.
      *
-     * <p>A description is required and non-blank, the rule {@link CullCategory} enforces on the
-     * config side. A blank one renders a hollow prompt section and quietly costs cull recall.
-     *
-     * <p>Its length is held to the same ceiling, and so are the examples beside it. Every ceiling
-     * here is {@link CullCategory}'s own, read off it rather than repeated, so no file this app
-     * wrote can be refused by a number that drifted from the one that wrote it.
+     * <p>A description is required and non-blank, since a blank one renders a hollow prompt section
+     * and quietly costs cull recall. Its length is held to the same ceiling, and so are the
+     * examples beside it. Every ceiling here is {@link CullCategory}'s own, read off it rather than
+     * repeated, so no file this app wrote can be refused by a number that drifted from the one that
+     * wrote it.
      *
      * <p>Every field is checked before any card is built, so {@link CullCategory}'s own
      * {@link IllegalArgumentException} is unreachable from here. That exception would otherwise be

@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 // The end-to-end proof for the whole entry chain: JavaFX starts, Spring is built inside it, and a
 // window comes up. It runs on JavaFX's own headless backend, so it needs no display on either CI
 // runner. Every read of the scene graph goes through the FX thread rather than straight off the
-// test thread. That is the discipline every later screen test inherits from here.
+// test thread.
 class SluiceFxApplicationTest {
 
     private static final int TIMEOUT_SECONDS = 60;
@@ -80,8 +80,7 @@ class SluiceFxApplicationTest {
         this.startApplication(repoRoot, libraryRoot, inbox);
 
         assertThat(styleClassesOfRoot()).contains("shell").doesNotContain("failure-screen");
-        // Starting is also where the app takes the working root. Nothing else proves the real lock
-        // runs on the real startup path rather than only in its own unit tests.
+        // Starting is also where the app takes the working root.
         assertThat(repoRoot.resolve(".sluice-lock")).exists();
     }
 
@@ -128,8 +127,8 @@ class SluiceFxApplicationTest {
         this.application = null;
         FxToolkit.cleanupApplication(started);
 
-        // Claiming it is the proof. A root the app never gave back refuses this outright, which is
-        // exactly what the next launch would meet.
+        // A root the app never gave back refuses this outright, which is exactly what the next
+        // launch would meet.
         final var lock = new FileChannelWorkingRootLock();
         try {
             assertThatCode(() -> lock.acquire(repoRoot)).doesNotThrowAnyException();
@@ -138,8 +137,6 @@ class SluiceFxApplicationTest {
         }
     }
 
-    // One process at a time, per working root. The refusal has to reach the user as a window that
-    // says so, since a second launch is the ordinary way anybody meets it.
     @Test
     void anInstallWhoseRootIsAlreadyHeldOpensAWindowSayingSo(@TempDir final Path repoRoot,
                                                              @TempDir final Path libraryRoot,
@@ -181,8 +178,7 @@ class SluiceFxApplicationTest {
         assertThat(styleClassesOfRoot()).contains("shell").doesNotContain("failure-screen");
     }
 
-    // Nothing else is configured here. The welcome card is the fixture's own choice of outcome,
-    // not a given.
+    // Nothing else is configured here, so the welcome card is the fixture's own choice of outcome.
     @Test
     void theConfigCardsRemoveButtonDeletesTheBadKeyAndRetryingSucceeds() throws Exception {
         Files.writeString(this.configFileOrFail(), """
@@ -221,9 +217,6 @@ class SluiceFxApplicationTest {
         assertThat(this.configFileOrFail()).doesNotExist();
     }
 
-    // A machine where nobody has chosen a folder yet is the ordinary first launch, not a failure.
-    // The app comes up, and what it can do about it is the first-run flow rather than a stack trace.
-    //
     // Started with no arguments, so nothing configures the paths. One assumption rides on that. An
     // OS environment variable outranks the bundled defaults. So a machine exporting a SLUICE_PATHS_
     // variable configures them anyway, and passes this for a reason unrelated to the code.
@@ -247,8 +240,7 @@ class SluiceFxApplicationTest {
     }
 
     // Loading the files and handing them to the window are separate steps, and only the second one
-    // is what a desktop reads. A platform given none of them shows its own default and reports
-    // nothing, so the window looks like any other program's.
+    // is what a desktop reads. A platform given none of them reports nothing and shows its default.
     @Test
     void theWindowCarriesTheProductIcon(@TempDir final Path repoRoot, @TempDir final Path libraryRoot,
                                         @TempDir final Path inbox) throws Exception {
@@ -259,7 +251,7 @@ class SluiceFxApplicationTest {
                 .allSatisfy(icon -> assertThat(icon.isError()).isFalse());
     }
 
-    // Without the cap the scene would keep its own 1100.
+    // Without the cap the scene would keep its own INITIAL_WIDTH.
     @Test
     void theWindowOpensNoWiderThanTheDisplaysUsableArea(@TempDir final Path repoRoot,
                                                         @TempDir final Path libraryRoot,

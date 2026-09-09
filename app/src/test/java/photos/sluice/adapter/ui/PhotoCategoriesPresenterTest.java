@@ -93,7 +93,7 @@ class PhotoCategoriesPresenterTest {
     }
 
     // Every refusal this screen puts up is one it worked out itself, so the save call reads as the
-    // part that cannot fail. Let out of here it escapes into a button press.
+    // part that cannot fail.
     @Test
     void aSaveTheSettingsFileRefusesIsReportedRatherThanThrown() {
         final var store = new RecordingSettings(BLURRY, FUNNY);

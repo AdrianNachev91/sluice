@@ -27,9 +27,7 @@ import java.util.function.BooleanSupplier;
  * left to do. False means the job runner was busy with something else, so this watcher keeps
  * polling and retries later rather than giving up. True means this watcher's job is done, whether
  * because a resume went in or because one was refused on grounds no amount of polling will change.
- * A resume attempt can still land back in Waiting itself if a shard went bad between the tally
- * check and the real validation. When that happens, the same {@link CullEngine} call that produces
- * that outcome arms a fresh watcher. This instance does not loop on its own.
+ * Either way this instance arms no successor.
  *
  * <p>There is no time limit on the polling. A watch that does fire either completes the run or
  * lands it Blocked and stops. So the only thing a deadline could add is giving up on a run the user

@@ -57,11 +57,9 @@ class JobRunnerTest {
 
     @Test
     void isBusyWhileRunningThenFreeOnceTheJobCompletes() throws InterruptedException {
-        // Two latches, one for each direction. "started" lets the worker thread prove it has
-        // actually begun executing before this test trusts isBusy(). Without it, isBusy() could
-        // read false just because the virtual thread hasn't been scheduled yet. "release" then
-        // holds the job open on command, so it doesn't finish before the test gets a chance to
-        // assert anything.
+        // Two latches, one for each direction. Without "started", isBusy() could read false just
+        // because the virtual thread has not been scheduled yet. "release" then holds the job open
+        // on command, so it cannot finish before the assertions run.
         final var started = new CountDownLatch(1);
         final var release = new CountDownLatch(1);
         final JobHandle<String> handle = this.runner.submit(_ -> {
@@ -81,9 +79,8 @@ class JobRunnerTest {
 
     @Test
     void submitWhileAJobIsRunningThrows() throws InterruptedException {
-        // started/release: see isBusyWhileRunningThenFreeOnceTheJobCompletes. Needed here so the
-        // second submit() below is proven to race a job that's genuinely still in flight, not one
-        // that happened to finish first.
+        // The latches prove the second submit() below races a job genuinely still in flight,
+        // rather than one that happened to finish first.
         final var started = new CountDownLatch(1);
         final var release = new CountDownLatch(1);
         final JobHandle<String> first = this.runner.submit(_ -> {
@@ -174,8 +171,7 @@ class JobRunnerTest {
 
     @Test
     void runIfIdleLeavesTheWorkUnrunAndSaysSoWhileAJobIsRunning() throws InterruptedException {
-        // started/release: see isBusyWhileRunningThenFreeOnceTheJobCompletes. Needed so the call
-        // below is proven to meet a job genuinely still in flight.
+        // The latches prove the call below meets a job genuinely still in flight.
         final var started = new CountDownLatch(1);
         final var release = new CountDownLatch(1);
         final var ran = new AtomicBoolean(false);
@@ -194,8 +190,8 @@ class JobRunnerTest {
         job.join();
     }
 
-    // The whole point of the method. A job that could start here would be moving the tree while the
-    // work is deciding what the tree is.
+    // A job that could start here would be moving the tree while the work is deciding what the
+    // tree is.
     @Test
     void noJobStartsWhileRunIfIdleWorkIsStillRunning() throws InterruptedException {
         final var working = new CountDownLatch(1);
@@ -251,14 +247,13 @@ class JobRunnerTest {
 
     @Test
     void slotFreesAndFailureIsWrappedWhenWorkThrowsAnErrorNotJustAnException() {
-        // Guards the catch (Throwable), not catch (Exception), at JobRunner.java's own run().
         // An Error can escape deep in an engine call: a stack overflow walking a pathological
         // directory tree, an out-of-memory decoding a large batch. Catching only Exception would
-        // let it skip both freeing the slot and completing the caller's join(). Every future
-        // submit() would then wedge behind a job that never finishes. This asserts through a
-        // bounded get(), not join(). join()'s own wait is non-interruptible and cannot be timed
-        // out. If this exact regression ever recurred, join() would hang forever here, taking the
-        // whole test run down with it instead of failing cleanly.
+        // let it skip both freeing the slot and completing the caller's join().
+        //
+        // Asserted through a bounded get() rather than join(), whose own wait is non-interruptible
+        // and cannot be timed out. A regression here would hang join() forever, taking the whole
+        // test run down rather than failing cleanly.
         final var failure = new Error("simulated stack overflow");
         final JobHandle<String> handle = this.runner.submit(_ -> {
             throw failure;
@@ -272,7 +267,6 @@ class JobRunnerTest {
 
     @Test
     void slotIsFreeAgainOnceTheFirstJobFinishes() throws InterruptedException {
-        // started/release: see isBusyWhileRunningThenFreeOnceTheJobCompletes.
         final var started = new CountDownLatch(1);
         final var release = new CountDownLatch(1);
         final JobHandle<String> first = this.runner.submit(_ -> {
@@ -291,9 +285,8 @@ class JobRunnerTest {
 
     @Test
     void handedInHandleReflectsARequestedCancellation() throws InterruptedException {
-        // started/release: see isBusyWhileRunningThenFreeOnceTheJobCompletes. requestCancellation()
-        // is called while the job is still paused on release.await(), so the flag is guaranteed to
-        // already be set by the time the job resumes and reads it.
+        // requestCancellation() is called while the job is still paused on release.await(), so the
+        // flag is already set by the time the job resumes and reads it.
         final var observedCancellation = new AtomicBoolean(true);
         final var started = new CountDownLatch(1);
         final var release = new CountDownLatch(1);

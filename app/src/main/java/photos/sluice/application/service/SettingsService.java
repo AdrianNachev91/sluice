@@ -36,32 +36,16 @@ import java.util.Optional;
  * exactly as it was. Writing before putting the new values in force means the app never runs on
  * settings that failed to reach disk.
  *
- * <p>A save that moves the working root holds both roots across the write, and gives the old one up
- * only once the write has succeeded. There is therefore no window where this process has stopped
- * holding the root its own settings still name. A failed save has nothing to take back, so it
- * cannot be refused a folder it needs, and cannot end up holding neither.
- *
- * <p>A folder root that moves is checked before any of that. A root set to somewhere that cannot be
- * worked in is refused. That covers text naming no path at all, a folder no directory could be
- * confirmed at, one that is there and cannot be resolved, and two roots put inside each other. A
- * root left unset is not refused. An install chooses its three folders one picker at a time, and
- * the facade goes on refusing jobs while any of them is empty.
- *
- * <p>A save that moves a folder root runs with the job slot held shut. Jobs start from more than
- * one thread. Asking whether one is running and then saving would leave a window for a job to start
- * against the roots it reads as it goes.
- *
- * <p>Only a save that moves the working root touches the lock at all. A save that changes a
- * category, a grid, or the library and inbox roots asks for nothing. That matters in a process
- * which never claimed a root, and would otherwise be refused its own settings change by a desktop
- * app left open.
- *
- * <p>One save at a time, so a second one cannot decide what to do from settings the first is
- * halfway through replacing.
+ * <p>Only a save that moves a folder root checks roots or holds the job slot, and only one that
+ * moves the working root touches the lock. A save changing a category or a grid asks for none of
+ * it. That matters in a process which never claimed a root, and would otherwise be refused its own
+ * settings change by a desktop app left open.
  *
  * <p>A save that moved any of the folder roots then tells its {@link FolderRootsChangeListener}s,
  * and says whether the working root was one of them. Whatever a driving adapter does inside those
  * roots, it did against the old ones, and this is the only moment that fact is known.
+ *
+ * <p>Flowchart: {@code app/docs/design/application/service/settings-service.md}.
  */
 @Component
 public class SettingsService implements SettingsUseCase {
@@ -112,9 +96,7 @@ public class SettingsService implements SettingsUseCase {
     }
 
     /**
-     * The settings in force at this moment.
-     *
-     * @return {@link Settings} the current settings
+     * {@inheritDoc}
      */
     @Override
     public Settings settings() {
@@ -122,10 +104,7 @@ public class SettingsService implements SettingsUseCase {
     }
 
     /**
-     * What supplies the given setting from above the user's config file.
-     *
-     * @param property {@link String} the property name, as the app spells it in its own config file
-     * @return an {@link Optional} of {@link SettingOverride} what supplies it from above
+     * {@inheritDoc}
      */
     @Override
     public Optional<SettingOverride> overriddenAboveTheConfigFile(final String property) {
@@ -133,9 +112,7 @@ public class SettingsService implements SettingsUseCase {
     }
 
     /**
-     * Saves the given settings and puts them in force.
-     *
-     * @param settings {@link Settings} the settings to save
+     * {@inheritDoc}
      */
     @Override
     public void save(final Settings settings) {
@@ -166,9 +143,9 @@ public class SettingsService implements SettingsUseCase {
      * would be asking itself. Everything the gate protects is still true: no other job can start
      * while that one runs.
      *
-     * <p>Takes the folder rather than a whole settings value. That is what keeps a move honest
-     * across the time one takes. Everything else is read from the settings in force at this moment,
-     * so a category saved while a library was copying is still there afterwards.
+     * <p>Takes the folder rather than a whole settings value, because a move takes as long as a
+     * library is big. Everything else is read from the settings in force at this moment, so a
+     * category saved while a library was copying is still there afterwards.
      *
      * <p>No claim is taken or given up. The working root is whatever was already in force, so there
      * is no root to move a claim between.
@@ -230,10 +207,8 @@ public class SettingsService implements SettingsUseCase {
      * <p>An install that has never had a library root is not moving one. Nothing is stranded and
      * the index is empty, so a first run saves through here like any other setting.
      *
-     * <p>Runs after the roots are checked, on the same reasoning that puts that check ahead of the
-     * job gate. An unusable folder names a value the user can go and correct, and it is the same
-     * answer whatever else is also true. Which flow a usable move belongs in is the next question,
-     * not the first one.
+     * <p>Runs after the roots are checked. Which flow a usable move belongs in is the next
+     * question, not the first one.
      *
      * @param settings {@link Settings} the settings this save would put in force
      * @param previous {@link Settings} the settings running now
@@ -269,20 +244,16 @@ public class SettingsService implements SettingsUseCase {
      * Refuses candidate roots that are set to somewhere unusable.
      *
      * <p>Runs before the claim and before the job slot, so a refused save has taken nothing and
-     * changed nothing. Outside the slot rather than inside it, because the check reads directories.
-     * A folder root on a stalled mount would otherwise cost every concurrent {@code submit} its own
-     * wait on the slot, then a refusal it did nothing to deserve.
+     * changed nothing. Outside the slot because the check reads directories, and a folder root on a
+     * stalled mount would otherwise cost every concurrent {@code submit} its own wait and then a
+     * refusal it did nothing to deserve. It still runs under the save monitor, so a stalled root
+     * holds up the next save. That is one caller rather than every job in the process.
      *
-     * <p>It does still run under the save monitor, which no save can avoid: working out what is
-     * changing means reading the settings in force. So a stalled root holds up the next save. That
-     * is one caller rather than every job in the process.
-     *
-     * <p>Two refusals can be due at once, when a job is running and the roots are also unusable.
-     * This one wins. It names a value the user can go and correct, and it is the same answer
-     * however long the job takes. Whether a job happened to be running is neither.
+     * <p>Where a job is running and the roots are also unusable, this refusal wins. It names a value
+     * the user can go and correct, and it is the same answer however long the job takes.
      *
      * <p>Only a save that moves a folder root reaches this. A user whose library drive is unplugged
-     * can still change a category, since that save leaves every root exactly where it found it.
+     * can still change a category.
      *
      * @param paths {@link PathSettings} the folder roots this save would put in force
      * @throws PathsMisconfiguredException if a root that is set cannot be worked in
@@ -359,20 +330,16 @@ public class SettingsService implements SettingsUseCase {
      * the job, so a listener's arming step self-skips. Nothing is owed: only the library root moved,
      * every prep dir is where it was, and the watchers polling them were never stranded.
      *
-     * <p>That delay is real and this is the widest {@link JobRunner#runIfIdle} gets stretched. A
-     * listener surveys every run on disk. So folder roots on a slow or stalled network mount make a
-     * concurrent {@code submit} wait out its own bound and then be refused. Bounded is the whole
-     * difference: a stall costs a caller one refusal it can retry from, not the runner itself.
+     * <p>This is the widest {@link JobRunner#runIfIdle} gets stretched, since a listener surveys
+     * every run on disk. Folder roots on a slow or stalled network mount therefore make a concurrent
+     * {@code submit} wait out its own bound and then be refused. Bounded is the whole difference: a
+     * stall costs a caller one refusal it can retry from, not the runner itself.
      *
-     * <p>A listener that throws would report a save that has already reached disk as a failed one,
-     * so each is documented to report its own failures instead. This catch is what makes the port's
-     * wording true of a listener that gets it wrong rather than merely instructing one not to.
-     *
-     * <p>It takes {@link Throwable} because a listener walks directory trees, which is where
-     * {@code JobRunner} already names an {@link Error} as a real outcome rather than a theoretical
-     * one. Only the hazard is borrowed from there, not the handling: that class forwards what it
-     * catches to the caller's own future, while there is no caller here left to tell. Everything
-     * durable is already on disk, so a log line is the whole remedy.
+     * <p>Each listener runs inside its own catch, which is what makes the port's "report your own
+     * failures" wording true of one that gets it wrong. {@link Throwable} rather than
+     * {@link RuntimeException}, because a listener walks directory trees. There is no caller's
+     * future left to forward an {@link Error} to, and everything durable is already on disk, so a
+     * log line is the whole remedy.
      *
      * @param workingRootMoved boolean whether this save moved the working root itself
      */

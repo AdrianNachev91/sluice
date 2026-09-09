@@ -29,14 +29,12 @@ import java.util.Set;
  * Turns what a finished job produced into what the result card says.
  *
  * <p>Static and holding nothing. What a run reported is settled the moment it ended, so reading it
- * needs none of the presenter's own state. That also makes every case here reachable from a test
- * with a hand-built summary and no job at all.
+ * needs none of the presenter's own state.
  */
 final class RunResults {
 
-    // Two of the six sort buckets are always drawn, however small. A sort that moved no photo is
-    // the news on that card. Dropping the row at zero leaves that news to a reader who notices an
-    // absence.
+    // Always drawn, however small. A sort that moved no photo is the news on that card. Dropping
+    // the row at zero leaves that news to a reader who notices an absence.
     private static final String PHOTOS_SORTED = "Photos sorted";
     private static final String VIDEOS_SORTED = "Videos sorted";
 
@@ -58,21 +56,17 @@ final class RunResults {
             + "sift up again once they have.";
 
     // Opens on what came back rather than on every sheet being judged. A sheet whose answer covers
-    // only some of its photos has a decisions file and has not been judged, and the clause that
-    // follows says exactly that.
-    private static final String BLOCKED_DETAIL = "Every sheet came back. %s. Your photos are still in Sorted.";
+    // only some of its photos has a decisions file and has not been judged.
+    private static final String BLOCKED_DETAIL = "Every sheet came back. %s. Nothing was moved.";
 
-    // The same card for a run stopped with sheets still owed. Names how many never arrived, because
-    // the row below counts the sheets that came back AND passed. Without the count a reader
-    // subtracts that row from the total and reads every one of the difference as missing, when some
-    // of it came back wrong.
+    // The same card for a run stopped with sheets still owed.
     private static final String BLOCKED_SHORT_DETAIL =
-            "%s never came back. %s. Your photos are still in Sorted.";
+            "%s never came back. %s. Nothing was moved.";
 
     // Reached only on a paying provider, which is what lets this name one. The other kind hands an
     // incomplete set back as a sift still waiting, not as one that stopped.
     private static final String INCOMPLETE_DETAIL = "Your provider could not judge every sheet, so "
-            + "nothing was moved. Your photos are still in Sorted.";
+            + "nothing was moved.";
 
     private static final String CANCELLED_CONTINUE_NOTE = "You can continue at any time.";
 
@@ -197,8 +191,7 @@ final class RunResults {
      * spent nothing, and rows of zeroes would be three lines saying so.
      *
      * @param report {@link CullReport} what the run had judged and consumed. Null only because the
-     *         exception's own field allows it; the one provider that can reach this card always
-     *         builds one
+     *         exception's own field allows it
      * @return a {@link List} of {@link Count} the rows
      */
     private static List<Count> abandonedCounts(final @Nullable CullReport report) {
@@ -307,8 +300,7 @@ final class RunResults {
      *
      * <p>Said because the card otherwise ends on a heading saying the sort finished, counts that
      * add up to nowhere, and no offer to sift. A reader is left working out which of those three is
-     * the fault. Every file went somewhere, and the rows name where, so what is missing is the one
-     * sentence tying them to the absent button.
+     * the fault.
      *
      * <p>A sort counts only what was in scope, so a narrowed one that filed nothing reports what an
      * empty Inbox reports. Only what was asked for tells the cases apart.
@@ -362,8 +354,7 @@ final class RunResults {
      *
      * <p>Empty means nothing reached Sorted, so there is nothing to offer. More than one timeframe
      * is refused rather than picked between. The button names what it would sift, and naming one of
-     * several spends the reader's money on photos they had not asked about. Nothing on the
-     * dashboard produces more than one today, and this is the answer for when something does.
+     * several spends the reader's money on photos they had not asked about.
      *
      * @param sorted {@link SortSummary} what the sort did
      * @return {@link CardAction} the offer, or null where the card makes none
@@ -479,9 +470,8 @@ final class RunResults {
             case VIDEOS -> "Videos";
             case FUNNY -> "Funny";
             case UNDATED -> "Unsorted";
-            // Nothing in the pipeline files anything here, and the bucket exists because a first
-            // path segment has to land somewhere. A card meeting one says what it can rather than
-            // dropping the count.
+            // The bucket exists because a first path segment has to land somewhere. A card meeting
+            // one says what it can rather than dropping the count.
             case OTHER -> "Elsewhere in your Library";
         };
     }
@@ -535,8 +525,6 @@ final class RunResults {
                 brought.alreadyThere());
         addWhenAny(rows, "result-import-unreadable", "Could not be read", brought.couldNotBeRead());
         addWhenAny(rows, "result-import-unverified", "Arrived broken", brought.unverified());
-        // A card formatted by Windows keeps a folder of its own that no ordinary user may read, so
-        // almost every card import reads one holding no photos.
         addWhenAny(rows, "result-import-unopenable", "Folders could not be opened",
                 brought.unreadablePlaces());
         return new RunResultView(
@@ -550,7 +538,7 @@ final class RunResults {
      * How an import that ran to the end is headed.
      *
      * <p>A plain "finished" is the first thing read, so a run that left photos behind says so
-     * there rather than only in a row further down. A pulled card is the way this happens.
+     * there rather than only in a row further down.
      *
      * <p>Folders it could not open are not counted in. Every Windows-formatted card carries one no
      * ordinary user may read, so counting them would head almost every card import as gone wrong.
@@ -680,8 +668,7 @@ final class RunResults {
      * How far through its sheets a sift that did not finish got.
      *
      * <p>A run that spent money and then paused has to account for it. Without a currency figure,
-     * what it can say is how many of its sheets now hold a decision. That is the denomination the
-     * rest of this design settled on.
+     * what it can say is how many of its sheets now hold a decision.
      *
      * <p>Read off the prep dir's own tally rather than off what this call judged. Carrying a
      * stopped run on judges only the sheets still without a decision. That call's own count
@@ -717,9 +704,8 @@ final class RunResults {
      * number above them. The braced figure is the whole scope the sheets were built from. That is
      * why it reads as a denominator beside the sheet count rather than as a row of its own.
      *
-     * <p>The near-duplicate group count is left off, unlike a finished run's card. A group is
-     * resolved by copying its keeper, and that keeper stays in Sorted. Counted under a line about
-     * what left, it would name a photo that is still there.
+     * <p>The near-duplicate group count is left off, unlike a finished run's card. Counted under a
+     * line about what left, it would name a photo that is still in Sorted.
      *
      * @param sheets {@link ShardTally} what the prep dir holds
      * @param moved {@link ApplyReport} what apply moved before it stopped, or null where it never
@@ -781,7 +767,7 @@ final class RunResults {
      * Where a paused sift is picked up again, for the pause that offers no button of its own.
      *
      * <p>The other two carry Continue on the card, so the reader has what they need without
-     * leaving. One waiting on somebody's agent has nothing to press until the decisions land.
+     * leaving.
      *
      * @param why {@link WaitingReason} why the sift paused
      * @return {@link Location} the runs screen, or null where the card offers the way on itself

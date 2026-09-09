@@ -104,8 +104,8 @@ class AnthropicCullerTest {
         assertThat(this.culler().describe().id()).isEqualTo("anthropic");
     }
 
-    // What CullEngine reads to tell an ordinary pause from a failed run. Typed MANUAL instead, a
-    // model that genuinely could not answer would be filed as a run still waiting for shards.
+    // Typed MANUAL instead, a model that genuinely could not answer would be filed as a run still
+    // waiting for shards.
     @Test
     void callsAModelRatherThanWaitingForAPerson() {
         assertThat(this.culler().type()).isEqualTo(ProviderType.API);
@@ -412,8 +412,7 @@ class AnthropicCullerTest {
                 }
                 """, 100, 10));
 
-        // Cancels once montage-001's tick fires. montage-002/003 are never dispatched, so the
-        // client only ever sees one request.
+        // Cancels once montage-001's tick fires, so montage-002 and 003 are never dispatched.
         final var cancelled = new AtomicBoolean(false);
         final ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
 
@@ -492,8 +491,8 @@ class AnthropicCullerTest {
         assertThat(ticks).containsExactly("1/3");
     }
 
-    // The second, pre-retry check is what actually saves the latency. Without it, a cancellation
-    // landing here would still have to wait out a whole extra API round trip before it takes effect.
+    // Without the pre-retry check, a cancellation landing here waits out a whole extra API round
+    // trip before it takes effect.
     @Test
     void cancellationAfterAFailedFirstAttemptSkipsTheRetryAndWritesNothing() throws Exception {
         final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
@@ -558,12 +557,12 @@ class AnthropicCullerTest {
         assertThat(this.prepDir.resolve("decisions-002.json")).doesNotExist();
     }
 
-    // A file named by both a decision and index.json's unreviewable list would double-move at apply
-    // time. That is a real problem, but not one to settle here. The user can answer it with
-    // TRUST_DECISION, and that answer lives in a ledger only the apply phase reads. Rejecting the
-    // shard here would overrule them, and each rejection costs another paid model call.
+    // A file named by both a decision and index.json's unreviewable list would double-move at
+    // apply time. The user answers that with TRUST_DECISION, and the answer lives in a ledger only
+    // the apply phase reads. Rejecting the shard here would overrule them, and each rejection
+    // costs another paid model call.
     //
-    // The fixture is synthetic: the renderer keeps sidecar srcs and unreviewable entries disjoint,
+    // The fixture is synthetic. The renderer keeps sidecar srcs and unreviewable entries disjoint,
     // so only a hand-edited index.json reaches this state through the model's own verdict.
     @Test
     void writesTheShardWhenAFileIsAlsoListedAsUnreviewableLeavingThatOverlapToApply() throws Exception {
@@ -586,10 +585,8 @@ class AnthropicCullerTest {
         verify(this.messages, times(1)).create(any(MessageCreateParams.class));
     }
 
-    // The overlap above is hand-built: the renderer never emits a file as both a sidecar src and an
-    // unreviewable entry. A shard read back off disk is the case that needs no such fixture, since
-    // nothing constrains what an already-written shard names. So this is the resume-path twin, and
-    // the one that would break first if the unreviewable argument were ever restored.
+    // Nothing constrains what an already-written shard names, so this case needs no hand-built
+    // fixture at all.
     @Test
     void resumesAnExistingShardNamingAnUnreviewableFileInsteadOfPayingToReCullIt() throws Exception {
         this.writeMontage("montage-001", "IMG_0001.jpg");
@@ -603,9 +600,8 @@ class AnthropicCullerTest {
         verify(this.messages, times(0)).create(any(MessageCreateParams.class));
     }
 
-    // A sidecar names the photos its montage shows, so without one there is nothing to key the
-    // model's verdicts against and no request can be built. Skipping that montage keeps the rest of
-    // the scope culling, and leaves the apply phase to offer the user a corrupt-sidecar remedy.
+    // A sidecar names the photos its montage shows. Without one there is nothing to key the
+    // model's verdicts against, and no request can be built at all.
     @Test
     void skipsAMontageWhoseSidecarIsUnreadableAndStillCullsTheRest() throws Exception {
         this.writeMontage("montage-001", "IMG_0001.jpg");
@@ -631,9 +627,9 @@ class AnthropicCullerTest {
         assertThat(ticks).containsExactly("1/2", "2/2");
     }
 
-    // The state resolveCorruptSidecar() actually leaves behind: the sidecar filed away, its shard
-    // still on disk. That shard must survive untouched, because APPLY_ANYWAY is an answer to trust
-    // it. Re-culling the montage would overwrite the very decisions the user chose to keep.
+    // The state a resolved corrupt sidecar leaves behind: the sidecar filed away, its shard still
+    // on disk. APPLY_ANYWAY is an answer to trust that shard, so re-culling the montage would
+    // overwrite the very decisions the user chose to keep.
     @Test
     void leavesAnExistingShardAloneWhenItsSidecarHasBeenFiledAway() throws Exception {
         this.writeMontage("montage-001", "IMG_0001.jpg");
@@ -689,8 +685,7 @@ class AnthropicCullerTest {
         assertThat(retry.outputConfig()).isPresent();
     }
 
-    // The retry budget is a hard cap of one corrective attempt: a model that fails the same
-    // montage twice stops burning tokens right there.
+    // A model that fails the same montage twice stops burning tokens right there.
     @Test
     void failsAfterOneRetryAggregatingBothAttemptsProblems() throws Exception {
         final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
@@ -723,8 +718,8 @@ class AnthropicCullerTest {
                 .isEqualTo(report(0, 0, 2, 220, 40));
     }
 
-    // A failed attempt must roll its tentative shard back out of the accepted set. Poisoned
-    // leftovers would surface as phantom problems when a later montage is validated.
+    // A tentative shard left in the accepted set would surface as a phantom problem when a later
+    // montage is validated.
     @Test
     void aFailedFirstAttemptLeavesTheAcceptedSetCleanForLaterMontages() throws Exception {
         this.writeMontage("montage-001", "IMG_0001.jpg");
@@ -859,7 +854,7 @@ class AnthropicCullerTest {
     }
 
     // A resumed shard joins the accumulated set, so the cross-shard rules keep firing across the
-    // resume boundary. A later montage cannot reuse a group id an earlier run's shard claimed.
+    // resume boundary.
     @Test
     void aResumedShardStillBlocksALaterGroupIdReuse() throws Exception {
         this.writeMontage("montage-001", "IMG_0001.jpg", "IMG_0002.jpg");
@@ -1157,8 +1152,8 @@ class AnthropicCullerTest {
                 .hasMessageContaining("sluice.cull.provider-settings.anthropic.model");
     }
 
-    // Two routes lead to a stored key, and someone hitting this has taken neither. The message
-    // names both rather than the one the app happens to check first.
+    // Someone hitting this has taken neither route, so the message names both rather than the one
+    // the app happens to check first.
     @Test
     void failsLoudNamingBothRoutesToAKeyWhenNoTierHoldsOne() {
         final SecretStore empty = new FixedSecretStore(null);
@@ -1204,8 +1199,6 @@ class AnthropicCullerTest {
                 List.of(new ModelOption("claude-sonnet-5", "Claude Sonnet 5")), "claude-sonnet-5")));
     }
 
-    // The list is what a wrong model id would otherwise be typed into, so a model that cannot read
-    // a photo or answer a schema has no business appearing in it.
     @Test
     void aModelThatCannotReadAPhotoIsNotOffered() {
         this.listsModels(model("claude-sonnet-5", "Claude Sonnet 5", true, true),
@@ -1327,8 +1320,7 @@ class AnthropicCullerTest {
     }
 
     // An unparseable endpoint is a field a user typed, and the HTTP client rejects it with an
-    // exception from no family this class could enumerate. Escaping would reach a button handler,
-    // which has nowhere to put it.
+    // exception from no family this class could enumerate.
     @Test
     void aFailureFromOutsideTheSdksOwnFamiliesStillBecomesAnAnswer() {
         this.listFails(new IllegalArgumentException("Expected URL scheme 'http' or 'https'"));
@@ -1338,8 +1330,7 @@ class AnthropicCullerTest {
                         unreachable -> assertThat(unreachable.detail()).contains("URL scheme"));
     }
 
-    // A credential store that cannot answer is the other way a check fails before any request goes
-    // out, and it is not the same state as holding no key at all.
+    // Not the same state as holding no key at all, though both fail before a request goes out.
     @Test
     void aCredentialStoreThatRefusesToAnswerIsReportedRatherThanThrown() {
         final var culler = this.checkingCuller(_ -> {

@@ -19,8 +19,7 @@ import java.util.function.UnaryOperator;
  *
  * <p>Events arrive on whichever thread the job runs on, and a JavaFX control may only be touched
  * from the application thread. So nothing here draws. It keeps a snapshot the screen can read, then
- * hands the redraw to the toolkit. That is the same division the presenters already use, where the
- * screen supplies the redraw and decides nothing about what it means.
+ * hands the redraw to the toolkit.
  *
  * <p>The snapshot is replaced whole on every event rather than mutated in place. A reader on the
  * application thread therefore always sees one consistent list, never a phase half-written by the
@@ -59,9 +58,8 @@ public class FxProgressPort implements ProgressPort {
     }
 
     /**
-     * Test seam: production wiring always goes through the public constructor above, which hands
-     * every redraw to the toolkit. A test proving that events are marshalled rather than run where
-     * they arrive passes a dispatcher it can inspect, and needs no toolkit at all.
+     * Test seam. A test proving that events are marshalled rather than run where they arrive passes
+     * a dispatcher it can inspect, and needs no toolkit at all.
      *
      * @param onFxThread a {@link Consumer} of {@link Runnable} how a redraw reaches the application
      *     thread
@@ -89,8 +87,7 @@ public class FxProgressPort implements ProgressPort {
      *
      * <p>Apart from {@link #setRepaint} because the two have different lifetimes. A screen owns the
      * area for as long as it is built. This is for a job whose progress is reported somewhere else
-     * entirely, and only while it runs. The library move is the one: it reports through the same
-     * port, from a dialog on a different screen.
+     * entirely, and only while it runs.
      *
      * <p>Runs on the application thread, in the same redraw the screen's own repaint runs in.
      *
@@ -271,7 +268,6 @@ public class FxProgressPort implements ProgressPort {
      *
      * <p>A label that was never started is ignored rather than added. The port's own contract is
      * that a phase is bracketed, so an unbracketed tick is a bug in the engine reporting it.
-     * Adding a phase here would draw a bar for it and hide that bug.
      *
      * <p>An announced entry the job has not reached is skipped for the same reason. In a plan
      * naming the label twice it sits after the running one. A scan from the end that took it would

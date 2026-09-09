@@ -23,9 +23,7 @@ public interface VisionCuller {
      * the models it offers.
      *
      * <p>Answered by the provider rather than assembled elsewhere, so a provider added later
-     * arrives complete. Nothing outside it has to be edited for it to appear.
-     *
-     * <p>The identifier a dispatcher matches the configured provider against lives here too.
+     * arrives complete with nothing outside it to edit.
      *
      * @return {@link VisionProviderDescriptor} this provider's own description
      */
@@ -46,20 +44,17 @@ public interface VisionCuller {
      * Asks whether the credential stored for this provider is accepted, and what that credential can
      * run.
      *
-     * <p>Answers rather than throws. Every way this can fail is a state a person can act on. So each
-     * one is a value to render, not an exception a caller has to classify.
+     * <p>Answers rather than throws. Every way this can fail is a state a person can act on, so each
+     * is a value to render rather than an exception a caller has to classify.
      *
-     * <p>It reads what is stored for this provider, not anything a screen is holding unsaved. So a
-     * surface offering this alongside editable fields is reporting on the last save.
+     * <p>It reads what is stored for this provider, not anything a screen is holding unsaved.
      *
-     * <p>May be called often and at no notice, whenever a surface decides what it shows is out of
-     * date. An implementation that can only answer by doing the provider's real work is the wrong
-     * shape for it.
+     * <p>May be called often and at no notice. An implementation that can only answer by doing the
+     * provider's real work is the wrong shape for it.
      *
-     * <p>Settings tells the user this costs nothing, distinct from a cull. Verify that claim holds
-     * for this provider's own account before shipping it. A provider with no free way to check a
-     * credential breaks the claim. That is a decision to make out loud, amending both this and the
-     * Settings copy stating it as free.
+     * <p>Settings tells the user this costs nothing, distinct from a cull. A provider with no free
+     * way to check a credential breaks that claim, and changing it means changing the Settings
+     * wording too.
      *
      * <p>No default. A provider with nothing to authenticate answers
      * {@link ProviderCheck.NotApplicable} deliberately, rather than inheriting a claim it never
@@ -86,10 +81,8 @@ public interface VisionCuller {
     /**
      * Counts what one call against prep would carry on the way in, without making it.
      *
-     * <p>What the pre-run estimate is built from, and through it the spend ceiling. Callers ask it
-     * before deciding whether to start a run, so it is asked on a path that has spent nothing yet.
-     * {@link SpendForecast.Unknown} is the answer for a provider that cannot say without doing the
-     * real work.
+     * <p>{@link SpendForecast.Unknown} is the answer for a provider that cannot say without doing
+     * the real work.
      *
      * <p>No default. A missing answer read as zero would leave the ceiling disarmed for exactly the
      * provider that needed it, and nothing would say so. A provider that consumes nothing says
@@ -103,13 +96,15 @@ public interface VisionCuller {
     /**
      * Obtains a decision shard for every montage in prep, by whatever means the implementation
      * gets its judgements. Returns a report of what the run did and spent, and throws
-     * CullException when it cannot. The throw is the signal to whoever is culling to try again.
+     * CullException when it cannot. That throw is the signal to whoever is culling to try again.
      * How far opts is honored varies by provider; each documents its own take.
      *
+     * <p>A provider that needs a credential and has none refuses with
+     * {@link MissingCredentialException} instead. It is unchecked, and trying again does not fix
+     * it: a credential has to be stored first.
+     *
      * <p>An implementation does not vouch for the shards' content. That is the apply phase's to
-     * judge, since it alone reads the user's own answers to earlier findings. So a culler checks
-     * only what it is placed to check. The external-agent provider checks that a shard is there at
-     * all. A provider calling a model checks that model's response before writing it.
+     * judge, since it alone reads the user's own answers to earlier findings.
      *
      * @param prep {@link PrepDir} the prep directory holding montages to judge
      * @param opts {@link CullOptions} options controlling how the culler runs
@@ -118,10 +113,8 @@ public interface VisionCuller {
     CullReport cull(PrepDir prep, CullOptions opts) throws CullException;
 
     /**
-     * Progress-aware sibling of cull() above. Defaulted to
-     * silently ignore progress so an implementation that doesn't override it still satisfies the
-     * port. Each concrete culler overrides this one directly. Its plain cull() delegates to it
-     * instead, so the real work lives in exactly one place.
+     * Progress-aware sibling of cull() above. Defaulted to silently ignore progress so an
+     * implementation that doesn't override it still satisfies the port.
      *
      * @param prep {@link PrepDir} the prep directory holding montages to judge
      * @param opts {@link CullOptions} options controlling how the culler runs
@@ -136,10 +129,8 @@ public interface VisionCuller {
 
     /**
      * Cancellation-aware sibling of the two above, checked between montages. Defaulted to ignore
-     * cancellation so an implementation with nothing interruptible to check (the external-agent
-     * provider's single presence check) still satisfies the port without overriding this one too.
-     * An automated provider overrides it directly, the same way it overrides the progress-aware
-     * cull() above.
+     * cancellation so an implementation with nothing interruptible to check still satisfies the
+     * port.
      *
      * @param prep {@link PrepDir} the prep directory holding montages to judge
      * @param opts {@link CullOptions} options controlling how the culler runs

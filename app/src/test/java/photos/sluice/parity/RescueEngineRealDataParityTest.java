@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
-// The Phase 7 rescue parity gate. It runs the reference rescue engine and RescueEngine on two
+// The rescue parity gate. It runs the reference rescue engine and RescueEngine on two
 // identical copies of the same real Review folder. It then asserts MoveDiffer sees no difference
 // in the resulting Sorted trees or in what was left behind. Opt-in only, never running on CI, and
 // requiring a real Review folder on disk that this test only ever copies from, never writes to.

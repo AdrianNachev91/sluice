@@ -185,10 +185,9 @@ class MoveLedgerTest {
         assertThat(snapshot.skipped()).containsExactlyInAnyOrder(gone, goneLater);
     }
 
-    // A line whose shape matches - right field count, right marker - but whose subject or
-    // resolution cannot be parsed gets the same treatment as a shape neither parser recognizes at
-    // all: dropped, not thrown. Path.of and Enum.valueOf would otherwise be unchecked escape routes
-    // out of every caller's read-failure handling.
+    // A line whose shape matches but whose content cannot be parsed is dropped rather than thrown.
+    // Path.of and Enum.valueOf would otherwise be unchecked escape routes out of every caller's
+    // read-failure handling.
     @Test
     void aLineMatchingItsShapeButGarbledInContentIsDroppedWithoutLosingTheGoodLinesAroundIt(@TempDir final Path prepDir)
             throws IOException {
@@ -220,7 +219,6 @@ class MoveLedgerTest {
         ledger.recordOverlap(prepDir, overlapping, OverlapResolution.TRUST_DECISION, AnswerSource.DESKTOP);
         ledger.recordCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, AnswerSource.DESKTOP);
         final String d = MoveLedger.RECORD_DELIMITER;
-        // Same NUL-byte technique as the move-record test above, for the same reason.
         final String unusablePath = "bad" + (char) 0 + "path";
         appendRaw(prepDir.resolve(CHOICES), unusablePath + d + "SKIPPED_BY_USER" + d + "now" + d + "why");
         appendRaw(prepDir.resolve(CHOICES),

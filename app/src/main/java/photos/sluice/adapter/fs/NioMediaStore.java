@@ -48,9 +48,9 @@ public class NioMediaStore implements MediaStore {
     /**
      * Lists every regular file under a directory tree, recursively.
      *
-     * <p>A part file left by a transfer that never landed is answered like any other. A caller that
-     * would treat one as media asks {@link MediaStore#isIncompleteTransfer}; a caller clearing a
-     * directory out has to be handed it, or the directory never empties.
+     * <p>A part file left by a transfer that never landed is answered like any other, since a caller
+     * clearing a directory out has to be handed it. {@link MediaStore#isIncompleteTransfer} is what
+     * tells one apart from media.
      *
      * @param root {@link Path} directory to walk
      * @return a {@link List} of {@link Path}, all regular files found under root
@@ -428,9 +428,9 @@ public class NioMediaStore implements MediaStore {
         if (!Files.exists(dir) || containsAnyFile(dir)) {
             return;
         }
-        // Every subdirectory below dir is now known empty of files too (containsAnyFile already
-        // checked the whole subtree), so this prunes all of them bottom-up, leaving dir itself
-        // with no children - at which point it is safe to remove too.
+        // containsAnyFile already checked the whole subtree, so every subdirectory below dir is
+        // known empty of files too. This prunes them bottom-up, leaving dir itself with no
+        // children, at which point it is safe to remove too.
         this.removeEmptyDirectories(dir);
         this.deleteIfEmptyOfFiles(dir);
     }
@@ -479,8 +479,8 @@ public class NioMediaStore implements MediaStore {
      * date-resolution chain falls back to mtime, so a copy that lost it would be filed under the
      * date it was copied. Access and creation times ride along on the same restore call.
      *
-     * <p>Progress is reported per block written, so a file produces one reading per megabyte. Fine
-     * enough for any bar, and far too coarse to be worth throttling.
+     * <p>Progress is reported per block written, so a file produces one reading per megabyte. Too
+     * coarse to be worth throttling.
      *
      * @param source {@link Path} file to read
      * @param destination {@link Path} exact target path
@@ -531,7 +531,7 @@ public class NioMediaStore implements MediaStore {
      * {@code Files.move} a cross-volume copy nothing can stop.
      *
      * <p>Package-private so a test can override it. Nothing in one can conjure a second file store,
-     * so left private the cross-store branch would be reachable only on a machine with the right
+     * so the cross-store branch would otherwise be reachable only on a machine with the right
      * volumes attached.
      *
      * @param source {@link Path} the file being moved

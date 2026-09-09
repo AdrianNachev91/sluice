@@ -117,8 +117,8 @@ class RunsPaneTest {
         assertThat(pane.lookup("#run-copy-prompt")).isNotNull();
     }
 
-    // A run with judged sheets and nothing blamed has stalled. Its follow-up is then the
-    // instructions themselves, the facade refusing the redo it would otherwise do first.
+    // A run with judged sheets and nothing blamed has stalled, which is the state whose follow-up
+    // is the instructions themselves.
     @Test
     void copyingTheInstructionsPutsThemOnTheClipboard() throws Exception {
         final Pipeline pipeline = stalledPipeline();
@@ -154,9 +154,8 @@ class RunsPaneTest {
         assertThat(onFxThread(() -> Clipboard.getSystemClipboard().getString())).isEqualTo("write them again");
     }
 
-    // The only press on this screen that reports on itself. A follow-up redraws instead, and the
-    // card it would have said it on is gone by then. A run nothing has answered gets no follow-up,
-    // so this is the press that leaves the run where it was.
+    // The button's own text survives only where the press draws no follow-up, since a follow-up
+    // redraws the card it would have said it on. A run nothing has answered is that case.
     @Test
     void copyingInstructionsThatLeaveTheRunAloneSaysSoOnTheButton() throws Exception {
         final Pipeline pipeline = mock(Pipeline.class);
@@ -225,9 +224,6 @@ class RunsPaneTest {
         assertThat(pane.lookup("#runs-clear-completed").isDisabled()).isTrue();
     }
 
-    // It clears what the fold holds, so it belongs with them: it travels as they open and scrolls
-    // away with them. A pinned header would keep it on screen above every unfinished run it does
-    // not touch.
     @Test
     void clearingSitsInsideTheFinishedSection() throws Exception {
         final Parent pane = onFxThread(() -> built(run("2018", State.COMPLETE)));
@@ -279,9 +275,8 @@ class RunsPaneTest {
         return found;
     }
 
-    // A refusal names its screen in the control under the line rather than in its own words, so
-    // that control is the whole of the route. One built and wired but never added to the scene
-    // draws nothing, and no presenter test can see that.
+    // A link built and wired but never added to the scene draws nothing, which no presenter test
+    // can see.
     @Test
     void aRefusalNamingAScreenPutsTheLocationLinkOnTheScreen() throws Exception {
         final Pipeline pipeline = stalledPipeline();
@@ -305,8 +300,7 @@ class RunsPaneTest {
         assertThat(opened).containsExactly(Location.SETTINGS);
     }
 
-    // The same control, on a screen with nothing to report. It has to take no room at all, or every
-    // screen carries a gap where a refusal would have gone.
+    // It has to take no room at all, or every screen carries a gap where a refusal would have gone.
     @Test
     void withNothingToReportTheLocationLinkTakesNoRoom() throws Exception {
         final Parent pane = onFxThread(() -> built(run("2019", State.WAITING)));

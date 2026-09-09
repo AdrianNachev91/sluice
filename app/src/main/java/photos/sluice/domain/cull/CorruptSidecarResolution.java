@@ -5,9 +5,8 @@ package photos.sluice.domain.cull;
  * decisions are ledger-abandoned - its photos stay in Sorted for a future cull of that scope.
  * APPLY_ANYWAY means the montage's own shard is trusted at face value, its membership cross-check
  * skipped. Every other safety net still applies: files must exist, categories configured,
- * cross-shard duplicate check, never-overwrite. {@code PrepDirRemedies.resolveCorruptSidecar()}
- * records which one was chosen; validation then honors it without ever editing the shard that
- * produced the conflict.
+ * cross-shard duplicate check, never-overwrite. How an answer is recorded, and what it does not
+ * touch, is in {@code app/docs/design/application/service/prep-dir-remedies.md}.
  */
 public enum CorruptSidecarResolution {
     SET_ASIDE, APPLY_ANYWAY

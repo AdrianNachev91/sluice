@@ -27,14 +27,10 @@ import java.util.Set;
  * is the poke - write the missing shards, run again.
  *
  * <p>Whether those shards are any good is deliberately not asked here. Apply's own gate is the
- * single validator of shard content. It is also the only one a run passes through once every
- * montage has a shard, since no culler is entered at all on that path.
- *
- * <p>One validator rather than two is what keeps a user's troubleshooting answers reachable. Those
- * answers live in a disposition ledger, and this class can see only raw disk state. Validating
- * here would re-derive a verdict the user has already overruled. So every shard-content problem is
- * reported from the apply phase instead, with those answers already applied. A stray shard, an
- * unparseable one, and a decision naming a file no montage showed all surface there.
+ * single validator of shard content, and one validator rather than two is what keeps a user's
+ * troubleshooting answers reachable. Those answers live in a disposition ledger, and this class can
+ * see only raw disk state. Validating here would re-derive a verdict the user has already
+ * overruled.
  *
  * <p>{@code opts.allowPartial()} waives the missing-shard requirement outright, since that is the
  * only requirement this class has. {@code opts.timeout()} is ignored, since there is nothing to

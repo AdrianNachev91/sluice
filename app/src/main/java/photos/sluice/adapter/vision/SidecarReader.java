@@ -19,20 +19,17 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 
 /**
- * Reads a {@code montage-NNN.json} sidecar and returns every photo entry it lists. Callers
- * project the fields they need. The srcs are the authoritative in-scope file set
- * {@link photos.sluice.domain.cull.ShardValidator} checks decisions against. Fields outside the
- * photo entries (the montage field, anything the writer grows later) stay ignored. The sidecar's
- * full shape is owned by the writer that produces it.
+ * Reads a {@code montage-NNN.json} sidecar and returns every photo entry it lists. The srcs are the
+ * authoritative in-scope file set {@link photos.sluice.domain.cull.ShardValidator} checks decisions
+ * against. Fields outside the photo entries (the montage field, anything the writer grows later)
+ * stay ignored. The sidecar's full shape is owned by the writer that produces it.
  *
  * <p>Any failure is loud and unchecked. The sidecar is written by this app, so an unreadable or
  * incomplete one means the prep directory itself is broken, and no shard correction can repair
  * that. Throwing keeps this class out of the business of deciding what to do about it.
  *
- * <p>Callers make that decision, and they differ. The apply phase turns it into a finding the user
- * answers, choosing between trusting the montage's existing shard and setting the montage aside. A
- * culler skips the montage. Two failure kinds are distinguished for callers that care: damaged
- * content throws {@link MalformedPrepJsonException}, while a read that merely failed throws a plain
+ * <p>Two failure kinds are distinguished for callers that care: damaged content throws
+ * {@link MalformedPrepJsonException}, while a read that merely failed throws a plain
  * {@link UncheckedIOException}.
  */
 @Component

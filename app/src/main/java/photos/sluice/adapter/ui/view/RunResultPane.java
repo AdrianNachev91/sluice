@@ -60,9 +60,6 @@ final class RunResultPane {
 
         final TextArea detail = SettingsRows.emptyHelpLine("run-result-detail");
         detail.getStyleClass().add("run-result-detail");
-        // Given its own ground only where the run failed, which tone() decides. On every other
-        // ending this line introduces the counts under it. On a failure it is the whole card, and
-        // it names a file the reader has to go and deal with.
         final Hyperlink detailLocationLink = SettingsRows.locationLink("run-result-detail-link");
         final HBox detailBox = SettingsRows.locationLines(detail, detailLocationLink);
         detailBox.setId("run-result-detail-box");
@@ -145,8 +142,7 @@ final class RunResultPane {
      * <p>This screen opens the dialog and decides nothing else. Whether one is owed at all, and
      * what it says, are the presenter's.
      *
-     * <p>The dialog blocks, so nothing else happens while it is open. Backing out of it leaves the
-     * card exactly as it was.
+     * <p>The dialog blocks, so nothing else happens while it is open.
      *
      * @param presenter {@link RunLauncherPresenter} takes the press
      * @param opensOver {@link Node} something on the window the question opens over

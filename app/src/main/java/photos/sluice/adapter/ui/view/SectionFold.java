@@ -74,9 +74,8 @@ final class SectionFold {
     /**
      * Opens or shuts it, travelling rather than jumping.
      *
-     * <p>A fold nobody can watch takes its end state and starts no travel. That covers a screen
-     * being built, where the page is not in a scene yet. It also covers a render, which would
-     * otherwise capture whichever frame the travel happened to be on.
+     * <p>A fold nobody can watch takes its end state and starts no travel, so a section that opens
+     * off screen is already open the moment anyone sees it.
      *
      * @param wanted boolean whether the contents should end up showing
      */
@@ -161,9 +160,9 @@ final class SectionFold {
     /**
      * Moves the pane so the section that just opened ends on screen.
      *
-     * <p>Deferred a pulse by its caller, and that is the whole of it. Lifting a box's ceiling only
-     * gives it its real height on the layout pass after. A reading taken as the travel ends answers
-     * for the page as it stood before the section grew.
+     * <p>Has to run a pulse after the travel ends. Lifting a box's ceiling only gives it its real
+     * height on the layout pass after, so a reading taken as the travel ends answers for the page
+     * as it stood before the section grew.
      */
     private void arrive() {
         // The fold can have been shut again in the pulse this waited out, and travelling toward a

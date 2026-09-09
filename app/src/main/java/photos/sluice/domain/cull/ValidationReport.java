@@ -9,9 +9,8 @@ import java.util.List;
  * cull is seen whole rather than one error per re-run. The run is valid only when it is empty.
  * {@code heals} are non-fatal warnings for paths auto-corrected via a unique sidecar basename (a
  * culler retyped a {@code \YYYY\MM\} segment). {@code decisions} is the merged, heal-corrected flat
- * list every shard contributed, in shard order - the input the apply step moves files from. It is
- * populated best-effort even on an invalid report, but apply reads it only once {@link #valid()}
- * holds.
+ * list every shard contributed, in shard order. It is populated best-effort even on an invalid
+ * report, so {@link #valid()} is what says whether it can be acted on.
  */
 public record ValidationReport(List<Finding> findings, List<String> heals, List<Decision> decisions) {
 

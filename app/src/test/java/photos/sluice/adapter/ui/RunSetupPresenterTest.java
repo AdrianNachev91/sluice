@@ -64,7 +64,7 @@ class RunSetupPresenterTest {
                 new YearRow(2018, 50, 0, List.of(new MonthRow(1, 30, 0), new MonthRow(6, 20, 0)))), 0));
         when(this.pipeline.estimateFor(anyInt())).thenReturn(NOTHING);
         // A spending provider is the fixture, so every test below is about the figure rather than
-        // about whether there is one at all. The tests that turn it off say so themselves.
+        // about whether there is one at all.
         when(this.pipeline.configuredProviderSpends()).thenReturn(true);
         when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of()));
         this.presenter.refreshCounts();
@@ -315,8 +315,8 @@ class RunSetupPresenterTest {
                 .contains("starting guess");
     }
 
-    // Compared against what the from-history state actually renders, rather than against a phrase
-    // copied out of it. A reword there cannot quietly disarm this.
+    // Compared against what the from-history state actually renders rather than a phrase copied out
+    // of it, so a reword there cannot quietly disarm this.
     @Test
     void aGuessedFigureIsNotAlsoCalledAnAverageOfYourOwnSifts() {
         when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, true, false));
@@ -426,8 +426,7 @@ class RunSetupPresenterTest {
     }
 
     // The second half compares against what the no-history state actually renders rather than
-    // against a phrase copied out of it. Reword that line and this still holds; delete the branch
-    // and it fails, which is the point.
+    // against a phrase copied out of it.
     @Test
     void aBrokenRecordOfPastSiftsSaysSoRatherThanClaimingThereIsNone() {
         when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, false, true));
@@ -517,7 +516,7 @@ class RunSetupPresenterTest {
     }
 
     // A year holding videos alone passes the staged check, and there is still nothing for a vision
-    // provider to look at. Left to the cost line, it would render the same as a free provider.
+    // provider to look at.
     @Test
     void aSiftIsRefusedForAYearHoldingNoPhotos() {
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
@@ -537,8 +536,6 @@ class RunSetupPresenterTest {
     }
 
     // The screen is rebuilt whenever somebody comes back to it, over a presenter that outlives it.
-    // A field the view could not fill would open blank over a scope still in force, and Start would
-    // run against something nobody could see.
     @Test
     void theScopeInForceIsCarriedToWhateverScreenIsDrawnNext() {
         this.choose(RunMode.SIFT, "2019 6-7");
@@ -620,7 +617,7 @@ class RunSetupPresenterTest {
     @Test
     void aYearRowStaysMarkedEvenWhereTheModeCannotTakeTheYearItNames() {
         // A year of videos alone: the rows are live, and a sift over it still has nothing to look
-        // at. An empty Inbox would refuse it too, in a mode whose rows do not mark at all.
+        // at.
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
                 new YearRow(2019, 0, 4, List.of(new MonthRow(6, 0, 4)))), 0));
         this.presenter.refreshCounts();
@@ -725,8 +722,6 @@ class RunSetupPresenterTest {
         assertThat(this.presenter.view().inbox().headline()).isEqualTo("Nothing to sort.");
     }
 
-    // The Inbox card is what says why, in the tone a healthy screen keeps. A line under the field
-    // would say it a second time, in the one a screen keeps for something being wrong.
     @Test
     void anEmptyInboxKillsStartForASortAndSaysNothingUnderTheField() {
         this.anEmptyInbox();
@@ -1178,8 +1173,8 @@ class RunSetupPresenterTest {
         assertThat(this.presenter.view().canStart()).isFalse();
     }
 
-    // The screen greys Start off a snapshot and the facade refuses off a fresh read. Two checks,
-    // so a reader who gets past the first meets the same sentence at the second.
+    // The screen greys Start off a snapshot and the facade refuses off a fresh read. A reader who
+    // gets past the first meets the same sentence at the second.
     @Test
     void theScreenAndTheFacadeWordTheSameOverlapIdentically() {
         this.anUnfinishedSiftOf("2019-06", State.WAITING);

@@ -101,8 +101,6 @@ class DateResolverTest {
 
         final DateResult result = this.resolver.resolve(new MediaFile(file), null);
 
-        // The guard only flips the confidence; the date and source name it rejected are preserved
-        // so the caller can still report what was found, not just that it was unsortable.
         assertThat(result).isEqualTo(new DateResult(preYear2000, Confidence.UNSORTABLE, "mtime"));
     }
 

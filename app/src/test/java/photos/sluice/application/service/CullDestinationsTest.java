@@ -15,9 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static photos.sluice.application.service.CullPrepTestSupport.pathsConfig;
 
-// Where a culled file ends up. Deciding what folder a decision or an unreviewable file belongs in
-// is pure path arithmetic over the configured roots - no filesystem I/O. ApplyEngineTest and
-// ReconcileEngineTest cover the real move/copy behavior these destinations feed into.
+// Path arithmetic only, no filesystem I/O. The real move and copy behaviour these destinations
+// feed into is covered where those moves happen.
 class CullDestinationsTest {
 
     @Test
@@ -84,8 +83,8 @@ class CullDestinationsTest {
                 .hasMessageNotContaining("outside");
     }
 
-    // Three parent references, not one. The group id is joined onto the year-month, so the first
-    // is glued into a literal "2019-06_.." name. The second only pops that back off.
+    // Three parent references, not one. The group id is joined onto the year-month, so the first is
+    // glued into a literal "2019-06_.." name and the second only pops that back off.
     @Test
     void aNearDupGroupResolvingOutsideTheDuplicatesRootIsRefused(@TempDir final Path root) {
         final var destinations = new CullDestinations(pathsConfig(root, root.resolve("Library")));
@@ -154,9 +153,6 @@ class CullDestinationsTest {
         assertThat(CullDestinations.candidateName("README", 2)).isEqualTo("README (2)");
     }
 
-    // Every group's rejects must resolve through the SAME anchor its own keeper does. Never through
-    // their own file. nearDupAnchors() is where that anchor comes from - see
-    // CullDestinations.duplicatesDir's own Javadoc for why.
     @Test
     void nearDupAnchorsMapsEachGroupToItsChosenKeepersFileRegardlessOfMonth() {
         final Path juneChosen = Path.of("Sorted/Photos/2019/06/a.jpg");

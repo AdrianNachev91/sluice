@@ -31,7 +31,7 @@ public interface TransferProgress {
      * Reports a transfer as part of the unit a {@link ProgressCallback} is counting.
      *
      * <p>The counted units stay whole. What this adds is where inside the current one the work has
-     * reached. That is the only reading that moves while a single large file is being written.
+     * reached.
      *
      * <p>A size of zero reports nothing rather than dividing by it. That is a guard on the arithmetic
      * rather than a case anything reaches: an empty file produces no block, so nothing calls this

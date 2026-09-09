@@ -45,9 +45,9 @@ public interface SettingsUseCase {
      * @throws LibraryRootMoveNeedsAResolutionException if these settings move a configured library
      *         root. That goes through {@link LibraryRootUseCase#moveLibraryRoot}, which is where a
      *         caller says what becomes of the hash index. Setting one for the first time saves here
-     * @throws PathsMisconfiguredException if a folder root these settings move is set to somewhere
-     *         that cannot be worked in. A root left unset saves, since that is what an install
-     *         still choosing its folders looks like
+     * @throws PathsMisconfiguredException if these settings move a folder root and any root they set
+     *         cannot be worked in, the moved one or not. A root left unset saves, since that is what
+     *         an install still choosing its folders looks like
      * @throws WorkingRootBusyException if another process holds the working root these settings name
      * @throws JobInProgressException if a job is running and these settings move a folder root
      * @throws ShuttingDownException if the app is closing and these settings move a folder root. A
@@ -55,7 +55,8 @@ public interface SettingsUseCase {
      *         the job runner for anything
      * @throws MalformedSettingsException if the stored settings cannot be understood, so nothing can
      *         be merged into them
-     * @throws UncheckedIOException if the stored settings cannot be read or written
+     * @throws UncheckedIOException if the stored settings cannot be read or written, or the working
+     *         root cannot be claimed or given up
      */
     void save(Settings settings);
 }

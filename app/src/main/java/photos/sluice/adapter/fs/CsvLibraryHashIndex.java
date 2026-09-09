@@ -96,9 +96,8 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      */
     @Override
     public boolean contains(final String sha256) {
-        // No caching: every caller so far either already holds a pre-loaded Set or calls this
-        // rarely enough that re-reading the file each time is not worth the staleness risk of a
-        // cache that could drift if the file is modified outside this process.
+        // No caching. This is the read that authorizes deleting a file, and a cache would drift the
+        // moment the index changed outside this process.
         return this.load().containsKey(sha256);
     }
 
@@ -296,12 +295,10 @@ public class CsvLibraryHashIndex implements HashIndexPort {
     }
 
     /**
-     * Hand-rolled instead of pulling in a CSV library: the format is fixed at exactly 2 always-
-     * quoted columns, so this is a small character-by-character state machine rather than a
-     * general-purpose parser. {@code inQuotes} tracks whether we're inside a quoted field; a
-     * {@code "} seen while inside one is either an escaped literal quote (doubled - consume both,
-     * stay in the field) or the field's closing quote, disambiguated by peeking at the next
-     * character.
+     * Hand-rolled instead of pulling in a CSV library: the format is fixed at exactly two
+     * always-quoted columns, so this is a small state machine rather than a general-purpose parser.
+     * A {@code "} inside a field is either an escaped literal quote or the field's closing one, and
+     * peeking at the next character is what tells them apart.
      *
      * @param line {@link String} CSV row to split into fields
      * @return a {@link List} of {@link String}, the row's field values, in order

@@ -48,9 +48,6 @@ public final class CliLauncher {
      */
     private static final String CLI_PROFILE = "cli";
 
-    /**
-     * Names the stream the logging configuration writes to.
-     */
     private static final String LOG_STREAM_PROPERTY = "sluice.log.stream";
 
     /**
@@ -63,14 +60,8 @@ public final class CliLauncher {
      */
     private static final String STARTUP_FAILURE_LEVEL_PROPERTY = "sluice.log.startupFailure";
 
-    /**
-     * The level that stops that report being written at all.
-     */
     private static final String SILENT = "OFF";
 
-    /**
-     * Names the level the app's own logging starts at.
-     */
     private static final String LOG_LEVEL_PROPERTY = "sluice.log.level";
 
     /**

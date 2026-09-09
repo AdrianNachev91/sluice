@@ -14,12 +14,7 @@ import java.util.function.Supplier;
  * Runs one command's own work and reports whatever came of it, in whichever shape was asked for.
  *
  * <p>Every verb goes through here, so what a caller has to handle is decided once. A verb supplies
- * only the part that differs: what it did, and how to say so. Refusals, unexpected failures, the
- * exit code and the two streams are all settled the same way whichever verb ran.
- *
- * <p>It catches what a command raised rather than letting it out. An exception reaching the parser
- * arrives as a stack trace on the wrong stream, with no document at all. A scripted caller can do
- * nothing with that.
+ * only the part that differs: what it did, and how to say so.
  *
  * <p>An {@link Error} is left alone. Those say the machine is in trouble rather than the command,
  * and dressing one up as a tidy exit code would hide that.

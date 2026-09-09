@@ -81,8 +81,7 @@ class VisionProviderPresenterTest {
         final SettingsView.SecretRow row = visionProviderOver(throwing).secretRow("anthropic");
 
         // The store's own words are kept, since they are the only thing telling one refusal from
-        // another. What they are not is the whole message: a user needs what happened and what to
-        // do, and neither is in a sentence written for a log.
+        // another.
         assertThat(row.errorMessage())
                 .contains("the credential file could not be read")
                 .contains("bug");
@@ -131,8 +130,7 @@ class VisionProviderPresenterTest {
     }
 
     // Nothing has ever been saved for this provider, so the picker falls back to a recommendation
-    // nobody chose. That fallback must never read as a caution. The caution's own claim is that a
-    // cull will fail on what the user configured, and here nothing was configured at all.
+    // nobody chose.
     @Test
     void aProviderNeverConfiguredDrawsNoUnrecognisedCautionEvenThoughThePickerFellBackToARecommendation() {
         final var settings = new Settings(new PathSettings(null, null, null), "anthropic",
@@ -255,9 +253,6 @@ class VisionProviderPresenterTest {
         assertThat(waiter.join(Duration.ofSeconds(10))).isTrue();
     }
 
-    // The provider's own static list would be the comfortable answer here and the wrong one. It
-    // sits under a note saying nothing has been asked yet, and by this point something has been
-    // asked and did not come back.
     @Test
     void aStartUpCheckThatOutlastsItsBudgetSaysSoRatherThanFallingBackToAGuess() {
         final var checking = new CountDownLatch(1);
@@ -273,8 +268,8 @@ class VisionProviderPresenterTest {
         answering.countDown();
     }
 
-    // Answering that there is nothing to check is not a failed check. Drawing it as one would open
-    // every fresh install on an error the user has not caused and cannot clear.
+    // Drawing this as a failed check would open every fresh install on an error the user has not
+    // caused and cannot clear.
     @Test
     void aStartUpCheckOnAnInstallWithNoKeyOpensOnTheStaticListRatherThanAFailure() {
         final VisionProviderPresenter visionProvider = visionProviderChecking(settings(null, null, null),
@@ -287,8 +282,6 @@ class VisionProviderPresenterTest {
                 options -> assertThat(options.sourceNote()).contains("before you connect"));
     }
 
-    // A provider is asked to answer rather than throw. One that throws anyway leaves the same reader
-    // with the same empty picker, so it is reported the same way.
     @Test
     void aStartUpCheckThatThrowsSaysSoRatherThanFallingBackToAGuess() {
         final VisionProviderPresenter visionProvider = visionProviderChecking(settings(null, null, null), _ -> {
@@ -422,7 +415,6 @@ class VisionProviderPresenterTest {
     }
 
     // The saved settings name a model MODELS does not offer; a-model is the only one it has.
-    // This exercises the caution note against the provider's own static floor, no check performed.
     @Test
     void aSavedModelTheProviderDoesNotOfferDrawsACaution() {
         final VisionProviderPresenter visionProvider = visionProviderChecking(settings(null, null, null),
@@ -517,7 +509,7 @@ class VisionProviderPresenterTest {
         final VisionProviderPresenter visionProvider = visionProviderOver(refusing);
 
         // The store's own words are kept, since they are the only thing telling one refusal from
-        // another. They are not the whole message: a user needs what happened and what to try.
+        // another.
         assertThat(visionProvider.saveSecret("anthropic", "a-fresh-key"))
                 .contains("a stale copy above it could not be cleared")
                 .contains("Try Remove");
@@ -635,9 +627,9 @@ class VisionProviderPresenterTest {
         return answer;
     }
 
-    // checkingCatalog ignores the candidate its own check(id, candidate) is given. This is the one
-    // fixture that reads it back, so a test can prove testConnection forwards the screen's typed
-    // endpoint rather than what is stored.
+    // checkingCatalog ignores the candidate its own check(id, candidate) is given. This one reads
+    // it back, so a test can prove testConnection forwards the screen's typed endpoint rather than
+    // what is stored.
     private static VisionProviderCatalog candidateCapturingCatalog(final List<CullProviderSettings> received) {
         final VisionProviderCatalog delegate = checkingCatalog(_ -> new ProviderCheck.Rejected());
         return new VisionProviderCatalog() {

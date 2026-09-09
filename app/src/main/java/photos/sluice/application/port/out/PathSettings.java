@@ -36,7 +36,7 @@ public record PathSettings(@Nullable String repoRoot, @Nullable String libraryRo
     }
 
     /**
-     * The longest a folder root may be, for a control that stops a reader typing past it.
+     * The longest a folder root may be.
      *
      * @return int the character ceiling
      */

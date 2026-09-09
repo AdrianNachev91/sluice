@@ -10,8 +10,8 @@ import java.util.List;
  * being package-private inside their own adapter. So no compiler and no shared call holds them to
  * each other. This table is what holds them, read by a test on each side.
  *
- * <p>A trailing comma is why it exists. The desktop dropped it and started a paid sift of a whole
- * year; the command line refused it. Nothing related the two until something did.
+ * <p>A trailing comma is the case that earned it. The desktop dropped it and started a paid sift of
+ * a whole year, where the command line refused it.
  *
  * <p>A span inside a list, {@code 6-8,11}, is in the table because both sides read it the same way.
  * Whether a verb can then act on a set with a gap in it is a separate question. It is asked where

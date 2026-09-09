@@ -41,15 +41,6 @@ import static photos.sluice.application.service.PipelineTestSupport.writePhoto;
 
 class CurateEngineTest {
 
-    // Proves the real sort-then-cull round trip, not two separately-mocked halves. A real photo
-    // genuinely leaves Inbox for Sorted, and the SAME job then culls the year it just landed in, all
-    // the way to Applied.
-    //
-    // AutoApproveCuller stands in for a real automated provider (Anthropic/OpenAI/Ollama). It writes
-    // its own valid shard for every montage in one call, the way a real automated culler would
-    // after resolving its own judgements. curate() runs prep, dispatch, and apply inside one
-    // submit() call, with no gap to hand-drop a shard into - unlike the ManualModeCuller tests
-    // above, which need one.
     @Test
     void curateSortsThenCullsInOneJobEndToEnd(@TempDir final Path root) throws IOException {
         final Path photo = writeInboxPhoto(root, "20190601_photo.jpg");
@@ -91,9 +82,8 @@ class CurateEngineTest {
         assertThat(Files.exists(photo)).isTrue();
     }
 
-    // Curate reaches Blocked through the same cull stage a standalone cull() uses, so its outcome
-    // has to carry the findings too. The sort summary still describes what already moved, which is
-    // the whole reason a refused cull stage must not throw the sort's own result away.
+    // The sort summary still describes what already moved, so a refused cull stage must not throw
+    // the sort's own result away.
     @Test
     void curateReportsBlockedWithItsFindingsWhenTheCullStagesApplyRefuses(@TempDir final Path root) throws IOException {
         writeInboxPhoto(root, "20190601_photo.jpg");
@@ -122,10 +112,8 @@ class CurateEngineTest {
         assertThat(Files.exists(root.resolve("logs/sift-prep/2019/index.json"))).isTrue();
     }
 
-    // An OldestYear scope's target year only exists once the sort resolves it. An empty (or
-    // fully-empty-after-routing) Inbox never resolves one, so there is nothing for the cull stage to
-    // even target. Proven by the absence of a sift-prep dir at all, not just a null cullOutcome.
-    // That shows the cull stage never ran, rather than running over some empty default scope.
+    // A null cullOutcome alone would also hold for a cull stage that ran over an empty default
+    // scope. The absence of a sift-prep dir is what rules that out.
     @Test
     void curateSkipsCullWhenAnOldestYearSortFindsNothingToSort(@TempDir final Path root) throws IOException {
         Files.createDirectories(inboxOf(root));
@@ -138,10 +126,8 @@ class CurateEngineTest {
         assertThat(Files.exists(root.resolve("logs/sift-prep"))).isFalse();
     }
 
-    // Sort is never restricted to fit cull's one-scope shape. An OldestN sort still runs its normal,
-    // complete job, and can genuinely land files across more than one year. Proven here by two
-    // photos in different years both getting sorted. Only the cull stage mirrors the same n back
-    // through CullScope.OldestN - the same mtime-ordered scope a standalone cull() call would use.
+    // Two photos in different years, so a sort restricted to fit the cull stage's one-scope shape
+    // would show here.
     @Test
     void curateWithOldestNScopeSortsAcrossYearsAndCullsTheSameCount(@TempDir final Path root) throws IOException {
         writeInboxPhoto(root, "20180601_a.jpg", 1);
@@ -158,8 +144,6 @@ class CurateEngineTest {
         assertThat(Files.exists(root.resolve("logs/sift-prep/oldest-2/index.json"))).isTrue();
     }
 
-    // Mirrors curateRefusesAnExplicitYearScopeAlreadyWaitingOnShards below, for the other scope shape
-    // whose CullScope is known before curate() ever submits a job.
     @Test
     void curateRefusesAnOldestNScopeAlreadyWaitingOnShards(@TempDir final Path root) throws IOException {
         Files.createDirectories(inboxOf(root));
@@ -172,9 +156,6 @@ class CurateEngineTest {
                 .hasMessageContaining("oldest-1");
     }
 
-    // The other half of monthsFromRange()'s translation. Every other curate() test passes null
-    // months, so this is the only coverage for an actual MonthRange narrowing down to a specific
-    // CullScope.Year(months) list.
     @Test
     void curateWithAnExplicitMonthRangeNarrowsTheCullScopeToThoseMonths(@TempDir final Path root) throws IOException {
         writeInboxPhoto(root, "20190601_june.jpg");
@@ -192,11 +173,8 @@ class CurateEngineTest {
         assertThat(Files.exists(root.resolve("logs/sift-prep/2019-06/index.json"))).isTrue();
     }
 
-    // An explicit Year scope names its target unconditionally. curate() culls it once sorted
-    // regardless of whether this particular run added anything new there. Unlike OldestYear, which
-    // has no year to cull at all if its own sort found nothing. Here the sort itself finds nothing
-    // new (Inbox is empty), yet a photo already sitting in Sorted from an earlier, uncommitted run
-    // still gets culled.
+    // The Inbox is empty, so the sort finds nothing new. The photo already sitting in Sorted from
+    // an earlier run is what the cull stage has to reach.
     @Test
     void curateWithAnExplicitYearScopeCullsThatYearEvenWhenThisRunSortedNothingNew(@TempDir final Path root)
             throws IOException {
@@ -213,9 +191,7 @@ class CurateEngineTest {
         assertThat(Files.exists(existing)).isTrue();
     }
 
-    // An explicit OldestN scope's target count is known before curate() ever submits a job, the same
-    // shape as an explicit Year. It carries straight through regardless of what this run's own sort
-    // found. Here the sort finds nothing new, yet a photo already sitting in Sorted still gets culled.
+    // The same fixture, for the other scope whose target is known before curate() submits a job.
     @Test
     void curateWithAnExplicitOldestNScopeCullsEvenWhenThisRunSortedNothingNew(@TempDir final Path root)
             throws IOException {
@@ -231,10 +207,8 @@ class CurateEngineTest {
         assertThat(Files.exists(root.resolve("logs/sift-prep/oldest-1/index.json"))).isTrue();
     }
 
-    // Mirrors cull()'s own "refuses to rebuild a scope with an unresolved WaitingCullJob" contract.
-    // An explicit Year scope's target CullScope is known before curate() ever submits a job, so it
-    // gets the same synchronous, pre-sort fail-fast. Proven here by the sort never running at all:
-    // the pre-existing Sorted photo is still there, untouched, and no second prep dir was written.
+    // The refusal is synchronous and pre-sort, proven by the sort never running at all: the
+    // pre-existing Sorted photo is untouched, and no second prep dir was written.
     @Test
     void curateRefusesAnExplicitYearScopeAlreadyWaitingOnShards(@TempDir final Path root) throws IOException {
         Files.createDirectories(inboxOf(root));
@@ -247,11 +221,8 @@ class CurateEngineTest {
                 .hasMessageContaining("2019");
     }
 
-    // An OldestYear scope can't get the synchronous pre-sort refusal above - its year isn't known
-    // until the sort resolves it. So this same conflict can only surface after the sort has
-    // already moved real files. The caller must not lose track of what moved just because the
-    // cull stage was refused. Pipeline.CurateConflictException carries the SortSummary forward for
-    // exactly that.
+    // An OldestYear scope's year is not known until the sort resolves it, so this conflict can
+    // only surface after the sort has already moved real files.
     @Test
     void curateWrapsAPostSortConflictInCurateConflictExceptionCarryingTheSortSummary(@TempDir final Path root)
             throws IOException {
@@ -272,13 +243,9 @@ class CurateEngineTest {
         assertThat(Files.exists(root.resolve("Sorted/Photos/2019/08/20190815_new.jpg"))).isTrue();
     }
 
-    // Proves the cancellation wiring between curate()'s two stages: cooperative, checked only at the
-    // boundary between them, never mid-engine-call.
-    //
-    // BlockingMoves lets the test synchronize with the exact moment SortEngine is mid-move. It can
-    // then request cancellation before curate()'s post-sort check runs - a real observable signal,
-    // not a guessed sleep. The sort itself still completes in full; its own single move() call is
-    // never interrupted, only delayed. Only the cull stage that would have followed it is skipped.
+    // BlockingMoves synchronizes with the exact moment the sort is mid-move, so cancellation is
+    // requested before the post-sort check runs rather than at a guessed moment. The sort itself
+    // still completes in full, its own single move() call delayed rather than interrupted.
     @Test
     void curateSkipsTheCullStageWhenCancellationIsRequestedBetweenStages(@TempDir final Path root) throws Exception {
         writeInboxPhoto(root, "20190601_photo.jpg");
@@ -298,11 +265,8 @@ class CurateEngineTest {
         assertThat(Files.exists(root.resolve("logs/sift-prep"))).isFalse();
     }
 
-    // Reaches CullJobOutcome.Cancelled through curate()'s own buildFreshAndDispatch() call, not
-    // just a standalone cull(). Both funnel through the same method, but this proves the shared
-    // path really is reached from curate() too. SortEngine doesn't call MediaStore.listFiles, so
-    // BlockingListFiles only blocks once the sort stage has already finished and the cull stage's
-    // render pass starts scanning Sorted for candidates.
+    // The sort stage never calls listFiles, so BlockingListFiles only blocks once the sort has
+    // finished and the cull stage's render pass starts scanning Sorted for candidates.
     @Test
     void curateCancelledMidRenderDuringItsCullStageResolvesToCancelled(@TempDir final Path root) throws Exception {
         writeInboxPhoto(root, "20190601_photo.jpg");

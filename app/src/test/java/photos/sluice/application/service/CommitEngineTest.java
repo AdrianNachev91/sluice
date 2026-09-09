@@ -170,8 +170,8 @@ class CommitEngineTest {
         writeFile(second, "keeper2");
         final var hashIndex = new CsvLibraryHashIndex(SettingsFixture.workingRoot(root));
         final String firstHash = new Sha256Hasher().hash(first);
-        // Allows exactly one move to succeed, then throws - simulating a process crash right after
-        // the first file's move-and-index but before the loop reaches the second.
+        // One move succeeds, then it throws: a crash after the first file's move-and-index and
+        // before the loop reaches the second.
         final CommitEngine crashingEngine = commitEngine(root, libraryRoot, hashIndex, new FailingAfterMoves(1));
 
         assertThatThrownBy(() -> crashingEngine.commit(new CommitScope.All()))
@@ -181,9 +181,7 @@ class CommitEngineTest {
         final Path firstDest = libraryRoot.resolve("Photos/2019/06/a.jpg");
         assertThat(Files.exists(firstDest)).isTrue();
         assertThat(hashIndex.load()).containsOnlyKeys(firstHash);
-        // The crash lands on the second file's move itself, before it touches the filesystem at
-        // all. It's still sitting in Sorted, exactly where an ordinary resumed commit would find
-        // it.
+        // The crash lands on the second file's move before it touches the filesystem at all.
         assertThat(Files.exists(second)).isTrue();
         assertThat(Files.exists(libraryRoot.resolve("Photos/2019/06/b.jpg"))).isFalse();
 
@@ -215,9 +213,9 @@ class CommitEngineTest {
         writeFile(root.resolve("Sorted/Photos/2019/06/a.jpg"), "a");
         writeFile(root.resolve("Sorted/Photos/2019/07/b.jpg"), "b");
 
-        // Cancels once the first file's move has already ticked, so the loop stops before the
-        // second file is even looked at. Scan order across the two files isn't guaranteed, so the
-        // assertions below check counts rather than which specific file committed first.
+        // Cancels once the first file's move has ticked, so the loop stops before the second is
+        // even looked at. Scan order is not guaranteed, so the assertions below check counts
+        // rather than which file went first.
         final AtomicBoolean cancelled = new AtomicBoolean(false);
         final ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
 
@@ -293,9 +291,9 @@ class CommitEngineTest {
         Files.writeString(file, content);
     }
 
-    // Wraps the real NioMediaStore but throws after a fixed number of successful move() calls -
-    // CommitEngine's own move step. Deterministically simulates a crash mid-run. listFiles() sorts
-    // the delegate's result so which file counts as "first" doesn't depend on filesystem walk order.
+    // A crash mid-run, made deterministic: it fails on a counted move rather than on a clock.
+    // listFiles() sorts the delegate's result so which file counts as "first" doesn't depend on
+    // filesystem walk order.
     private static final class FailingAfterMoves implements MediaStore {
         private final MediaStore delegate = new NioMediaStore();
 

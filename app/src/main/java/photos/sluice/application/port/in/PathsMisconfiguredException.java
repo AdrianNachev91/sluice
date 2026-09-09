@@ -14,10 +14,10 @@ import java.util.stream.Collectors;
 /**
  * Thrown when folder roots that cannot be worked in are refused.
  *
- * <p>Two callers throw it, and they admit different things. Work is refused whenever a root is
- * unset, missing or overlapping, so a fresh install meets this on every call until its first run is
- * configured. A settings save is refused only for a root set to somewhere unusable. An unset root
- * saves there, because that is what an install still choosing its folders looks like.
+ * <p>The two callers admit different things. Work is refused whenever any root is unusable, so a
+ * fresh install meets this on every call until its first run is configured. A settings save is
+ * refused for every unusable root except one left unset, because that is what an install still
+ * choosing its folders looks like.
  *
  * <p>The violations are carried as values. A surface that marks a field, or routes a user to the
  * right setting, reads those rather than the message. The message exists for a log and for a caller

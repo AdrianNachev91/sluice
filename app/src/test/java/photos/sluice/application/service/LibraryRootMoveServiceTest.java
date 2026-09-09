@@ -58,9 +58,8 @@ class LibraryRootMoveServiceTest {
             assertThat(fixture.libraryRootInForce()).isEqualTo(newLibrary.toString());
         }
 
-        // The other tests prove the move against the settings in force. This one proves it against
-        // the file a restart reads, through the real YAML store. A move reaching only the in-memory
-        // settings is silently undone by the next launch.
+        // Through the real YAML store, since a move reaching only the in-memory settings is
+        // silently undone by the next launch.
         @Test
         void theMoveSurvivesToTheConfigFile(@TempDir final Path root, @TempDir final Path newLibrary)
                 throws IOException {
@@ -116,9 +115,8 @@ class LibraryRootMoveServiceTest {
             assertThat(fixture.progress.events).containsExactly("planned:");
         }
 
-        // The engine is stubbed rather than cancelled for real. Two small files copy in
-        // microseconds, so a cancel raced against the job's own start decides the assertion by
-        // scheduler order. When a stopped copy is noticed is the engine's own question.
+        // The engine is stubbed rather than stopped for real. Two small files copy in microseconds,
+        // so a real stop raced against the job's own start decides the assertion by scheduler order.
         @Test
         void aCopyReportedAsStoppedLeavesTheRootWhereItWas(@TempDir final Path root,
                                                            @TempDir final Path newLibrary) {
@@ -134,9 +132,8 @@ class LibraryRootMoveServiceTest {
             assertThat(fixture.libraryRootInForce()).isEqualTo(fixture.library.toString());
         }
 
-        // A stubbed engine cannot prove the job's cancellation actually reaches it: both stubbed
-        // cases pass against a service wired to CancellationSignal.NEVER. The cost of that would be
-        // a Cancel button doing nothing on the longest job in the app.
+        // Both stubbed cases above pass against a service wired to CancellationSignal.NEVER. So the
+        // cost of leaving it at those two is a Stop button doing nothing on the app's longest job.
         @Test
         void theJobsCancellationReachesTheCopy(@TempDir final Path root, @TempDir final Path newLibrary) {
             final var engine = new SignalWatchingCopyEngine();
@@ -330,8 +327,7 @@ class LibraryRootMoveServiceTest {
         }
     }
 
-    // Reports one file copied out of two and then stopped, without touching a disk. The real
-    // engine's own decision to stop is proved in CopyEngineTest against a signal that test controls.
+    // Reports one file copied out of two and then stopped, without touching a disk.
     private static final class StoppedCopyEngine extends CopyEngine {
 
         private StoppedCopyEngine() {
@@ -345,9 +341,9 @@ class LibraryRootMoveServiceTest {
         }
     }
 
-    // Holds the copy open until the test has asked the job to stop, then answers whatever the signal
-    // it was handed says. That signal is the service's own wiring, so this fails if the service ever
-    // stops passing the job's cancellation through to the engine.
+    // Holds the copy open until the test has asked the job to stop, then answers whatever the
+    // signal it was handed says. That signal is the service's own wiring, so this fails if the
+    // service ever stops passing the job's cancellation through.
     private static final class SignalWatchingCopyEngine extends CopyEngine {
 
         private final CountDownLatch copyStarted = new CountDownLatch(1);

@@ -170,8 +170,8 @@ class RunProgressPresenter {
      * How far along one phase's bar is drawn.
      *
      * <p>A phase that ended having counted something keeps that count, whatever ended it. Sifting
-     * gives up part way whenever a run pauses for an agent. A full bar over eleven of twenty-eight
-     * sheets would say the opposite of what the card underneath says.
+     * gives up part way whenever a run pauses for an agent. A full bar over a run that judged only
+     * some of its sheets would say the opposite of what the card underneath says.
      *
      * <p>An uncounted ending has no fraction to draw either way. Full where the work went through,
      * and empty otherwise, since a full bar there would say it did.

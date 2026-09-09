@@ -8,18 +8,6 @@ import java.util.List;
  * violation {@link ShardValidator} checks for, or one of
  * {@link photos.sluice.application.service.ApplyPlanner}'s own batch-level checks. Examples of the
  * latter are a stray shard, or a decision whose file cannot be accounted for.
- *
- * <p>{@link #describe()} renders the exact prose an aggregated {@code ApplyException} reports, so
- * no caller formats a message out of a finding's fields itself. A caller may still read those
- * fields directly to act on the finding - {@link photos.sluice.application.service.PrepDirRemedies}
- * takes a {@link StrayShard}'s own file name to repair it, and {@code ApplyPlanner} reads a
- * {@link VerdictUnreviewableOverlap}'s file to suppress it once resolved - it just never renders
- * text from them.
- *
- * <p>{@link #remedy()} classifies how, if at all, {@code PrepDirDoctor}'s troubleshooter can
- * resolve the finding on its own. AUTO is safe to apply unprompted. CHOICE means the user picks
- * from enumerated options. NONE is informational only, a culler content mistake that only a
- * re-cull can fix.
  */
 public sealed interface Finding {
 
@@ -54,6 +42,9 @@ public sealed interface Finding {
      * that merely disagrees with the filename.
      */
     record MissingMontageField(String montage) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return this.montage + ": missing 'montage'";
@@ -66,6 +57,9 @@ public sealed interface Finding {
      * decisions.
      */
     record MontageFieldMismatch(String montage, String declared) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return this.montage + ": 'montage' is '" + this.declared + "', expected '" + this.montage + "'";
@@ -77,6 +71,9 @@ public sealed interface Finding {
      * configured for this cull, so the decision cannot be routed to any known folder.
      */
     record InvalidCategory(String montage, int index, String category, String allowedClause) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return at(this.montage, this.index) + ": invalid action '" + this.category + "' (" + this.allowedClause + ")";
@@ -88,6 +85,9 @@ public sealed interface Finding {
      * {@code reason}, leaving no record of why the vision step made that call.
      */
     record MissingReason(String montage, int index) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return at(this.montage, this.index) + ": missing 'reason'";
@@ -99,6 +99,9 @@ public sealed interface Finding {
      * {@code group} id, so it cannot be tied to any near-duplicate group.
      */
     record MissingGroup(String montage, int index) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return at(this.montage, this.index) + ": missing 'group'";
@@ -110,6 +113,9 @@ public sealed interface Finding {
      * why the vision step picked it as the group's keeper.
      */
     record MissingChosenReason(String montage, int index) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return at(this.montage, this.index) + ": missing 'chosen_reason'";
@@ -121,6 +127,9 @@ public sealed interface Finding {
      * tell which single file in the group should survive.
      */
     record WrongChosenCount(String montage, String group, int chosen) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return this.montage + ": near-dup group '" + this.group + "' has " + this.chosen + " chosen (need exactly" +
@@ -133,6 +142,9 @@ public sealed interface Finding {
      * that choice to have been made over.
      */
     record TooFewRejects(String montage, String group, int rejects) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return this.montage + ": near-dup group '" + this.group + "' has " + this.rejects + " reject(s) (need >=1)";
@@ -146,6 +158,9 @@ public sealed interface Finding {
      * segment.
      */
     record InvalidGroupSlug(String montage, String group, int maxLength) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return this.montage + ": near-dup group '" + this.group
@@ -160,6 +175,9 @@ public sealed interface Finding {
      * the one two-reference shape specific enough to offer a real choice.
      */
     record DuplicateFileReference(String file, long count) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return "file listed " + this.count + " times across shards/unreviewable: " + this.file;
@@ -171,20 +189,23 @@ public sealed interface Finding {
      * list. It is the one duplicate-reference shape common and specific enough for a troubleshooter
      * to offer a real choice, unlike the more general {@link DuplicateFileReference}. CHOICE because
      * either resolution changes which pile the file ends up in, and the engine cannot decide that on
-     * its own. "Trust the decision" means the shard's verdict applies. "Treat as unreviewable" means
-     * the verdict is dropped and the file goes to the unreviewable folder.
+     * its own.
      *
      * <p>A {@link Verdict.Keep} counts, not only a {@link Decision}. Either is a shard claiming it
-     * judged a photo the app reported nobody could judge. Both resolutions mean something for a
-     * keep too: trusting it leaves the photo in Sorted, dropping it lets the file go where an
-     * unreviewable one goes.
+     * judged a photo the app reported nobody could judge.
      */
     record VerdictUnreviewableOverlap(Verdict verdict) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return "file listed both as a verdict and as unreviewable: " + this.verdict.file();
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public Remedy remedy() {
             return Remedy.CHOICE;
@@ -201,6 +222,9 @@ public sealed interface Finding {
             montages = List.copyOf(montages);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return "near-dup group '" + this.group + "' spans " + this.montages.size() + " shards ("
@@ -212,6 +236,9 @@ public sealed interface Finding {
      * A decision's {@code file} field is blank, leaving no source path for apply to act on.
      */
     record MissingFile(String montage, int index) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return at(this.montage, this.index) + ": missing 'file'";
@@ -222,9 +249,8 @@ public sealed interface Finding {
      * A sheet's shard says nothing at all about one or more of the photos that sheet showed. Every
      * photo needs a verdict, a {@link Verdict.Keep} included.
      *
-     * <p>Names the photos rather than counting them. The list is what goes back to whoever produced
-     * the shard. Asking for three named photos is a different request from asking for the sheet
-     * again.
+     * <p>Names the photos rather than counting them. Asking for three named photos is a different
+     * request from asking for the sheet again.
      *
      * <p>NONE: no engine can invent a judgement. What puts it right is the shard being written
      * again.
@@ -234,6 +260,9 @@ public sealed interface Finding {
             photos = List.copyOf(photos);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return this.montage + ": no verdict for " + this.photos.size() + " of its photos ("
@@ -252,6 +281,9 @@ public sealed interface Finding {
      * <p>NONE, for the reason {@link PhotosNotJudged} carries.
      */
     record PhotoFromAnotherSheet(String montage, int index, Path file) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return at(this.montage, this.index) + ": names a photo another sheet showed: " + this.file;
@@ -263,14 +295,16 @@ public sealed interface Finding {
      * could resolve it back into scope.
      */
     record FileOutOfScope(String montage, int index, Path file) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return at(this.montage, this.index) + ": file out of scope: " + this.file;
         }
     }
 
-    // ApplyPlanner's own batch-level checks, below - real failure paths beyond the per-decision
-    // shard contract ShardValidator checks above.
+    // ApplyPlanner's own batch-level checks, below.
 
     /**
      * A file a run would act on sits outside the Sorted root. Every candidate a cull can produce is
@@ -290,6 +324,9 @@ public sealed interface Finding {
      * ways out.
      */
     record SourceOutsideSorted(Path file, Path sortedRoot) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return this.file.equals(this.sortedRoot)
@@ -302,18 +339,21 @@ public sealed interface Finding {
      * A decisions-NNN.json file with no montage entry expecting it - almost always a culler
      * numbering slip. Always reports AUTO: this record is a pure value with no I/O, built before
      * any lookup of which montages are currently unclaimed. It cannot itself know whether the
-     * repair will turn out ambiguous. The real decision is made when the repair actually runs.
-     * {@link photos.sluice.application.service.PrepDirRemedies#autoRepairStrayShard} renames the
-     * shard into the one montage left unclaimed when that's unambiguous. Otherwise it leaves the
-     * shard untouched, for {@link
-     * photos.sluice.application.service.PrepDirRemedies#setAsideStrayShard}'s own CHOICE fallback.
+     * repair will turn out ambiguous, so that decision is made when the repair runs. See
+     * {@code app/docs/design/application/service/prep-dir-remedies.md}.
      */
     record StrayShard(String shardFile) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return this.shardFile + ": no matching montage";
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public Remedy remedy() {
             return Remedy.AUTO;
@@ -325,6 +365,9 @@ public sealed interface Finding {
      * NONE because there is nothing to auto-repair - the montage genuinely hasn't been culled.
      */
     record MissingShard(String montage, String expectedFile) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return this.montage + ": no shard " + this.expectedFile;
@@ -340,10 +383,12 @@ public sealed interface Finding {
      * put right.
      *
      * <p>NONE for exactly that reason. No engine-level repair can invent the judgements the shard
-     * was supposed to carry. Rewriting the shard, or the last-resort discard-and-redo, are the two
-     * ways out.
+     * was supposed to carry.
      */
     record CorruptShard(String montage, String shardFile) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return this.montage + ": shard " + this.shardFile + " is unreadable";
@@ -355,18 +400,22 @@ public sealed interface Finding {
      * Always reports AUTO, the same reasoning {@link StrayShard} already relies on. index.json is a
      * derived summary (scope, base path, montage entries, photo/montage counts), reconstructible
      * from the surviving sidecars and the prep dir's own location. Everything except the
-     * unreviewable list survives, and that one is genuinely lost. {@link
-     * photos.sluice.application.service.PrepDirRemedies#rebuildIndex} only actually rebuilds when
-     * every sidecar is present, parseable, and forms a contiguous montage-001..NNN run. A gap or an
-     * unparseable sidecar means the rebuild guard refuses. The finding then stays open with no
-     * further engine-level remedy short of the last-resort discard-and-redo.
+     * unreviewable list survives, and that one is genuinely lost. Whether the rebuild can actually
+     * run is decided then, not here, and a refused rebuild leaves the finding open. See
+     * {@code app/docs/design/application/service/prep-dir-remedies.md}.
      */
     record CorruptIndex(Path indexPath) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return this.indexPath + ": corrupt or unreadable index.json";
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public Remedy remedy() {
             return Remedy.AUTO;
@@ -387,15 +436,14 @@ public sealed interface Finding {
      * remedy would offer to rebuild an artifact nothing has established as broken. Retrying costs
      * nothing and resolves the first cause once whatever held the file lets go. Discard is the way
      * out when it does not, which is where the second cause tends to end up.
-     *
-     * <p>This is what keeps {@code PrepDirHealth.State.DAMAGED} from being a state with nothing to
-     * show. A dashboard renders this line. A troubleshoot report says it plainly, rather than
-     * reporting a clean bill of health for a directory the app is refusing to cull.
      */
     record UnreadablePrepDir(Path prepDir) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
-            return this.prepDir + ": could not be read far enough to diagnose - see the log for what failed";
+            return this.prepDir + ": could not be read far enough to diagnose";
         }
     }
 
@@ -403,16 +451,20 @@ public sealed interface Finding {
      * A montage's own sidecar (montage-NNN.json) cannot be parsed, while index.json itself is
      * intact. CHOICE because the sidecar names that montage's only surviving evidence of what was
      * actually in scope. The engine cannot decide unprompted whether to give up on that batch or
-     * trust the shard's own decisions at face value. {@link
-     * photos.sluice.application.service.PrepDirRemedies#resolveCorruptSidecar} records which the user
-     * picked.
+     * trust the shard's own decisions at face value.
      */
     record CorruptSidecar(String montage) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return this.montage + ": sidecar unreadable or missing";
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public Remedy remedy() {
             return Remedy.CHOICE;
@@ -426,6 +478,9 @@ public sealed interface Finding {
      * which.
      */
     record MissingSource(Path file, Path moveRecordLog) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String describe() {
             return "file not found, and its move could not be verified: " + this.file
@@ -434,6 +489,9 @@ public sealed interface Finding {
                     + " none. This needs manual investigation before re-running; see " + this.moveRecordLog + ".";
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public Remedy remedy() {
             return Remedy.CHOICE;
@@ -441,8 +499,8 @@ public sealed interface Finding {
     }
 
     /**
-     * The shared "montage[#index]" location prefix used by every per-decision finding, and by
-     * ShardValidator's own non-finding heal messages for the same location.
+     * The shared "montage[#index]" location prefix. {@code ShardValidator}'s own non-finding heal
+     * messages use it too, so the two stay in step.
      *
      * @param montage {@link String} the montage id
      * @param index int the decision's 1-based position within its shard

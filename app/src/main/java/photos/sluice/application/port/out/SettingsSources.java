@@ -10,8 +10,8 @@ import java.util.Optional;
  * session, and the next launch reads the higher source again. Without this, that revert has nothing
  * on screen explaining it.
  *
- * <p>A port rather than a method on the class that reads the property sources. Only the wiring
- * layer may name that class, which is why every other seam here is a port too.
+ * <p>A port rather than a method on the class that reads the property sources, which only the
+ * wiring layer may name.
  */
 public interface SettingsSources {
 
@@ -19,9 +19,8 @@ public interface SettingsSources {
      * What supplies the given property from above the user's config file, or empty when nothing
      * does and a saved value will hold.
      *
-     * <p>Answers for one property at a time, because the caller is a screen with a fixed set of
-     * fields and knows which property each of them writes. Reading every setting the app has is a
-     * different question, and nothing asks it.
+     * <p>Answers for one property at a time. Reading every setting the app has is a different
+     * question, and nothing asks it.
      *
      * @param property {@link String} the property name, as the app spells it in its own config file
      * @return an {@link Optional} of {@link SettingOverride} what supplies it from above

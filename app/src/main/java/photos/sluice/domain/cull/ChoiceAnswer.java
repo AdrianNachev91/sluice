@@ -5,7 +5,7 @@ import java.nio.file.Path;
 /**
  * One answer a user gives to a damaged run, as a value rather than as a call.
  *
- * <p>It exists so both surfaces name the same options, and the command line serializes it directly.
+ * <p>It exists so both surfaces name the same options.
  *
  * <p>Its variants are not only the ones whose {@link Finding} declares
  * {@link Finding.Remedy#CHOICE}. Both {@link SetAsideStrayShard} and throwing a run away are reachable for a

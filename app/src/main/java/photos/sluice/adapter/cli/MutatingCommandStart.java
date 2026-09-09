@@ -57,11 +57,8 @@ public class MutatingCommandStart {
      * Claims the working root, then sweeps the recovery artifacts whose 30 days are up.
      *
      * <p>Any folder root the app cannot work in stops both, and the command that follows is the one
-     * that says so. This is where it differs from the desktop, which claims the working root even
-     * while another root is still being chosen. A window stays open for the rest to be filled in,
-     * and holding the folder meanwhile keeps a second Sluice out of it. A command cannot be filled
-     * in. Whatever it was asked to do is refused on those same violations a moment later. A claim
-     * taken here would be dropped again with no work in between.
+     * that says so. Whatever it was asked to do is refused on those same violations a moment later,
+     * so a claim taken here would be dropped again with no work in between.
      *
      * @throws WorkingRootBusyException if another process holds the working root
      */

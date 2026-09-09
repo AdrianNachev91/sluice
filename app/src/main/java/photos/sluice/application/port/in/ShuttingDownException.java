@@ -7,8 +7,8 @@ package photos.sluice.application.port.in;
  * one clears by waiting: the job runner is shut for the rest of the process. A screen catching the
  * two as one would offer a retry that can never succeed.
  *
- * <p>Rare by design. The desktop's exit path stops the runner once its window is already gone. The
- * one caller left to meet this is a poller that was already mid-attempt.
+ * <p>Rare by design. The desktop's exit path stops the runner once its window is already gone, so
+ * what is left to meet this is whatever was already mid-call.
  *
  * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know it was refused
  * needs no knowledge of this type at all.

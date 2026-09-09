@@ -26,8 +26,8 @@ class FileChannelWorkingRootLockTest {
     private static final int PROCESS_TIMEOUT_SECONDS = 60;
 
     // Every lock built by a test, released afterwards whether the test passed or not. A claim left
-    // behind would fail the next test for a reason that has nothing to do with it. On Windows it
-    // would also break the temp-directory cleanup, on a handle still open.
+    // behind fails the next test for an unrelated reason, and on Windows breaks the temp-directory
+    // cleanup on a handle still open.
     private final List<FileChannelWorkingRootLock> locks = new ArrayList<>();
 
     @AfterEach

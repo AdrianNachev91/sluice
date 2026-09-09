@@ -10,11 +10,9 @@ import java.util.List;
  * settings do not name. The run then stalls behind a refusal with no remedy on any screen. Refusing
  * the move is what keeps a user from walking into that state.
  *
- * <p>It is a refusal rather than a guarantee, and the one gap left is worth knowing. A prep dir that
- * cannot be read is still counted, deliberately, so a run nobody can inspect still blocks a move.
- * What is not covered is the sift-prep root itself failing to list: that answers no runs rather than
- * failing, and a move then goes ahead on a machine whose runs nobody could see. Every reader of that
- * directory degrades the same way, so closing it means the count being able to say it does not know.
+ * <p>A prep dir that cannot be read is still counted, deliberately, so a run nobody can inspect
+ * still blocks a move. The sift-prep root failing to list refuses too, as
+ * {@link RunsUnreadableException}, since neither unknown may read as nothing there.
  *
  * <p>A completed run's records are inert, since nothing resumes one. A damaged run counts as
  * unfinished: nobody has established what it holds, and its way out is the same as any other's.

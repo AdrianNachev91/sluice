@@ -124,8 +124,6 @@ class SpendRateTest {
                 .isEqualTo(SpendRate.seed());
     }
 
-    // The vision pass ran to completion here; only apply refused afterwards. What it consumed is
-    // still what that much judging costs.
     @Test
     void aRunWhoseApplyWasRefusedStillSaysWhatItsSiftCost() {
         assertThat(SpendRate.from(List.of(ending(RunEnding.BLOCKED, 10, 12, 43_000)), MODEL, SHIPPED)

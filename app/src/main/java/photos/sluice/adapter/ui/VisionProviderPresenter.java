@@ -38,8 +38,8 @@ import java.util.concurrent.TimeoutException;
  * credential, its model catalogue, and a live connection check.
  *
  * <p>{@link SettingsPresenter} owns the document one Save button writes. This class is the side
- * channel to the keyring and the network that card also needs, and neither reads nor writes that
- * document itself.
+ * channel to the keyring and the network that card also needs, and it never writes that document
+ * itself.
  */
 @Component
 @Profile("!cli")
@@ -56,8 +56,7 @@ public class VisionProviderPresenter {
 
     // A store's own refusal is written for a log. It names the entry Sluice asked for and whatever
     // code the platform handed back, and a user typed neither. It is still the only thing telling
-    // one refusal from another. So it is kept, behind a sentence saying what happened, what
-    // survives, and what to try.
+    // one refusal from another, so it is kept behind a sentence a person can act on.
     //
     // Two ways out rather than one, because they reach different places. A save lands in the
     // highest tier that says it can be used, then clears whatever sits above it. So a key that is
@@ -75,15 +74,13 @@ public class VisionProviderPresenter {
     private final VisionProviderCatalog providers;
     private final SettingsUseCase settingsUseCase;
 
-    // What the last live check said, per provider. A picker cannot draw a list nobody asked for, so
-    // this is what tells modelPickerFor whether to show a provider's static floor or its account's
-    // real one. Written by refreshModels, off the FX thread; read by modelPickerFor, which may run
-    // concurrently with a refresh in flight. A provider with no entry here has never been checked
-    // this session.
+    // What the last live check said, per provider. Written by refreshModels, off the FX thread;
+    // read by modelPickerFor, which may run concurrently with a refresh in flight. A provider with
+    // no entry here has never been checked this session.
     private final Map<String, ProviderCheck> lastCheck = new ConcurrentHashMap<>();
 
     // Providers whose start-up check has been started and not yet given up on. A picker for one of
-    // these has nothing honest to draw: the answer deciding what it offers is still on its way.
+    // these has nothing to draw yet: the answer deciding what it offers is still on its way.
     // Written off the FX thread and read by modelPickerFor, the same as lastCheck above.
     //
     // The value completes when the wait ends, however it ends. A screen already showing a picker
@@ -257,13 +254,11 @@ public class VisionProviderPresenter {
      * An answer arriving after the budget is dropped rather than kept. It can then never land on top
      * of a newer one a save or Retry has since stored.
      *
-     * <p>Which provider to check is the caller's answer, not this class's: {@link SettingsPresenter}
-     * resolves an unrecognised configured id to one this install has before calling here.
-     *
      * <p>Does nothing for a provider that offers no model catalog, since there is no picker for a
      * check to feed.
      *
-     * @param providerId {@link String} the provider to check
+     * @param providerId {@link String} the provider to check, already resolved to one this install
+     *     has
      */
     public void refreshModelsAtStartup(final String providerId) {
         this.refreshModelsAtStartup(providerId, BOOT_CHECK_BUDGET);
@@ -381,7 +376,7 @@ public class VisionProviderPresenter {
      * What the model picker should draw for one provider, and whether its saved model needs a
      * caution.
      *
-     * <p>A provider with no model catalog draws nothing, so an empty violation is never read.
+     * <p>A provider with no model catalog draws nothing.
      *
      * <p>A provider whose start-up check has not answered yet draws nothing at all.
      *

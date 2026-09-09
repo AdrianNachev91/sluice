@@ -55,8 +55,7 @@ class AppearanceCardTest {
     }
 
     // A theme button carries its option's id as user data, and a save reads it back off whichever
-    // is selected. Nothing else in the suite reaches that pair of casts, and neither one fails
-    // loudly: a wrong id would save a theme the user did not pick.
+    // is selected. Neither cast fails loudly, so a wrong id would save a theme nobody picked.
     @Test
     void savingCarriesTheThemePickedOnTheScreen() throws Exception {
         final List<Settings> saved = new ArrayList<>();
@@ -86,12 +85,8 @@ class AppearanceCardTest {
         assertThat(saved).singleElement().extracting(Settings::theme).isEqualTo(ThemeChoice.LIGHT);
     }
 
-    // A theme saves the instant it is picked, so a refused save has to say so on its own. Silence
-    // plus a radio flicking back reads as the screen ignoring the press.
-    //
-    // The attempt count is what pins the re-entrancy guard. Putting the radio back notifies the same
-    // listener, so without the guard the press saves a second time through the file that just
-    // refused it. Every other assertion here passes either way.
+    // The attempt count is what pins the re-entrancy guard: without it the count reads two, and
+    // every other assertion here passes either way.
     @Test
     void aThemeTheFileWouldNotTakeLeavesTheRadioWhereItWasAndSaysWhy() throws Exception {
         final List<Settings> attempted = new ArrayList<>();
@@ -124,12 +119,9 @@ class AppearanceCardTest {
                 .getUserData();
     }
 
-    // The presenter pair this card and its screen read and write through.
     private record Presenters(SettingsPresenter settings, VisionProviderPresenter vision) {
     }
 
-    // Its own presenter because the shared one refuses every save. That is what the refusal test
-    // above needs, and it leaves nothing for a test reading a saved value to read.
     private static Presenters presenterSavingInto(final List<Settings> saved) {
         return presenterOver(saved::add);
     }

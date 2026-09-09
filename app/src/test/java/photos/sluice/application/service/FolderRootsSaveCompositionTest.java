@@ -29,10 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static photos.sluice.application.service.PipelineTestSupport.sortedPhotosDir;
 import static photos.sluice.application.service.PipelineTestSupport.writePhoto;
 
-// Each link of the save-to-watcher-retire chain is already proven on its own. SettingsServiceTest
-// proves the announce, FolderRootsHousekeepingTest the reaction, CullEngineTest the retire, and
-// SmokeTest that the desktop registers the listener at all. What none of them can say is whether
-// the beans the context builds join up, so that is the whole subject here.
+// Every link of the save-to-watcher-retire chain is already proven on its own. What none of those
+// can say is whether the beans the context builds join up, so that is the whole subject here.
 @SpringBootTest
 class FolderRootsSaveCompositionTest {
 
@@ -87,8 +85,7 @@ class FolderRootsSaveCompositionTest {
     }
 
     // Everything but the working root and the inbox is carried over from the settings in force, so
-    // the save under test moves roots and changes nothing else. The library root stays where it is,
-    // since moving that one is refused here and goes through the library-root move seam.
+    // the save under test moves roots and changes nothing else. The library root has its own seam.
     private Settings movedTo(final Path root) {
         final Settings current = this.settings.settings();
         return new Settings(new PathSettings(root.toString(), current.paths().libraryRoot(),
@@ -98,7 +95,7 @@ class FolderRootsSaveCompositionTest {
     }
 
     // The one bean this test redirects. Production reads the config file out of an OS-native
-    // app-data folder, which a test must not write into. Nothing else about the wiring is replaced.
+    // app-data folder, which a test must not write into.
     @TestConfiguration
     static class TempConfigFile {
 

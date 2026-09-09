@@ -11,9 +11,8 @@ import java.util.Map;
  * <p>Windows resolves under {@code %APPDATA%}, macOS under {@code ~/Library/Application Support},
  * and other platforms follow the XDG base directory convention.
  *
- * <p>A map rather than a lookup, unlike the credential tier that reads an override. Every name read
- * here is one the OS itself sets and spells consistently, so nothing is lost by matching it exactly.
- * A user-typed name would be the case where that stops being true.
+ * <p>Every name read here is one the OS itself sets and spells consistently, so a map matching it
+ * exactly loses nothing. A user-typed name would be the case where that stops being true.
  */
 public final class ConfigDirLocator {
 

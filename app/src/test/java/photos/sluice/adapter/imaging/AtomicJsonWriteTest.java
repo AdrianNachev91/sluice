@@ -50,8 +50,6 @@ class AtomicJsonWriteTest {
                 .doesNotContain("stale");
     }
 
-    // Writing straight to the destination empties it the moment the stream opens. This is the whole
-    // point of the class: a document already there outlives a write that dies.
     @Test
     void aFailedWriteLeavesTheDestinationAndTheDirectoryUntouched(@TempDir final Path dir) throws IOException {
         final Path target = dir.resolve("index.json");
@@ -69,8 +67,6 @@ class AtomicJsonWriteTest {
         }
     }
 
-    // The asymmetry the two failures have. A write that produced nothing leaves nothing worth
-    // keeping; a rename that failed leaves a complete document, and a caller may have paid for it.
     // The failure is induced through Files.move's own contract, which specifies
     // DirectoryNotEmptyException for a non-empty directory at the destination on every platform.
     @Test

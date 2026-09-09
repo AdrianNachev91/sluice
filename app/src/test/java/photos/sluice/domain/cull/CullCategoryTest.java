@@ -56,8 +56,8 @@ class CullCategoryTest {
 
     @Test
     void dropsBlankExamplesAndTrimsTheRest() {
-        // A YAML list written with a bare "-" binds that entry as null. So the list has to tolerate
-        // one, not only the blank string beside it.
+        // A YAML list written with a bare "-" binds that entry as null, so the fixture carries one
+        // beside the blank string.
         //noinspection NullableProblems
         final var category = new CullCategory("food", "Meals",
                 Arrays.asList("  restaurant plates ", "   ", null, "home dinners"), Boolean.TRUE);
@@ -113,8 +113,6 @@ class CullCategoryTest {
 
     @Test
     void rejectsNulls() {
-        // Deliberately violates the non-null contract: Spring's reflective config binding can pass
-        // null past the annotations, and these are the guards that catch it.
         //noinspection DataFlowIssue
         assertThatThrownBy(() -> CullCategory.of(null, "Paper receipts and invoices"))
                 .isInstanceOf(IllegalArgumentException.class);

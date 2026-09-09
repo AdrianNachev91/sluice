@@ -52,7 +52,6 @@ class FilenameSourceTest {
 
     @Test
     void ignoresAnyEmbeddedTimeComponent() {
-        // Folder routing only needs year/month/day, so an embedded time component is ignored.
         final var file = new MediaFile(Path.of("IMG_20210315_235959.jpg"));
 
         final Optional<LocalDateTime> result = this.source.resolve(file, null);

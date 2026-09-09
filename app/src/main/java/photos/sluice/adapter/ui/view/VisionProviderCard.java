@@ -33,9 +33,8 @@ import java.util.function.Consumer;
  */
 final class VisionProviderCard {
 
-    // An eye, and the stroke that crosses it out. SVG path data, the same format BrandMark uses and
-    // the one SVGPath takes: letters are drawing commands, numbers their coordinates. Drawn rather
-    // than written, because every password field a user has met uses this and none spell it out.
+    // An eye, and the stroke that crosses it out, as SVG path data. Drawn rather than written,
+    // because every password field a user has met uses this and none spell it out.
     //
     // The stroke is a shape rather than a line, and its own node rather than more of the eye's
     // path. An SVGPath is filled, so a line contributes nothing at all. A shape appended to the
@@ -115,10 +114,6 @@ final class VisionProviderCard {
     /**
      * The controls inside the provider block, for whoever has to reach one of them again.
      *
-     * <p>{@code endpointField} is the node the endpoint row was built around and {@code endpoint} is
-     * the field inside it. Both are here because they answer different questions. The row is hidden
-     * and shown by its parent; the field is what carries the text.
-     *
      * @param model {@link ComboBox} of {@link SettingsView.ModelChoice} the model picker
      * @param modelInfo {@link VBox} the note drawn under the picker
      * @param endpoint {@link TextField} the endpoint value
@@ -135,9 +130,8 @@ final class VisionProviderCard {
     /**
      * How one model reads in the picker's dropdown, with the recommended one saying so.
      *
-     * <p>A named class rather than an anonymous one, and package-visible rather than private.
-     * {@code ScreenWarmUp} can then construct the exact type this file builds, instead of an
-     * anonymous class only this one method could ever build again.
+     * <p>A named class rather than an anonymous one, and package-visible rather than private, so
+     * that anything warming this screen's classes can construct the exact type it builds.
      */
     static final class ModelChoiceCell extends ListCell<SettingsView.ModelChoice> {
         @Override
@@ -156,8 +150,7 @@ final class VisionProviderCard {
      * Reads what the visionProvider currently has to say about one provider's models, cached rather than
      * freshly checked, and draws it.
      *
-     * <p>Called both when the model row is first built and whenever the provider dropdown changes.
-     * Never checks the service on its own: a dropdown a user is only browsing must not spend a
+     * <p>Never checks the service on its own: a dropdown a user is only browsing must not spend a
      * network call every time it changes.
      *
      * @param model {@link ComboBox} the model picker
@@ -188,8 +181,7 @@ final class VisionProviderCard {
     static String selectedModelId(final ComboBox<SettingsView.ModelChoice> model) {
         final SettingsView.ModelChoice selected = model.getSelectionModel().getSelectedItem();
         // The property's declared type is not nullable, so the IDE reads this guard as always
-        // false. A disabled Unavailable picker, or a provider with no model setting, leaves this
-        // genuinely unselected.
+        // false. A disabled picker leaves it genuinely unselected.
         //noinspection ConstantValue
         return selected == null ? "" : selected.id();
     }
@@ -283,12 +275,10 @@ final class VisionProviderCard {
         removeButton.getStyleClass().add("button-quiet");
         removeButton.setDisable(!secret.hasStoredValue());
         removeButton.setOnAction(_ -> {
-            // Asked before anything is cleared. A key is the one thing on this card the app cannot
-            // put back, since Sluice never reads a stored credential out. An accidental press costs
-            // the user a trip to their provider for a new one.
+            // Asked before anything is cleared, and backing out leads. No screen ever shows a
+            // stored key, so this is the one thing on the card the app cannot put back. An
+            // accidental press costs the user a trip to their provider for a new one.
             final VisionProviderPresenter.SecretRemoval removal = visionProvider.secretRemoval(providerId);
-            // Backing out leads, because this asks about the one thing on the card the app cannot
-            // put back.
             if (Dialogs.ask(removeButton, removal.heading(), removal.detail(),
                     new Dialogs.Choice("Remove key", Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.QUIET),
                     new Dialogs.Choice("Keep it", Dialogs.Role.CANCEL, Dialogs.Emphasis.LOUD)).isEmpty()) {
@@ -375,8 +365,6 @@ final class VisionProviderCard {
 
     /**
      * The dropdown of every provider a user can pick, opened on the configured one.
-     *
-     * <p>Shared with the first-run card, which offers the same choice before this card exists.
      *
      * @param view {@link SettingsView} carries the providers and which is selected
      * @return {@link ComboBox} of {@link SettingsView.ProviderChoice} the dropdown
@@ -584,8 +572,8 @@ final class VisionProviderCard {
                                         final ComboBox<SettingsView.ProviderChoice> providerBox) {
         modelInfo.getChildren().clear();
         switch (result.picker()) {
-            // Reached only for a provider this row's own showOnlyWhatTheProviderUses call already
-            // hides. Cleared rather than left showing whatever the last provider offered.
+            // A provider with no model setting at all, whose picker is hidden anyway. Cleared
+            // rather than left showing whatever the last provider offered.
             case null -> emptyAndDisabled(model);
             case final SettingsView.ModelPicker.Options options -> {
                 model.setDisable(false);
@@ -636,9 +624,8 @@ final class VisionProviderCard {
                 // stopped responding is exactly the one a reader presses this against, and it takes
                 // the interactive timeout to say so. Left as it was, the press reads as ignored.
                 //
-                // Worded here, unlike the picker's own waiting text, which the visionProvider supplies.
-                // Every button on this screen names itself; every line about the models comes from
-                // the visionProvider. This is a button saying what it is doing.
+                // Worded here rather than by the presenter, because every button on this screen
+                // names itself and this is a button saying what it is doing.
                 retry.setOnAction(_ -> {
                     retry.setDisable(true);
                     retry.setText("Connecting...");
@@ -662,8 +649,7 @@ final class VisionProviderCard {
         model.setDisable(true);
         model.getItems().clear();
         model.getSelectionModel().clearSelection();
-        // Whichever state follows says what it wants said. A prompt left standing would be the
-        // previous state still talking.
+        // The prompt too. Whichever state follows says what it wants said.
         model.setPromptText(null);
     }
 
@@ -700,8 +686,8 @@ final class VisionProviderCard {
      * Checks a provider's stored credential against the real service, off the FX thread, and redraws
      * the picker with what came back.
      *
-     * <p>Two callers reach this: Retry, and a credential save that just changed what this account
-     * can run. Both want the same thing - forget the last answer, ask again, draw what comes back.
+     * <p>Forgets the last answer rather than reusing it, since the point is that what this account
+     * can run may just have changed.
      *
      * @param model {@link ComboBox} the model picker
      * @param modelInfo {@link VBox} where the source note, a violation, or a caution lands

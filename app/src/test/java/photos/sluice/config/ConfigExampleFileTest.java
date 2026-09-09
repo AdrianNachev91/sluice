@@ -28,8 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ConfigExampleFileTest {
 
-    // Every @ConfigurationProperties class this app binds, paired with its prefix, matching
-    // AppConfig's own @EnableConfigurationProperties list.
+    // Every @ConfigurationProperties class this app binds, matching AppConfig's own
+    // @EnableConfigurationProperties list.
     private static final List<Class<?>> PROPERTIES_CLASSES =
             List.of(PathsProperties.class, MontageProperties.class, CullConfig.class, ImagingConfig.class,
                     UiProperties.class);
@@ -85,8 +85,7 @@ class ConfigExampleFileTest {
      *
      * <p>A {@link List}-typed component (the cull categories) is skipped. It names a set of
      * user-typed cards rather than a fixed key, and the example file documents it in prose instead.
-     * A {@link Map}-typed one (the per-provider settings) is skipped for the same reason, and the
-     * test above is what covers it.
+     * A {@link Map}-typed one (the per-provider settings) is skipped for the same reason.
      *
      * @param type {@link Class} the record type to read components from
      * @return a {@link List} of {@link String} every leaf kebab-case key this record and its nested

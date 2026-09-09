@@ -49,9 +49,8 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
-// Fixtures and lookups shared across the Settings pane's test classes, one per card plus
-// SettingsPaneTest itself for the save wiring. Each test class still registers its own FxToolkit
-// lifecycle; JUnit runs that per class, not per fixture.
+// Fixtures and lookups shared across the Settings pane's test classes. Each of those still
+// registers its own FxToolkit lifecycle, JUnit running that per class rather than per fixture.
 final class SettingsPaneTestSupport {
 
     static final SecretId ANTHROPIC_KEY = new SecretId("anthropic", "ANTHROPIC_API_KEY");
@@ -105,9 +104,8 @@ final class SettingsPaneTestSupport {
         return (Parent) mounted(presenter, visionProvider, 300).node();
     }
 
-    // The body that scrolls, inside the page that pins a header over it.
     // Every screen reports a save in one banner slot, whatever the outcome. The tone is what
-    // separates a confirmation from a refusal, so a test that only reads the words proves half of
+    // separates a confirmation from a refusal, so a test reading only the words proves half of
     // what it claims.
     static String reportText(final Parent pane) {
         final var banner = (HBox) pane.lookup("#settings-report-banner");

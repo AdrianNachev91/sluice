@@ -23,8 +23,7 @@ import java.util.List;
  * <p>Interruption leaves whole files rather than half of one, because a destination that already
  * holds a name is written beside it rather than over it. So a run stopped partway can be started
  * again, and the second run's arrivals sit beside the first's rather than replacing them. That is
- * the never-overwrite rule the rest of the app moves files under, and this inherits it rather than
- * restating it.
+ * the never-overwrite rule the rest of the app moves files under.
  */
 @Component
 public class CopyEngine {

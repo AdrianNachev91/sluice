@@ -33,23 +33,16 @@ import java.util.stream.Collectors;
  * Says whether a failure is something the app refused, and if so which refusal it was.
  *
  * <p>Which refusal it is, is decided by the exception's type alone. Matching on a message would
- * break silently the first time somebody improved a sentence. Every refusal this recognises
- * carries a type of its own for that reason.
+ * break silently the first time somebody improved a sentence.
  *
- * <p>Some branches do go on to use the message, once the type has settled what the refusal is.
- * That is the sentence being carried through rather than read. Those exceptions word themselves
- * for a person to see, and rewriting them here would leave two versions to keep in step.
- *
- * <p>The rest compose their own, and each says why in its own place. What decides it is who the
- * exception's message was written for. One written for a log, or for a screen this surface has not
- * got, is replaced rather than carried.
+ * <p>Some branches then carry that exception's own message through. What decides it is who the
+ * message was written for. One written for a person is carried. One written for a log, or for a
+ * screen this surface has not got, is replaced by words composed here that say why in their own
+ * place.
  *
  * <p>One arm classifies nothing. A scope argument a verb refused already carries its own refusal,
  * worked out where the rule that refused it lives. It comes through here so that a caller meets it
  * on the same two streams, in the same document, as every refusal the app raises further down.
- *
- * <p>Anything it does not recognise gets no answer here. That is what
- * {@link CommandStatus#FAILED} is for.
  */
 @Component
 @Profile("cli")
@@ -108,7 +101,7 @@ public class RefusalClassifier {
                     refused.getMessage());
             case final UnrecognisedProviderException unrecognised -> providerUnrecognised(unrecognised);
             case final ApplyException _ -> Refusal.of(RefusalKind.ANSWERS_DO_NOT_HOLD,
-                    "This sift's answers do not hold together, so your photos are still in Sorted. "
+                    "This sift's answers do not hold together, so nothing was moved. "
                             + "Run 'troubleshoot' on it to see what is wrong.");
             case final ShuttingDownException _ -> Refusal.of(RefusalKind.SHUTTING_DOWN,
                     "Shutdown in progress. This was not started.");
@@ -126,8 +119,8 @@ public class RefusalClassifier {
     /**
      * The refusal for a run whose own records could not be read.
      *
-     * <p>Named as a record rather than as a folder. The path is a file inside a run, and nothing a
-     * caller typed, so advice about checking a folder name sends them to the wrong place.
+     * <p>The path is a file inside a run rather than anything a caller typed, so this names a
+     * record rather than a folder.
      *
      * @param malformed {@link MalformedPrepJsonException} the read that could not be made sense of
      * @return {@link Refusal} the refusal
@@ -143,9 +136,6 @@ public class RefusalClassifier {
     /**
      * The refusal for a file the command could not reach, for a reason other than its absence.
      *
-     * <p>A permission the process does not hold, and a drive that stopped answering, are the two
-     * this meets. Neither is something the caller did, and both clear on their own.
-     *
      * @param unreachable {@link UncheckedIOException} the read or write that could not be done
      * @return {@link Refusal} the refusal
      */
@@ -159,8 +149,7 @@ public class RefusalClassifier {
     /**
      * The refusal for a note whose bytes are not the text this app wrote there.
      *
-     * <p>Names the file, which the sentence above cannot: it answers for every file this app reads,
-     * and a folder can hold several notes.
+     * <p>Names the file, since a folder can hold several notes.
      *
      * @param note {@link NoteIsNotTextException} the read that came back as something else
      * @return {@link Refusal} the refusal
@@ -317,8 +306,6 @@ public class RefusalClassifier {
      *
      * <p>The places are reported alongside, because "nothing holds one" and "the one place that
      * could hold one refused the question" send somebody to different work.
-     *
-     * <p>The words are composed here rather than taken from the exception.
      *
      * @param missing {@link MissingCredentialException} the provider's own refusal
      * @return {@link Refusal} the refusal

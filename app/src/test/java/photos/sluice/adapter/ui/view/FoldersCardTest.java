@@ -45,7 +45,6 @@ class FoldersCardTest {
         FxToolkit.cleanupStages();
     }
 
-    // A refusal at the foot of a page that scrolls is a message about a field the reader cannot see.
     // The saved roots are fine, so the row starts unmarked. Only the folder typed in this test is
     // refused, which is what makes the mark afterwards mean the save put it there.
     @Test
@@ -63,8 +62,6 @@ class FoldersCardTest {
         assertThat(reportIsARefusal(pane)).isTrue();
     }
 
-    // The roots this presenter opens on are fine, so the field starts unmarked. That is what makes
-    // the mark afterwards mean this save put it there.
     @Test
     void aRefusedSaveMarksTheFieldAndNotOnlyTheLineUnderIt() throws Exception {
         final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));

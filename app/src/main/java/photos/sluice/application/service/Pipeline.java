@@ -54,11 +54,8 @@ import java.util.List;
  * builds and wires both, then exposes their methods under one type so a driving adapter depends
  * on a single class.
  *
- * <p>Every entry point that resolves a folder path checks the three roots first. They have to be
- * set, to exist, and not to sit inside each other. Anything else refuses with
- * {@link PathsMisconfiguredException}. That includes the calls that only read, since reading a run
- * still needs to know where the working root is. An install with nothing configured yet therefore
- * meets a typed refusal here rather than a failure deeper down.
+ * <p>Every entry point that resolves a folder path checks the three roots first, the calls that
+ * only read included, and refuses with {@link PathsMisconfiguredException} otherwise.
  *
  * <p>Depends on the engines' concrete classes rather than their {@code SortUseCase}/
  * {@code CommitUseCase}/{@code RescueUseCase} port-in interfaces. The progress-callback overloads
@@ -72,10 +69,9 @@ public class Pipeline {
     private static final String DISCARDING = "Discarding...";
     private static final String IMPORTING = "Importing...";
 
-    // How often a waiting job re-checks its prep dir's shard tally. Not part of CullSettings: this
-    // cadence is an internal responsiveness/overhead tradeoff rather than anything a user is
-    // offered. Short enough that a human dropping files never perceives the delay; long enough not
-    // to hammer disk or spam re-validation.
+    // How often a waiting job re-checks its prep dir's shard tally. Not a CullSettings knob: it is
+    // an internal responsiveness/overhead tradeoff. Short enough that a human dropping files never
+    // perceives the delay, long enough not to hammer disk or spam re-validation.
     private static final Duration DEFAULT_WATCH_POLL_INTERVAL = Duration.ofSeconds(2);
 
     private final SortEngine sortEngine;
@@ -147,10 +143,8 @@ public class Pipeline {
     }
 
     /**
-     * Test seam: production wiring always goes through the public constructor above, which fixes
-     * the poll cadence at DEFAULT_WATCH_POLL_INTERVAL. Tests exercising real poll timing pass
-     * a much shorter interval here so the behavior proves out in milliseconds, not seconds, without
-     * resorting to a mock clock.
+     * Test seam taking the poll cadence the public constructor above fixes. A much shorter interval
+     * proves poll timing out in milliseconds rather than seconds, with no mock clock.
      *
      * @param sortEngine {@link SortEngine} the sort engine
      * @param commitEngine {@link CommitEngine} the commit engine
@@ -212,8 +206,7 @@ public class Pipeline {
 
     /**
      * Arms a watch on every run that could still be resumed. Called once a process owns the working
-     * root. A one-shot caller that only reads leaves it alone, and so never arms pollers it is
-     * about to kill.
+     * root.
      */
     public void armWatchesForResumableRuns() {
         this.requireUsableRoots();
@@ -221,11 +214,9 @@ public class Pipeline {
     }
 
     /**
-     * Sweeps every prep dir's disaster drawer for retention-expired entries, meaning a corrupt
-     * original or a troubleshoot report older than 30 days. Every discarded-run graveyard folder
-     * past that same window goes too. The caller runs
-     * this itself, once its process owns the working root. The sweep deletes, so it must never run
-     * before that.
+     * Sweeps every prep dir's disaster drawer, and every discarded-run graveyard folder, for
+     * entries past their retention window. Called once the process owns the working root. The
+     * sweep deletes, so it must never run before that.
      */
     public void sweepExpiredDisasterDrawers() {
         this.requireUsableRoots();
@@ -345,15 +336,14 @@ public class Pipeline {
      * be. Diagnosis is side-effect-free and never throws, whatever state a dir is in, so one dir
      * nobody can read reports DAMAGED and the rest still render.
      *
-     * <p>That makes polling on a timer safe, not cheap. Each pass reads every sidecar, every shard
-     * and the move ledger of every run, twice over. A caller refreshing on a timer picks its
-     * interval accordingly.
+     * <p>Safe to poll on a timer, not cheap: each pass reads every sidecar, every shard and the move
+     * ledger of every run, twice over.
      *
-     * <p>Not routed through JobRunner: it only reads, so it does not compete for the single job
-     * slot.
+     * <p>Not routed through {@link JobRunner}: it only reads, so it does not compete for the single
+     * job slot.
      *
-     * <p>A sift-prep root nobody could read answers {@link CullRuns.Unlistable} rather than an
-     * empty list, so no screen renders a failed read as a reader having no runs.
+     * <p>A sift-prep root nobody could read answers {@link CullRuns.Unlistable} rather than an empty
+     * list, which would read as a reader having no runs.
      *
      * @return {@link CullRuns} every run found, diagnosed and ordered by scope, or that the root
      *     could not be read
@@ -366,14 +356,13 @@ public class Pipeline {
     /**
      * One run on disk, diagnosed.
      *
-     * <p>Reads one prep dir rather than the whole sift-prep root. A caller working on one run does
-     * not pay for every other run to answer a question about that one.
+     * <p>Reads one prep dir rather than the whole sift-prep root.
      *
      * <p>Never throws whatever state the dir is in, the contract {@link #cullRuns} already carries
      * per run. A dir that could not be read answers DAMAGED with a null tally.
      *
-     * <p>Not routed through {@link JobRunner}: it only reads, so it does not compete for the single
-     * job slot. That is what lets it answer while a sift is running.
+     * <p>Not routed through {@link JobRunner}, for the same reason as {@link #cullRuns}. That is
+     * what lets it answer while a sift is running.
      *
      * @param prepDir {@link Path} the run to diagnose
      * @return {@link CullRunSummary} that run's scope, diagnosis, tally and age
@@ -386,13 +375,11 @@ public class Pipeline {
     /**
      * Where a discarded run's records are filed.
      *
-     * <p>Named before a discard rather than after it, so the question asked beforehand can say
-     * where the records will be. {@link DiscardReport} names the run's own dated folder inside this
-     * one, which does not exist until the discard has run.
+     * <p>{@link DiscardReport} names the run's own dated folder inside this one, which does not
+     * exist until the discard has run.
      *
-     * <p>Unguarded by {@link #requireUsableRoots}, because it resolves a path rather than reaching
-     * the disk. A caller asking where records would go while the roots are unusable is answered
-     * rather than refused.
+     * <p>Unguarded by {@link #requireUsableRoots}: it resolves a path rather than reaching the disk,
+     * so it answers rather than refuses while the roots are unusable.
      *
      * @return {@link Path} the folder holding every discarded run's records
      */
@@ -409,11 +396,11 @@ public class Pipeline {
      * <p>Moved into the archives folder rather than deleted. It is still the only record of what
      * past runs cost, and a line one version cannot parse may be readable by the next.
      *
-     * <p>The history it holds does not come back. What the estimate loses is its projected half,
-     * which it rebuilds from the first completed run after this.
+     * <p>The history it holds does not come back. The estimate rebuilds its projected half from the
+     * first completed run after this.
      *
-     * <p>A ledger that reads is left where it is. Nothing about being asked makes a healthy record
-     * one to throw away, and the answer says so the same way an absent one does.
+     * <p>A ledger that reads is left where it is, and the answer says so the same way an absent one
+     * does.
      *
      * @return {@link Path} where the ledger was filed, or null where there was nothing to repair
      */
@@ -433,8 +420,7 @@ public class Pipeline {
      * <p>A walk of the tree, so its cost grows with what is in there. A caller that would block a
      * window on it runs it off whatever thread paints.
      *
-     * <p>Not routed through {@link JobRunner}: it only reads, so it does not compete for the single
-     * job slot. The same reasoning as {@link #cullRuns}.
+     * <p>Not routed through {@link JobRunner}, for the same reason as {@link #cullRuns}.
      *
      * @return {@link InboxTally} what is waiting, and what it comes to on disk
      */
@@ -458,9 +444,8 @@ public class Pipeline {
     /**
      * Every folder holding photos somebody still has to look at.
      *
-     * <p>Three tree walks, one per root, so its cost grows with what is in them. A caller that would
-     * block a window on it runs it off whatever thread paints. Not routed through {@link JobRunner}:
-     * it only reads, so it does not compete for the single job slot.
+     * <p>Three tree walks, one per root. Carries the same cost and the same reasoning as
+     * {@link #inboxTally}.
      *
      * @return {@link ReviewListing} the folders, and any of the three roots that could not be read
      */
@@ -488,16 +473,15 @@ public class Pipeline {
     /**
      * What sifting this many photos is expected to consume.
      *
-     * <p>Takes a count rather than a scope. A screen showing a figure beside a scope somebody is
-     * still typing then recomputes it without walking the tree again. The count itself comes from
-     * {@link #sortedTally}, whose rows carry the year and month breakdown a scope narrows to.
+     * <p>Takes a count rather than a scope, so a caller recomputes without walking the tree again.
+     * The count comes from {@link #sortedTally}, whose rows carry the year and month breakdown a
+     * scope narrows to.
      *
-     * <p>The tree is the expensive read this avoids, and it is not the only read. Each call reads
-     * the spend ledger, which is one small file rather than a walk. A caller putting this behind
-     * every keystroke is doing that much disk work per keystroke.
+     * <p>It still reads the spend ledger on every call, which is one small file rather than a walk.
+     * A caller putting this behind every keystroke is doing that much disk work per keystroke.
      *
-     * <p>No roots check. The one path it reads is the spend ledger. An unusable root degrades the
-     * estimate rather than escaping, since a failed read falls back to the shipped seed.
+     * <p>No roots check. The one path it reads is the spend ledger, and an unusable root degrades
+     * the estimate rather than escaping: a failed read falls back to the shipped seed.
      *
      * @param photos how many photos the scope holds
      * @return {@link SpendEstimate} what a sift over them is expected to consume
@@ -509,10 +493,9 @@ public class Pipeline {
     /**
      * Whether a run on the configured provider can spend anything.
      *
-     * <p>A screen asks this to decide whether to raise the question of cost at all. It is not the
-     * same question as {@link #estimateFor}, which needs a photo count. A sort resolves which
-     * photos land under which year, so a curate has no count to ask with until it has run. Reading
-     * a zero estimate back is therefore not a route open to every caller.
+     * <p>Not the same question as {@link #estimateFor}, which needs a photo count. A sort resolves
+     * which photos land under which year, so a curate has no count to ask with until it has run.
+     * Reading a zero estimate back is therefore not a route open to every caller.
      *
      * <p>No roots check and no disk read. The answer is the configured provider's own type, so a
      * caller may put it behind a keystroke.
@@ -526,10 +509,9 @@ public class Pipeline {
     /**
      * Retires every poller this process has armed. No run is started, stopped or altered by it.
      *
-     * <p>For a working-root move and for the app closing. Every armed watcher polls a prep dir
-     * under {@code logs/sift-prep}, which hangs off the working root. So "armed under the old root"
-     * and "armed at all" name the same set. One left behind would poll a folder outside the root in
-     * force, for as long as the process lives.
+     * <p>Every armed watcher polls a prep dir under {@code logs/sift-prep}, which hangs off the
+     * working root, so "armed under the old root" and "armed at all" name the same set. One left
+     * behind would poll a folder outside the root in force, for as long as the process lives.
      *
      * <p>A library or inbox move strands nothing and must not come here.
      *
@@ -537,9 +519,8 @@ public class Pipeline {
      * mid-attempt when this arrives still finishes that attempt, resume included. What this
      * guarantees is that no further poll starts.
      *
-     * <p>One of the two facade methods with no roots check, alongside {@link #stopAcceptingJobs}. It
-     * resolves no path, and the caller that needs it most is one whose roots have just changed
-     * underneath it.
+     * <p>No roots check: it resolves no path, and the caller that needs it most is one whose roots
+     * have just changed underneath it.
      */
     public void stopAllWatching() {
         this.cullEngine.disarmAllWatches();
@@ -549,17 +530,15 @@ public class Pipeline {
      * Shuts the job runner for good and drains the job that may be running. Answers whether anything
      * of the app's is still reaching files by the time it returns.
      *
-     * <p>What an exit path calls once its window has gone, after {@link #stopAllWatching}. A false
-     * answer means a job ran past the wait and is still touching files. The caller then keeps hold of
-     * whatever it was about to give back. That is what stops the working root reaching the next
-     * Sluice while this one is still moving things inside it.
+     * <p>Called after {@link #stopAllWatching}. A false answer means a job ran past the wait and is
+     * still touching files. The caller then keeps hold of the working root rather than letting it
+     * reach the next Sluice while this one is still moving things inside it.
      *
      * <p>One-way. Nothing reopens the runner, so anything reaching a job entry point afterwards is
      * refused with {@link ShuttingDownException}.
      *
-     * <p>The second entry point with no roots check, and for the same kind of reason as
-     * {@link #stopAllWatching}. It resolves no path, and an install whose roots are unusable has to
-     * be able to close as cleanly as one whose roots are fine.
+     * <p>No roots check, for the same reason as {@link #stopAllWatching}. An install whose roots are
+     * unusable has to be able to close as cleanly as one whose roots are fine.
      *
      * @param timeout {@link Duration} how long to wait for a running job to stop
      * @return boolean true when no job is still reaching files
@@ -647,13 +626,11 @@ public class Pipeline {
 
     /**
      * Gives up on prepDir as a background job. It refuses a COMPLETE run, since purgeCompleted() is
-     * that state's own verb. It then retires any watcher polling it and delegates to
-     * PrepDirRemedies.discard() for the actual file work. That files everything worth keeping into
-     * the graveyard and deletes the montage and tile images. The watcher must be disarmed before the
-     * graveyard move starts, or an auto-resume could fire against a prep dir already being
-     * dismantled. Routing through JobRunner buys the same one-job-at-a-time discipline every other
-     * job gets. A discard can then never race a re-prep of the scope it is giving up on. The
-     * last-resort "discard this run and redo" remedy calls this same method.
+     * that state's own verb, then retires any watcher polling it and delegates to
+     * PrepDirRemedies.discard() for the file work. The watcher must be disarmed before the graveyard
+     * move starts, or an auto-resume could fire against a prep dir already being dismantled. Routing
+     * through JobRunner buys the same one-job-at-a-time discipline every other job gets, so a
+     * discard can never race a re-prep of the scope it is giving up on.
      *
      * @param prepDir {@link Path} the cull prep directory to discard
      * @return a {@link JobHandle} of {@link DiscardReport} a handle to the running job
@@ -694,18 +671,16 @@ public class Pipeline {
     /**
      * Sets a run's rejected answers aside and hands back the instructions asking for them again.
      *
-     * <p>One call because it is one gesture. A reader who has given up on these answers wants two
-     * things: the sheets free to be answered afresh, and the words to ask with. Either one on its
-     * own is half a remedy.
+     * <p>One call because it is one gesture: the sheets free to be answered afresh, and the words to
+     * ask with. Either one on its own is half a remedy.
      *
      * <p>Diagnosed here rather than trusting what the card was drawn from. That reading can be
      * minutes old, and a watch or another window can have moved the run since. Only sheets this
      * reading blames are set aside.
      *
-     * <p>Not a job, so it claims no job slot and blocks nothing. The work is moving a handful of
-     * small files, and every control offering it is withheld while a job runs. What that cannot
-     * rule out is a watch resuming the run in the same moment. That resume then meets a sheet with
-     * no answer and reports the run as still waiting, which is what it now is.
+     * <p>Not a job, so it claims no job slot and blocks nothing. What that cannot rule out is a
+     * watch resuming the run in the same moment. That resume then meets a sheet with no answer and
+     * reports the run as still waiting, which is what it now is.
      *
      * @param prepDir {@link Path} the run
      * @return {@link String} the text to hand an agent
@@ -787,13 +762,13 @@ public class Pipeline {
     }
 
     /**
-     * Refuses the call when the folder roots it would reach are not usable. Every entry point that
-     * resolves a path runs this first, including the ones that only read.
+     * Refuses the call when the folder roots it would reach are not usable.
      *
      * <p>The guard sits here rather than in a screen, because both a screen and a command line pass
      * through this class. A check written into either one would be walked past by the other.
      *
-     * @throws PathsMisconfiguredException if any of the three roots is unset, missing, or overlapping
+     * @throws PathsMisconfiguredException if any of the three roots is unset, unparsable, missing,
+     *     unreadable, or overlapping another
      */
     private void requireUsableRoots() {
         this.rootsGuard.requireUsable();
@@ -830,11 +805,8 @@ public class Pipeline {
     /**
      * Thrown when a fresh cull or curate is refused because an unfinished run already occupies the
      * scope's own prep dir. It carries that run, diagnosed, so a caller routes the user to the
-     * right way out without parsing the message. Resume for WAITING or READY, Troubleshoot for
-     * BLOCKED or DAMAGED, Discard from any of them.
-     *
-     * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know the call was
-     * refused needs no knowledge of this type at all.
+     * right way out without parsing the message. Which remedy each state offers:
+     * {@code app/docs/design/application/service/cull-engine.md}.
      */
     public static sealed class ScopeOccupiedException extends IllegalStateException
             permits CurateConflictException {
@@ -844,8 +816,7 @@ public class Pipeline {
          * Creates the exception, rendering the refusal message from the occupying run.
          *
          * <p>Public, like the refusals in {@code port.in}. A facade whose refusals only it can
-         * construct cannot be stood in for. Every screen that words one is tested against a
-         * stand-in rather than a real pipeline.
+         * construct cannot be stood in for.
          *
          * @param occupant {@link CullRunSummary} the run already occupying the scope
          */
@@ -877,9 +848,6 @@ public class Pipeline {
      *
      * <p>Carries a list rather than the first one found. A reader told about one deals with it,
      * comes back, and is refused by the next.
-     *
-     * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know the call was
-     * refused needs no knowledge of this type at all.
      */
     public static final class ScopeOverlapsException extends IllegalStateException {
         private final transient CullScope.Year chosen;
@@ -961,15 +929,12 @@ public class Pipeline {
      * Thrown when a discard is refused because the run has already finished.
      *
      * <p>Reachable from a screen that offered the discard, because a run can finish between the
-     * screen being drawn and the button being pressed. A watcher applying an agent's last shard
+     * screen being drawn and the button being pressed - a watcher applying an agent's last shard
      * does exactly that, unattended. So this is a refusal a reader meets rather than a state only a
      * caller writing the wrong code could reach.
      *
-     * <p>Carries the prep dir, and its message says what to do instead. Purging is the finished
-     * run's own verb, and nothing was lost by asking for the other one.
-     *
-     * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know the call was
-     * refused needs no knowledge of this type at all.
+     * <p>Thrown before any watcher is disarmed and before any file moves, so nothing was lost by
+     * asking for the wrong verb.
      */
     public static final class RunAlreadyFinishedException extends IllegalStateException {
 
@@ -997,9 +962,6 @@ public class Pipeline {
      * on the difference and both leave the run already handled. It names no way on, because the
      * causes do not share one: a waiting run can be carried on and a blocked one cannot. Nothing is
      * set aside before this throws, so nothing was lost either way.
-     *
-     * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know the call was
-     * refused needs no knowledge of this type at all.
      */
     public static final class NothingToRedoException extends IllegalStateException {
 
@@ -1017,15 +979,10 @@ public class Pipeline {
 
     /**
      * Thrown when a fresh cull or curate is refused because scope's own prep dir could not be read
-     * at all. That is a different fault from a diagnosed run occupying it. Refusing is the same
-     * safe direction a {@link ScopeOccupiedException} takes: proceeding would let a fresh prep
-     * clear a directory nobody could confirm was actually empty. But nothing here was diagnosed, so
-     * no run is fabricated to carry one. This carries the prep dir path and the read failure
-     * instead. A caller names what could not be read and offers a retry, rather than routing to a
-     * specific state's remedy that was never actually reached.
-     *
-     * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know the call was
-     * refused needs no knowledge of this type at all.
+     * at all, which is a different fault from a diagnosed run occupying it. Refusing is the same
+     * safe direction a {@link ScopeOccupiedException} takes: proceeding would let a fresh prep clear
+     * a directory nobody could confirm was actually empty. Nothing here was diagnosed, so it carries
+     * the prep dir path and the read failure rather than a fabricated run.
      */
     public static final class ScopeUnreadableException extends IllegalStateException {
         private final transient Path prepDir;
@@ -1060,9 +1017,6 @@ public class Pipeline {
      * <p>Raised from inside the job rather than at the call, because the folder roots can move while
      * a caller is queueing for the job slot. A check before that wait answers about roots that may
      * be replaced before the job starts.
-     *
-     * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know the call was
-     * refused needs no knowledge of this type at all.
      */
     public static final class RunOutsideWorkingRootException extends IllegalStateException {
         private final transient Path prepDir;

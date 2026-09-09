@@ -123,7 +123,7 @@ genuinely resumable `Waiting` job.
 | Every candidate in scope is unreviewable              | `photos=0, montages=0, entries=[]`; `index.json` still written, no crash |
 | Rerun with fewer reviewable photos than a prior run   | Stale montage files from the prior run are removed first                 |
 | Cancellation requested mid-render                     | `null` returned; disk left exactly as it was before this call            |
-| Cancellation requested mid-batch (montage-write loop) | `null` returned; the partial prep dir is inert, cleared by the next call |
+| Cancellation requested mid-batch (montage-write loop) | `null` returned; the prep dir is cleared on the way out                  |
 
 ## Known limitations
 

@@ -20,9 +20,6 @@ import java.util.Locale;
  * <p>Counts are grouped in threes against {@link Locale#ROOT} rather than the machine's locale.
  * Every word this app prints is English, and a number punctuated one way beside sentences written
  * the other reads as a mistake.
- *
- * <p>{@code quiet} is set once and stays set. Nothing here restores it, since one process reports
- * one job.
  */
 @Component
 @Profile("cli")
@@ -91,9 +88,6 @@ public class ConsoleProgressPort implements ProgressPort {
 
     /**
      * Whether this process is drawing for somebody watching it.
-     *
-     * <p>What it decides is whether a line nobody would act on is worth writing at all. A run whose
-     * output is being collected has a reader who is not there while it runs.
      *
      * @return boolean true when progress is being redrawn on a terminal
      */

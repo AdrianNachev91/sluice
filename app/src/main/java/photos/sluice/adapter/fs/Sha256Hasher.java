@@ -14,17 +14,14 @@ import java.security.NoSuchAlgorithmException;
 
 /**
  * A {@link Sha256Port} that computes a file's SHA-256 hash by streaming its bytes through a
- * {@link java.security.DigestInputStream} in fixed-size chunks. This keeps memory use constant
- * regardless of file size, so hashing a multi-gigabyte video costs no more memory than a small
- * photo. The result is returned as an uppercase hex string, matching the casing already used by
- * the on-disk hash index.
+ * {@link java.security.DigestInputStream} in fixed-size chunks, so a multi-gigabyte video costs no
+ * more memory than a small photo. The result is an uppercase hex string.
  */
 @Component
 public class Sha256Hasher implements Sha256Port {
 
     // Arbitrary but conventional I/O chunk size: large enough to amortize the per-read call
-    // overhead, small enough to keep memory flat regardless of file size (a multi-GB video hashes
-    // in constant memory, not proportional to its size).
+    // overhead, small enough to keep memory flat whatever the file's size.
     private static final int BUFFER_SIZE = 8192;
     // Uppercase to match the hex casing already used by the on-disk hash index, since lookups
     // there are exact string comparisons.
@@ -39,10 +36,8 @@ public class Sha256Hasher implements Sha256Port {
     @Override
     public String hash(final Path file) {
         final MessageDigest digest = newSha256Digest();
-        // DigestInputStream wraps the file stream and feeds every byte it reads into the digest
-        // as a side effect, so the digest is computed incrementally over the stream rather than
-        // requiring the whole file in memory at once. The read loop exists only to drive that
-        // side effect - the returned bytes themselves are discarded.
+        // DigestInputStream feeds every byte it reads into the digest as a side effect, so the read
+        // loop below exists only to drive that.
         try (final InputStream in = Files.newInputStream(file);
              final var digestIn = new DigestInputStream(in, digest)) {
             final byte[] buffer = new byte[BUFFER_SIZE];
@@ -61,10 +56,9 @@ public class Sha256Hasher implements Sha256Port {
      */
     private static MessageDigest newSha256Digest() {
         try {
-            // SHA-256 is on the JDK's mandatory standard algorithm list, so every conforming JVM
-            // supports it; this checked exception exists only to satisfy the general-purpose
-            // MessageDigest API and cannot fire in practice. Converting it to unchecked signals a
-            // broken JVM, not a normal, callable-handleable error.
+            // SHA-256 is on the JDK's mandatory standard algorithm list, so a conforming JVM
+            // always has it. Converting the checked exception signals a broken JVM rather than
+            // anything a caller could handle.
             return MessageDigest.getInstance("SHA-256");
         } catch (final NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 algorithm not available", e);
@@ -72,9 +66,7 @@ public class Sha256Hasher implements Sha256Port {
     }
 
     /**
-     * Each byte maps to two hex characters by splitting it into its high and low nibble (4-bit
-     * half): {@code >>> 4} isolates the high nibble, {@code & 0x0F} masks off everything but the
-     * low nibble.
+     * Hex-encodes the digest, two characters per byte.
      *
      * @param bytes byte[] the raw digest bytes
      * @return {@link String} the uppercase hex encoding of the bytes

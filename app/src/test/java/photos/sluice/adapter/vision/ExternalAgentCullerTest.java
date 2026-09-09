@@ -31,8 +31,6 @@ class ExternalAgentCullerTest {
         assertThat(this.culler.describe().id()).isEqualTo("external-agent");
     }
 
-    // What CullEngine reads to tell an ordinary pause from a failed run. Typed API instead, every
-    // wait for a shard this provider exists to do would reach the user as a run that failed.
     @Test
     void waitsForAPersonRatherThanCallingAModel() {
         assertThat(this.culler.type()).isEqualTo(ProviderType.MANUAL);
@@ -43,8 +41,6 @@ class ExternalAgentCullerTest {
         final Path junk = dir.resolve("base").resolve("IMG_001.jpg");
         this.codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
                 List.of(new Classification(junk, "junk", "photo of a monitor"))));
-        // This culler counts shards and never opens one, so an empty shard is as much an answer to
-        // it as a full one. Whether the shard says anything usable is ShardValidator's question.
         this.codec.write(dir.resolve("decisions-002.json"), new DecisionShard("montage-002", List.of()));
 
         assertThat(this.culler.cull(prep(dir, "montage-001", "montage-002"), options()))
@@ -69,8 +65,6 @@ class ExternalAgentCullerTest {
                 .isEqualTo(report(1, 1));
     }
 
-    // Shard content is apply's gate to judge, so one the codec cannot parse still counts as present
-    // here. Parsing it here as well would make the two disagree about the same file.
     @Test
     void countsAnUnparseableShardAsPresentRatherThanReportingItAsAProblem(@TempDir final Path dir) throws IOException,
             CullException {
@@ -80,9 +74,6 @@ class ExternalAgentCullerTest {
                 .isEqualTo(report(1, 0));
     }
 
-    // Apply's gate reports a decisions file naming no current montage as a StrayShard finding, with
-    // the user's own answer about it already applied. Raising it here too would re-ask a question
-    // they may have settled, and this class cannot see their answer.
     @Test
     void leavesAShardWithNoMatchingMontageToApplysGate(@TempDir final Path dir) throws CullException {
         final Path junk = dir.resolve("base").resolve("IMG_001.jpg");
@@ -94,10 +85,8 @@ class ExternalAgentCullerTest {
                 .isEqualTo(report(1, 0));
     }
 
-    // Sidecar state is not an input to this class at all. It matters because a montage can hold a
-    // shard whose sidecar is damaged while another still lacks one. A resume then genuinely runs
-    // this check. Failing on the damaged sidecar would put the run out of reach of the
-    // corrupt-sidecar answer the user gives at the apply phase.
+    // A sidecar is not an input here at all. The fixture is the resume case that reaches this
+    // check: one montage holding a shard beside a damaged sidecar, another still without a shard.
     @Test
     void aDamagedSidecarNeverBlocksTheRun(@TempDir final Path dir) throws IOException, CullException {
         Files.writeString(dir.resolve("montage-001.json"), "{ not json");

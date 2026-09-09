@@ -40,10 +40,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class Dialogs {
 
     // The window sizes itself off label widths measured before this app's own fonts apply. A long
-    // choice then ends up wider than the room the skin reserved, and ellipsizes. Sizing hints on
-    // the buttons themselves lost that fight twice, in both directions. A floor on the pane ends
-    // it: wide enough for the choices at their real widths, and still well inside the window the
-    // dialog covers.
+    // choice then ends up wider than the room the skin reserved, and ellipsizes. A floor on the
+    // pane settles it: wide enough for the choices at their real widths, and still well inside the
+    // window the dialog covers.
     private static final double PANE_FLOOR = 650;
 
     // Where the body text folds. Inside PANE_FLOOR by the pane's own padding.
@@ -97,9 +96,6 @@ final class Dialogs {
     record Choice(String label, Role role, Emphasis emphasis) {
     }
 
-    /**
-     * Prevents instantiation of this static factory class.
-     */
     private Dialogs() {
     }
 
@@ -122,10 +118,6 @@ final class Dialogs {
 
     /**
      * Puts one question and answers which choice was taken.
-     *
-     * <p>The row leads with the choice this dialog wants pressed and keeps the way out last. Two
-     * or more ways to go ahead then stay together, rather than reading as equal options either
-     * side of it.
      *
      * @param opensOver {@link Node} something on the window the question opens over
      * @param heading {@link String} what the question is about
@@ -237,8 +229,6 @@ final class Dialogs {
             alert.close();
         };
         // Taken down here rather than by the caller, because the wait is over either way it ends.
-        // It also spares a caller the knot of a handle it can only get back after handing in the
-        // press that needs it.
         if (alert.getDialogPane().lookupButton(pressed) instanceof final Button drawn) {
             drawn.setDefaultButton(true);
             drawn.setOnAction(_ -> {
@@ -274,10 +264,6 @@ final class Dialogs {
      * <p>Refuses a set the dialog could not draw an answer from, rather than drawing one nobody
      * meant. Each of the three is a shape a caller can write by accident and no reader would spot.
      * No way out, two answers to Enter, or a dialog whose only button leaves.
-     *
-     * <p>The leading choice comes first whatever it is for. A dialog about something the app cannot
-     * undo leads with backing out. A row putting the quiet choice ahead of that reads as an
-     * afterthought stuck on the end. The offered order decides the rest.
      *
      * @param choices the choices to build
      * @return a {@link Map} of {@link ButtonType} to {@link Choice}, leading choice first
@@ -408,8 +394,6 @@ final class Dialogs {
             if (alert.getDialogPane().getScene().getWindow() instanceof final Stage stage) {
                 stage.getIcons().setAll(BrandMark.icons());
             }
-            // Without this the bar sorts the buttons itself, by what each one is for, and the
-            // order they were built in counts for nothing.
             orderAsBuilt(alert);
         });
     }

@@ -8,8 +8,7 @@ import java.util.Set;
  * that actually left the Inbox lands in exactly one of six outcome buckets: {@code reimportsDeleted},
  * {@code byteDupsDeleted}, {@code photosSorted}, {@code videosSorted}, {@code lowRes}, and
  * {@code unsorted}. The constructor rejects any instance whose {@code processed} count does not
- * equal those six added together, so a caller may read {@code processed} as that sum. Printing a
- * human-readable report from this record is a caller's job, not this type's.
+ * equal those six added together, so a caller may read {@code processed} as that sum.
  *
  * <p>The {@code yearsSorted} field is every distinct year a file actually landed in under Sorted
  * (Photos or Videos) this run. A {@link SortScope.Year} or {@link SortScope.OldestYear} scope
@@ -17,9 +16,9 @@ import java.util.Set;
  * Empty means nothing reached Sorted at all. This field is how a caller learns which year an
  * auto-resolved {@link SortScope.OldestYear} scope actually picked, since nothing else reports it.
  *
- * <p>{@code warnings} carries conditions worth a human's attention that stopped nothing: today,
- * only the pairing canary firing when Takeout sidecars were present but almost none of them paired
- * to a scanned media file. Empty means nothing tripped it.
+ * <p>{@code warnings} carries conditions worth a human's attention that stopped nothing. One is the
+ * pairing canary, which fires when Takeout sidecars were present and almost none of them paired to
+ * a scanned media file. Empty means nothing tripped one.
  *
  * <p>{@code cancelled} is the run's own account of whether it stopped short.
  *
@@ -104,8 +103,8 @@ public record SortSummary(
                     .formatted(processed, bucketed, reimportsDeleted, byteDupsDeleted, photosSorted, videosSorted,
                             lowRes, unsorted));
         }
-        // Two readings of one set: the names, and where each of them went. A caller that disagrees
-        // with itself would draw a card whose parts do not add up to the row above them.
+        // Two readings of one set: the names, and where each of them went. A record whose halves
+        // disagree has parts that do not add up.
         if (guessed.total() != lowConfidenceFiles.size()) {
             throw new IllegalArgumentException(("guessed must account for every low-confidence file: "
                     + "files=%d, guessed=%d (photosSorted=%d, videosSorted=%d, lowRes=%d)")

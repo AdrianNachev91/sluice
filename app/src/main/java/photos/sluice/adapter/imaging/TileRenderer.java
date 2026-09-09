@@ -45,6 +45,9 @@ import java.util.Set;
  * <p>Alongside the image, every render also decides whether the tile is fit to show a vision
  * model for a verdict. That decision rests on the resolution of the actual preview
  * recovered, not the file's own claimed capture resolution. See {@link TileResult}.
+ *
+ * <p>Flowcharts, the real-camera evidence and the scenario table:
+ * {@code app/docs/design/adapter/imaging/tile-renderer.md}.
  */
 @Component
 public class TileRenderer {
@@ -56,12 +59,10 @@ public class TileRenderer {
 
     private static final int MAX_EXIF_THUMBNAIL_BYTES = 20 * 1024 * 1024;
 
-    // Same constant LowResGate uses for "worth a close look" - reused, not duplicated, so the two
-    // never drift apart. It answers a related but distinct question here: not whether the original
-    // photo is low-res, but whether the specific preview we could actually recover is big enough to
-    // trust a vision judgment on. A RAW file's true capture can be high-res while its only
-    // recoverable preview is tiny (verified: a real Canon CR2's true resolution is 3504x2336, but
-    // its recoverable EXIF thumbnail is only 160x120).
+    // Reused rather than duplicated, so the two bars never drift apart. It answers a related but
+    // distinct question here: not whether the original photo is low-res, but whether the preview
+    // actually recovered is big enough to trust a vision judgment on. A RAW file's true capture can
+    // be high-res while its only recoverable preview is tiny.
     private static final int MIN_JUDGEABLE_DIMENSION = LowResGate.MIN_DIMENSION;
 
     private final HeifDecoder heifDecoder;
@@ -98,20 +99,19 @@ public class TileRenderer {
     public TileResult render(final Path file, final int tileSize) {
         final String extension = MediaTypeDetector.extensionOf(file);
         if (extension.equals("svg")) {
-            // A ".svg" file that isn't actually valid SVG happens in practice. A real file in this
-            // project's own library is a PNG mislabeled with an .svg extension. Falling back to
-            // the generic raster decode recovers a real tile for it instead of a placeholder.
-            // A vector image has no fixed source resolution to judge - Batik renders it at
-            // whatever size we ask for, so it's always reviewable when real.
+            // A ".svg" file that isn't actually valid SVG happens in practice, so falling back to
+            // the generic raster decode recovers a real tile instead of a placeholder. A vector
+            // image has no fixed source resolution to judge, since Batik renders it at whatever
+            // size it is asked for, so it is always reviewable when real.
             return renderSvg(file, tileSize)
                     .map(image -> new TileResult(image, false))
                     .or(() -> rasterResult(file, tileSize))
                     .orElseGet(() -> placeholderResult(tileSize, "SVG"));
         }
         if (extension.equals("heic") || extension.equals("heif") || extension.equals("avif")) {
-            // AVIF shares HEIC/HEIF's ISOBMFF container. It's decodable by the same libheif
-            // library, just with an AV1 payload instead of HEVC. Routed through the same port so a
-            // real libheif-backed adapter picks up AVIF for free, with no separate decoder needed.
+            // AVIF shares HEIC/HEIF's ISOBMFF container and the same libheif library, with an AV1
+            // payload instead of HEVC. Routed through the same port, so a libheif-backed adapter
+            // picks up AVIF with no separate decoder.
             return this.heifResult(file, tileSize)
                     .orElseGet(() -> placeholderResult(tileSize, extension.toUpperCase(Locale.ROOT)));
         }
@@ -121,12 +121,10 @@ public class TileRenderer {
     }
 
     /**
-     * The tag's value comes straight from the file's own bytes, not something this code controls.
-     * A corrupted or adversarial file reporting an enormous length must not trigger a huge
-     * allocation. A real EXIF thumbnail is always a small preview image. This cap is generous
-     * relative to any legitimate one - the real Canon CR2 fixture used here is 6162 bytes - while
-     * still ruling out a bogus multi-gigabyte value. Package-private (not private) so
-     * TileRendererTest can exercise the boundary directly.
+     * The tag's value comes straight from the file's own bytes, so a corrupted or adversarial file
+     * reporting an enormous length must not trigger a huge allocation. A real EXIF thumbnail is a
+     * small preview image, so the cap is generous against any legitimate one while still ruling out
+     * a bogus multi-gigabyte value. Package-private so a test can exercise the boundary directly.
      *
      * @param length int the claimed thumbnail byte length
      * @return boolean true if the length is a plausible thumbnail size
@@ -212,11 +210,9 @@ public class TileRenderer {
     }
 
     /**
-     * Thumbnailator's file-based decode (renderRaster above) doesn't expose the source image's
-     * pre-resize dimensions - it decodes and resizes in one step. This is a separate, lightweight
-     * header-only read (same technique ImageDimensionsReader uses), purely to answer "was the
-     * actual decoded source big enough to judge", without touching the already-tested decode path
-     * above or re-decoding the full image.
+     * Thumbnailator decodes and resizes in one step, so it never exposes the source image's
+     * pre-resize dimensions. This is a separate header-only read, purely to answer whether the
+     * decoded source was big enough to judge, without re-decoding the full image.
      *
      * @param file {@link Path} the file whose source resolution to check
      * @return boolean true if the source is too small to judge
@@ -233,14 +229,10 @@ public class TileRenderer {
             final ImageReader reader = readers.next();
             try {
                 reader.setInput(stream);
-                // Index 0 specifically, matching what renderRaster's own decode actually used -
-                // not the largest across every sub-image (a different question ImageDimensionsReader
-                // answers, about the file's true metadata resolution rather than what was decoded).
-                // Confirmed by reading Thumbnailator 0.4.21's own source
-                // (InputStreamImageSource.FIRST_IMAGE_INDEX = 0): its file-based decode always reads
-                // index 0, for any file type, never the largest or a format-specific choice. That's
-                // an internal implementation detail of a third-party library, not a documented
-                // contract - worth re-checking here if Thumbnailator is ever upgraded.
+                // Index 0 specifically, matching the sub-image renderRaster's own decode used,
+                // rather than the largest across every sub-image. That match rests on an internal
+                // Thumbnailator detail rather than a documented contract, so it is worth
+                // re-checking on an upgrade. The design doc names the test that guards it.
                 return Math.max(reader.getWidth(0), reader.getHeight(0)) < MIN_JUDGEABLE_DIMENSION;
             } finally {
                 reader.dispose();
@@ -254,14 +246,11 @@ public class TileRenderer {
 
     /**
      * Many RAW formats store their main pixel data in a compression scheme TwelveMonkeys' generic
-     * TIFF reader can't decode. Verified: a real Canon CR2's primary image fails with "Missing
-     * TIFF tag JPEGQTables". But the file still carries a standard EXIF embedded thumbnail. That
-     * thumbnail is a complete, independently-decodable JPEG blob per the EXIF spec, unlike the
-     * TIFF-compressed main image, extractable via its offset/length tags with no need to
-     * understand the RAW format at all. Verified empirically against two real cameras: an old
-     * Canon EOS 20D's recoverable thumbnail is a tiny 160x120 (below the judgeable bar), while a
-     * current Sony ILCE-6700's is a near-full-resolution 6192x4128 (well above it) - modern camera
-     * files are not assumed to have the same tiny-preview problem older ones do.
+     * TIFF reader cannot decode, and the file still carries a standard EXIF embedded thumbnail.
+     * That thumbnail is a complete, independently-decodable JPEG blob per the EXIF spec, unlike the
+     * TIFF-compressed main image, so it is extractable via its offset/length tags with no need to
+     * understand the RAW format at all. How big one is varies by camera era, which is why the
+     * result still goes through the judgeable-size check.
      *
      * @param file {@link Path} the RAW file to extract a thumbnail from
      * @param tileSize int the target tile size in pixels
@@ -314,12 +303,10 @@ public class TileRenderer {
      * @return an {@link Optional} {@link BufferedImage}, or empty if transcoding failed
      */
     private static Optional<BufferedImage> renderSvg(final Path file, final int tileSize) {
-        // Batik's own default canvas is a fixed 400x400 square, regardless of the document's real
-        // aspect ratio, whenever width/height transcoding hints aren't given. Verified directly
-        // against a real viewBox-only fixture - a common, valid SVG authoring style that omits
-        // width/height in favor of viewBox alone. That fixture came out visibly stretched to
-        // square before this fix. Parsing the real aspect ratio ourselves and passing explicit
-        // hints for both dimensions is the only way to get Batik to honor it.
+        // Batik's own default canvas is a fixed 400x400 square, whatever the document's real aspect
+        // ratio, whenever width/height transcoding hints are not given. Parsing the aspect ratio
+        // here and passing explicit hints for both dimensions is the only way to get Batik to
+        // honor it.
         final double aspect = svgAspectRatio(file);
         final float renderSize = tileSize * 2f;
         final var transcoder = new BufferedImageTranscoder();
@@ -356,16 +343,14 @@ public class TileRenderer {
      */
     private static double svgAspectRatio(final Path file) {
         try {
-            // Many real-world SVGs (Illustrator exports especially) carry the standard SVG 1.1
-            // public DOCTYPE prolog. Blocking DOCTYPE outright would silently lose the
-            // aspect-ratio fix for those legitimate files too. Blocking external entities and DTD
-            // fetching instead - the actual XXE vector - keeps a normal DOCTYPE parseable while
-            // staying safe against arbitrary user-supplied SVG content. This is the standard OWASP
-            // XXE-prevention posture for when DOCTYPE itself can't just be disallowed.
+            // Many real-world SVGs carry the standard SVG 1.1 public DOCTYPE prolog, so blocking
+            // DOCTYPE outright would lose the aspect-ratio fix for legitimate files. Blocking
+            // external entities and DTD fetching instead is the actual XXE vector, and the standard
+            // OWASP posture for when DOCTYPE itself cannot be disallowed.
             final var factory = DocumentBuilderFactory.newInstance();
             factory.setNamespaceAware(true);
             // These are fixed SAX/JAXP feature-name strings defined by spec, never dereferenced
-            // over the network - not real links, so there's no https variant to switch to.
+            // over the network. Not real links, so there is no https variant to switch to.
             //noinspection HttpUrlsUsage
             factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
             //noinspection HttpUrlsUsage
@@ -376,11 +361,10 @@ public class TileRenderer {
             factory.setXIncludeAware(false);
             factory.setExpandEntityReferences(false);
             final var builder = factory.newDocumentBuilder();
-            // A raster file mislabeled with an .svg extension fails XML parsing. That's an
-            // expected, already-handled outcome here - it falls through to the 1.0 default. The
-            // parser's default handler still logs fatal errors to stderr regardless, even though
-            // the exception itself is caught, so a no-op handler silences that noise. (Passing
-            // null instead of a no-op instance would just restore the noisy default handler.)
+            // An unparseable file is an expected outcome here, falling through to the 1.0 default.
+            // The parser's default handler still logs fatal errors to stderr even though the
+            // exception is caught, so a no-op handler silences that noise. Passing null instead
+            // would restore the noisy default handler.
             builder.setErrorHandler(new org.xml.sax.helpers.DefaultHandler());
             final var root = builder.parse(file.toFile()).getDocumentElement();
             final double[] viewBox = parseViewBox(root.getAttribute("viewBox"));
@@ -459,9 +443,9 @@ public class TileRenderer {
     }
 
     /**
-     * Draws a stand-in tile for a file that couldn't be decoded: a solid dark gray square with
-     * the label centered in bold white. Distinct from the montage's own background, so it reads
-     * clearly as "no preview".
+     * Draws a stand-in tile for a file that could not be decoded: a solid dark gray square with the
+     * label centered in bold white. Distinct from the montage's own background, so a placeholder
+     * that reaches a grid still reads as "no preview" rather than blending in.
      *
      * @param tileSize int the placeholder's size in pixels
      * @param label {@link String} the label to draw
@@ -488,11 +472,10 @@ public class TileRenderer {
     }
 
     /**
-     * Captures Batik's rendered raster directly in memory. Batik's {@code Transcoder} API writes
-     * to a {@link TranscoderOutput} (a stream). There is no built-in way to get a
-     * {@link BufferedImage} back directly, so this override captures the raster itself instead.
-     * This is the standard idiom for using Batik as an in-process SVG decoder rather than a
-     * file-to-file tool.
+     * Captures Batik's rendered raster directly in memory. Batik's {@code Transcoder} API writes to
+     * a {@link TranscoderOutput} stream with no built-in way to get a {@link BufferedImage} back,
+     * so this override captures the raster itself. The standard idiom for using Batik as an
+     * in-process SVG decoder rather than a file-to-file tool.
      */
     private static final class BufferedImageTranscoder extends ImageTranscoder {
 

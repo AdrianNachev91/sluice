@@ -3,8 +3,8 @@ package photos.sluice.application.port.in;
 /**
  * Thrown when something is refused because a job is already running.
  *
- * <p>Two callers throw it. A settings save that moves a folder root is refused. A sort that starts
- * against one library and finishes against another has filed half its photos in the wrong place.
+ * <p>A settings save that moves a folder root is refused. A sort that starts against one library
+ * and finishes against another has filed half its photos in the wrong place.
  * Nothing about the run would say so. A second job is refused outright, since one job at a time is
  * what keeps two engines off the same tree.
  *

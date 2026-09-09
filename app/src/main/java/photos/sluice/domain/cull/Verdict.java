@@ -6,9 +6,8 @@ import java.nio.file.Path;
  * What the vision step said about one photo on one sheet. Either a {@link Keep}, or one of the
  * {@link Decision} shapes that route the photo somewhere else.
  *
- * <p>A shard carries one of these per photo the sheet showed. {@link ShardValidator} enforces that
- * and hands the apply side a list of {@link Decision} with the keeps already gone. Nothing
- * downstream has to be written to cope with a keep.
+ * <p>A shard carries one of these per photo the sheet showed. {@link ShardValidator} enforces that,
+ * and is also where the keeps stop.
  */
 public sealed interface Verdict permits Verdict.Keep, Decision {
 

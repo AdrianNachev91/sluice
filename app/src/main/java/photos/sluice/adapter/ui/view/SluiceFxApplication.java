@@ -29,8 +29,7 @@ import java.util.function.BooleanSupplier;
  *
  * <p>JavaFX starts first and Spring is built inside {@code init()}, which runs before any window
  * exists but after the toolkit is up. That ordering is what gives a startup failure somewhere to be
- * reported. The other way round, a context that refuses to start has no window to say so in, and
- * the app simply never appears.
+ * reported.
  *
  * <p>A failure here is held rather than rethrown, so {@code start()} can show it. Anything thrown
  * out of {@code init()} takes the toolkit down with it.
@@ -85,10 +84,9 @@ public class SluiceFxApplication extends Application {
      * Winds the app down, then closes the Spring context. Called by JavaFX as the last window
      * closes, and the ordinary way a run ends.
      *
-     * <p>What winding down means is {@link StartupSequence#shutdown}'s to say, and it is the
-     * mirror of what that class does at boot. This method's own contribution is the ordering
-     * against the context: the context closes last, because a job still finishing is running
-     * against beans inside it.
+     * <p>What winding down means is {@link StartupSequence#shutdown}'s to say. This method decides
+     * only the ordering against the context: the context closes last, because a job still finishing
+     * is running against beans inside it.
      *
      * <p>It closes even when winding down fails, so one stuck step cannot leave a whole context
      * running behind a window that is gone.
@@ -110,9 +108,8 @@ public class SluiceFxApplication extends Application {
      * <p>Here rather than in {@link #stop}, which the toolkit calls once the last window has already
      * gone. A question needs a window to appear in, and by then there is none.
      *
-     * <p>Every way out of the app arrives here. The close button, the platform's own quit key and
-     * the window manager all raise this one request. So there is one place the question is put, and
-     * one wind-down behind it.
+     * <p>The close button, the platform's own quit key and the window manager all raise this one
+     * request, so there is one place the question is put and one wind-down behind it.
      *
      * @param stage {@link Stage} the window being closed
      * @param quitting {@link QuitFlow} puts the questions and carries out the answers
@@ -127,9 +124,8 @@ public class SluiceFxApplication extends Application {
 
     /**
      * Builds the Spring context and runs the startup sequence against it, recording whatever
-     * stopped either one rather than letting it escape. Shared by {@code init()}'s own first
-     * attempt and a config repair's retry. Both have to redo the whole thing, since a context that
-     * failed to build the first time never left anything behind to retry against.
+     * stopped either one rather than letting it escape. Redoes the whole thing every time, since a
+     * context that failed to build leaves nothing behind to retry against.
      */
     private void buildContextAndRun() {
         try {
@@ -202,9 +198,9 @@ public class SluiceFxApplication extends Application {
     /**
      * Puts the saved look in force when there is a context to read it from.
      *
-     * <p>Silent when there is none, and that is the honest answer rather than a fallback. A context
-     * that never started has not read the user's config file. No saved choice exists to honour, so
-     * the desktop's own scheme is all there is.
+     * <p>Silent when there is none, rather than falling back to a guess. A context that never
+     * started has not read the user's config file, so no saved choice exists to honour and the
+     * desktop's own scheme is all there is.
      */
     private void applySavedThemeIfSettingsAreReadable() {
         final ConfigurableApplicationContext built = this.context;

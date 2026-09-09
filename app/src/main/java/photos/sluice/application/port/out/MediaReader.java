@@ -12,9 +12,9 @@ import java.util.Optional;
  * moves, copies, writes, or deletes anything.
  *
  * <p>{@link MediaStore} extends this with the mutating half. A collaborator that only ever needs to
- * look at the filesystem takes this type instead. A mutation is then not merely discouraged there
- * but unavailable: the method does not exist on the type it holds. That makes a read-only guarantee
- * a compile-time property rather than a documented intention.
+ * look at the filesystem takes this type instead, where a mutation is not merely discouraged but
+ * unavailable: the method does not exist on the type it holds. That makes the read-only guarantee a
+ * compile-time property rather than a documented intention.
  */
 public interface MediaReader {
 
@@ -59,8 +59,8 @@ public interface MediaReader {
 
     /**
      * Every immediate subdirectory of root, non-recursive, as absolute paths. Order is unspecified.
-     * A file sitting directly in root, rather than in one of its subdirectories, is not named here.
-     * Only directories are. root itself must exist.
+     * A file sitting directly in root is not named here, only directories are. root itself must
+     * exist.
      *
      * <p>Deliberately shallow, unlike {@link #listFiles}.
      *
@@ -70,8 +70,7 @@ public interface MediaReader {
     List<Path> listChildDirectories(Path root);
 
     /**
-     * When path was last modified. Used where a directory's own age is the signal, e.g. a waiting
-     * cull job's prep dir. A media file's capture date comes from DateSource instead.
+     * When path was last modified. A media file's capture date comes from DateSource instead.
      *
      * @param path {@link Path} the file or directory to check
      * @return {@link Instant} the last-modified instant
@@ -141,9 +140,8 @@ public interface MediaReader {
     long size(Path path);
 
     /**
-     * Every line of file, in order, or empty if file does not exist. This is the read-side
-     * counterpart to {@link MediaStore#appendLine}, for resuming from a crash-safety log written
-     * one line per completed step.
+     * Every line of file, in order, or empty if file does not exist. The read-side counterpart to
+     * {@link MediaStore#appendLine}.
      *
      * <p>Text is UTF-8. A file whose bytes are not valid UTF-8 must throw an
      * {@link UncheckedIOException} caused by a {@link CharacterCodingException}, never silently
@@ -159,10 +157,9 @@ public interface MediaReader {
     /**
      * Whether a {@link #readLines} failure has to be rethrown rather than degraded around.
      *
-     * <p>The two kinds are worth separating and easy to confuse. Damaged content means the bytes
-     * are not text, which a caller can answer by carrying on without whatever the file held. Every
-     * other failure means the file was not read at all, and treating that as an empty file says the
-     * content is absent when nobody looked.
+     * <p>Damaged content means the bytes are not text, which a caller can answer by carrying on
+     * without whatever the file held. Every other failure means the file was not read at all, and
+     * treating that as an empty file says the content is absent when nobody looked.
      *
      * @param failure {@link UncheckedIOException} what readLines threw
      * @return boolean true unless the file was reached and its bytes turned out not to be text

@@ -38,7 +38,7 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
-// The Phase 11 apply parity gate. It runs the reference apply-cull.ps1 and ApplyEngine on two
+// The apply parity gate. It runs the reference apply-cull.ps1 and ApplyEngine on two
 // identical, path-rewritten copies of the same real, completed-but-not-yet-applied sift-prep
 // directory (every montage's decisions-NNN.json shard present, nothing applied yet). It then
 // asserts MoveDiffer sees no difference in the resulting Review/Duplicates/Library trees, and that

@@ -35,6 +35,10 @@ import java.util.Map;
  *
  * <p>Nothing here is flushed to the device. What this closes is a process that stops mid-write, not
  * a machine that loses power.
+ *
+ * <p>On Linux and macOS the config file ends up with the temporary file's permissions rather than
+ * the umask's. {@link Files#createTempFile} restricts a new file to its owner, and the rename
+ * carries that mode onto the config, so a file that read 644 reads 600 after the first write here.
  */
 class YamlConfigFile {
 
@@ -93,10 +97,10 @@ class YamlConfigFile {
      * is taken first.
      *
      * <p>Removing the temporary file is attempted however the write went, a finished write whose
-     * rename then failed included. Both halves of what it holds outlive the failure. The document
-     * came from the caller, and the file it was built from is still on disk untouched. So the same
-     * write runs again and builds the same document. Keeping it deliberately would leave a file in
-     * a folder the user opens by hand, named closely enough to the config to be mistaken for it.
+     * rename then failed included. Nothing is lost with it: the document came from the caller and
+     * the file it was built from is untouched, so the same write runs again and builds the same
+     * document. Keeping it deliberately would leave a file in a folder the user opens by hand,
+     * named closely enough to the config to be mistaken for it.
      *
      * <p>A process killed between the two steps leaves one behind that no cleanup could have run
      * for, and unique names mean those accumulate rather than being reused. Sweeping them at the

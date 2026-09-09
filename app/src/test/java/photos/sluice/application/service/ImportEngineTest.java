@@ -221,11 +221,9 @@ class ImportEngineTest {
             assertThat(card.resolve("holiday.jpg")).doesNotExist();
         }
 
-        // Pins the resolution rather than what it prevents. A walked file is spelled the way its
-        // real root spells it, so a file named on its own has to be resolved to be comparable. The
-        // spellings that differ are a Windows short name and a link, and no temp directory produces
-        // either on every platform this ships to. Left unresolved, the de-duplication silently
-        // stops working wherever they do differ, which is how Windows CI found it.
+        // Pins the resolution rather than what it prevents. The spellings that actually differ are
+        // a Windows short name and a link, and no temp directory produces either on every platform
+        // this ships to. So a fixture cannot make the de-duplication fail here.
         @Test
         void resolvesAFileNamedOnItsOwnBeforeComparingItWithAWalkedOne(@TempDir final Path card,
                                                                         @TempDir final Path root) {
@@ -432,8 +430,8 @@ class ImportEngineTest {
         };
     }
 
-    // Matched on the file name. Every source is resolved before it is copied. A path built here is
-    // not equal to the one the engine holds wherever the two spell it differently.
+    // Matched on the file name, since a path built here is not equal to the one the engine holds
+    // wherever the two spell it differently.
     private static MediaStore refusingToCopy(final String unreadable) {
         return new NioMediaStore() {
             @Override

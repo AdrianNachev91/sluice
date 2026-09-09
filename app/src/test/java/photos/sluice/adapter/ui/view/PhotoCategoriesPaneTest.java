@@ -40,7 +40,7 @@ import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.reportText;
 
-// What only a built scene graph can be wrong about: which controls a card draws, what Delete and
+// What only a built scene graph can be wrong about. Which controls a card draws, what Delete and
 // Add do to the page, and what a refusal marks. What a save decides is PhotoCategoriesPresenterTest's.
 class PhotoCategoriesPaneTest {
 
@@ -263,7 +263,7 @@ class PhotoCategoriesPaneTest {
 
     // Delete has to keep pointing at its own card once the page has been edited under it, which is
     // exactly what a captured position would stop doing. Three cards, and the last one deleted
-    // after the first has gone: its position has moved from 2 to 1, so a captured 2 removes nothing
+    // after the first has gone. Its position has moved from 2 to 1. A captured 2 removes nothing,
     // and a captured index into the list removes the wrong card.
     @Test
     void deletingAfterAnEarlierCardHasGoneTakesTheCardTheButtonBelongsTo() throws Exception {
@@ -420,8 +420,8 @@ class PhotoCategoriesPaneTest {
 
     private static PhotoCategoriesPane.Mounted mounted(final RecordingSettings store,
                                                        final Runnable onBack) {
-        // The whole page rather than the scrolling half, so a lookup reaches the header that now
-        // sits outside it as well as the cards inside.
+        // The whole page rather than the scrolling half, so a lookup reaches the header outside it
+        // as well as the cards inside.
         final PhotoCategoriesPane.Mounted built =
                 PhotoCategoriesPane.pane(new PhotoCategoriesPresenter(store), onBack);
         final var page = (Parent) built.node();
@@ -444,8 +444,8 @@ class PhotoCategoriesPaneTest {
                 CullCategory.of("funny", "Worth a laugh later"));
     }
 
-    // Three cards none of which is the built-in one, so every one of them has a Delete and the
-    // list can shift under a button without the undeletable card standing in for the rule.
+    // Three cards, none of them the built-in one. So every one has a Delete, and the list can shift
+    // under a button without the undeletable card standing in for the rule.
     private static RecordingSettings threeOrdinaryCards() {
         return new RecordingSettings(
                 CullCategory.of("blurry", "Not worth keeping"),

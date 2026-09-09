@@ -44,9 +44,7 @@ final class PhotoCategoriesPane {
     static Mounted pane(final PhotoCategoriesPresenter presenter, final Runnable onBack) {
         final var container = new VBox();
         container.getStyleClass().add("settings-pane");
-        // The header sits outside what scrolls, so the way back and Save both stay reachable from
-        // anywhere on a page that is taller than the window. It also survives a save, which rebuilds
-        // the body.
+        // The header survives a save, which rebuilds the body under it.
         final PageHeader.Result header =
                 PageHeader.build("Photo categories", "photo-categories-save", backButton(onBack));
         // Replaced on every draw, since a save rebuilds every card. Whatever asks about unsaved work

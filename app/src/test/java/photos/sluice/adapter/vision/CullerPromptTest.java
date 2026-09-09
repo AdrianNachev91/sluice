@@ -58,8 +58,8 @@ class CullerPromptTest {
                 .contains("### `food`\n\nMeals.\n\n\nExamples:\n- plates");
     }
 
-    // The two are adjacent in the rendered template, so a card offering examples must not run into
-    // the next card's heading, and one offering none must not leave a gap where the list would be.
+    // Cards render adjacent, so the exact whitespace is the assertion: no gap where the absent
+    // examples list would have been.
     @Test
     void aCardWithNoExamplesRendersExactlyWhatItDidBeforeTheFieldExisted() {
         final String prompt = cullerPrompt().systemPrompt(CARDS);
@@ -145,8 +145,8 @@ class CullerPromptTest {
                 """);
     }
 
-    // The settings this builds on supply the grid alone. Their empty card list is deliberate: a
-    // prompt renders from the cards it is handed, so nothing here can quietly come from config.
+    // The empty card list is deliberate. A prompt renders from the cards it is handed, so nothing
+    // here can quietly come from config.
     private static CullerPrompt cullerPrompt() {
         return new CullerPrompt(new FixedSettings("anthropic", List.of(), new MontageConfig(224, 7)));
     }

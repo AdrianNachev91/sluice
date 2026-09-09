@@ -40,9 +40,6 @@ public final class TakeoutSidecarPairer {
 
     /**
      * The outcome of one {@link TakeoutSidecarPairer#pair} call.
-     *
-     * <p>{@code takeoutMode} is true if any sidecar JSON was found at all. {@code sidecarsByMedia}
-     * holds the sidecar path resolved for each media path that got one.
      */
     public record PairingResult(boolean takeoutMode, Map<Path, Path> sidecarsByMedia) {
         /**
@@ -67,11 +64,8 @@ public final class TakeoutSidecarPairer {
     public PairingResult pair(final List<Path> mediaPaths, final List<Path> jsonPaths) {
         final boolean takeoutMode = !jsonPaths.isEmpty();
 
-        // Two passes: first index every sidecar in a directory by the media filename it
-        // describes (built once, independent of how many media files there are), then look each
-        // media file up against that index. This keeps pairing O(sidecars + media) instead of
-        // O(sidecars x media), and lets every media file share the same per-directory index
-        // rather than re-deriving owner keys per lookup.
+        // Indexing the sidecars once per directory, rather than deriving owner keys per lookup,
+        // keeps pairing O(sidecars + media) instead of O(sidecars x media).
         final Map<Path, List<Path>> jsonsByDir = jsonPaths.stream()
                 .collect(Collectors.groupingBy(TakeoutSidecarPairer::directoryKeyOf, LinkedHashMap::new,
                         Collectors.toList()));
@@ -93,8 +87,6 @@ public final class TakeoutSidecarPairer {
         for (final Path media : mediaPaths) {
             final Path dir = directoryKeyOf(media);
             final String fileName = media.getFileName().toString();
-            // Try the fast exact index lookup first; only fall back to scanning every sidecar in
-            // the directory by prefix when the index has no entry for this filename at all.
             Path matched = matchByOwnerKey(ownersByDir.get(dir), fileName);
             if (matched == null) {
                 matched = prefixFallback(jsonsByDir.get(dir), fileName);
@@ -109,7 +101,6 @@ public final class TakeoutSidecarPairer {
     /**
      * A root-level path has no parent to scope pairing by; fall back to the path itself so it
      * groups with nothing rather than throwing (Collectors.groupingBy rejects a null key).
-     * Package-visible: SidecarSweep reuses this to scope its own orphan check per directory.
      *
      * @param path {@link Path} the path to derive a directory scope key from
      * @return {@link Path} the parent directory, or the path itself if it has none
@@ -121,9 +112,8 @@ public final class TakeoutSidecarPairer {
 
     /**
      * Derives the media filename a sidecar describes from its base name (json extension already
-     * stripped). Public: SidecarSweep reuses this so the sweep's "which media does this sidecar
-     * belong to" derivation never drifts from the pairer's, and a test reuses it too, for the same
-     * reason - a hand-duplicated copy already drifted out of sync once.
+     * stripped). This is the one derivation of that relationship, and anything else needing it
+     * calls here rather than duplicating the rules.
      *
      * @param json {@link Path} the sidecar JSON path
      * @return {@link String} the owner key identifying the media file it describes
@@ -147,12 +137,10 @@ public final class TakeoutSidecarPairer {
      *
      * <p>The extension is looked for anywhere in the owner key rather than only at its end. A
      * sidecar carrying a non-standard suffix keeps its media extension in the middle
-     * ({@code IMG_1234.jpg.someextra}), and that is a real sidecar the sweep is meant to reach.
+     * ({@code IMG_1234.jpg.someextra}), and that is a real sidecar.
      *
-     * <p>The distinction matters because the orphan sweep deletes what it decides is a spent
-     * sidecar. An export manifest or an unrelated app's JSON must never enter that decision at all.
-     * A truncated name cut back past its media extension fails this check too, and is left on disk.
-     * That is the safe direction: the cost is a stale sidecar, not a deleted file.
+     * <p>A truncated name cut back past its media extension answers false, since the extension is
+     * the only thing this check reads.
      *
      * @param json {@link Path} the JSON file to inspect
      * @return boolean true if the owner key it derives names a recognized media file
@@ -213,7 +201,7 @@ public final class TakeoutSidecarPairer {
      * genuinely differs from its media's. Among several, the one whose raw owner key matches the
      * queried filename exactly wins, which is what tells two distinct case-variant media files
      * apart. Genuine ambiguity - several candidates, none matching exactly - returns null rather
-     * than guessing, so the caller's prefix fallback gets a chance to resolve it instead.
+     * than guessing.
      *
      * @param candidates a {@link List} of {@link Path} sidecars sharing one lowercased owner key, or null if none
      * @param queriedFileName {@link String} the exact filename being looked up (media name or its edited-stripped
@@ -236,11 +224,9 @@ public final class TakeoutSidecarPairer {
     }
 
     /**
-     * Fallback for when no owner key matches exactly: prefix-match the dir's sidecar base names
-     * against the media name's candidate prefixes (plain name, then dup/edited variants), in
-     * priority order, taking the first prefix with any hit and the shortest-matching sidecar
-     * among that prefix's hits - covers non-standard sidecar naming the owner-key derivation
-     * above doesn't land on exactly.
+     * Fallback for when no owner key matches exactly, covering non-standard sidecar naming the
+     * derivation above does not land on. Candidate prefixes are tried in priority order, and the
+     * first one with any hit wins.
      *
      * @param dirSidecars a {@link List} of {@link Path} sidecar paths in the media's directory
      * @param mediaFileName {@link String} the media file's own filename
@@ -260,10 +246,9 @@ public final class TakeoutSidecarPairer {
     }
 
     /**
-     * Same candidate identities as matchByOwnerKey (plain name, then edited-stripped), but each
-     * also gets its dup-numbering-reversed form here: owner keys built by ownerKeyOf are already
-     * normalized to this form, but a sidecar's base name on disk is not, so a prefix scan against
-     * raw base names needs the reversal applied to the search term instead.
+     * The same candidate identities matchByOwnerKey uses, each also in its dup-numbering-reversed
+     * form. ownerKeyOf normalizes a key to that form, but a sidecar's base name on disk keeps the
+     * raw one. So a prefix scan applies the reversal to the search term instead.
      *
      * @param mediaFileName {@link String} the media file's own filename
      * @return a {@link List} of {@link String} the candidate prefixes to try against sidecar base names, in priority
@@ -296,9 +281,9 @@ public final class TakeoutSidecarPairer {
     }
 
     /**
-     * Among sidecars whose base name starts with this prefix, the shortest is the closest match
-     * to the prefix itself - a longer one is more likely to be an unrelated sidecar that merely
-     * happens to share the same leading characters. An exact-case match is preferred over a
+     * Among sidecars whose base name starts with this prefix, the shortest is the closest match to
+     * the prefix itself. A longer one is more likely to be an unrelated sidecar that merely happens
+     * to share the same leading characters. An exact-case match is preferred over a
      * case-folded one, so two sidecars for case-variant media in one directory each reach their
      * own. Case-folded matching still runs when nothing matches exactly, which is what keeps the
      * existing tolerance for a sidecar whose own casing differs from its media's.

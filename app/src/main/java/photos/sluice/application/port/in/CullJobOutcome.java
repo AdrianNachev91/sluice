@@ -15,11 +15,9 @@ import java.util.List;
  * <p>{@link Applied} means a complete (or allowPartial-waived) shard set came back, and apply ran
  * to completion during this call.
  *
- * <p>{@link Waiting} and {@link Blocked} are the two non-terminal states, and they differ by whose
- * move comes next. Waiting means shards are still missing, so somebody else has work to do. The
- * external agent is still culling, or an automated run stopped part way. Blocked means every
- * montage has a shard and apply's validation refused anyway. Nothing further is coming on its own,
- * so the next move is the user's: troubleshoot, or repair by hand and resume.
+ * <p>{@link Waiting} and {@link Blocked} are the non-terminal states, and they differ by whose move
+ * comes next rather than by severity. Which run reaches which, and what each leaves to do:
+ * {@code app/docs/design/application/service/cull-engine.md}.
  *
  * <p>{@link Cancelled} is the one case with nothing to resume. The run stopped before montage
  * rendering finished, so no prep dir exists yet to derive a {@link WaitingCullJob} from.
@@ -33,14 +31,11 @@ import java.util.List;
  * can end, cancellation included, is reachable with the archive already done.
  *
  * <p>Whether to report it is each surface's own decision rather than something this type asks for.
- * The command line names the folder, having no other way to show one. The desktop deliberately says
- * nothing about it: housekeeping that succeeded is not news, nothing was lost, and the folder is
- * one the reader never chose.
  *
  * <p>Every case carries {@code cullReport} for the same reason, one axis over. Three of the four
  * are reachable after the vision pass has already called a model, so a spend attaches to them.
- * {@link Cancelled} is reached only before anything is dispatched, so its report is a zero one.
- * It answers the question rather than being excused from it.
+ * {@link Cancelled} is reached only before anything is dispatched, so its report is a zero one
+ * rather than an absent one.
  */
 public sealed interface CullJobOutcome {
 
@@ -65,8 +60,7 @@ public sealed interface CullJobOutcome {
      *
      * <p>{@code cullReport} covers the call that ended the run, and {@code tokensAcrossEveryLeg}
      * covers the run. A sift stopped at its spending limit and then continued is billed once per
-     * call. A continue that finds every sheet already judged is billed nothing at all. So the
-     * report alone answers what the last call cost rather than what the run cost.
+     * call, and a continue that finds every sheet already judged is billed nothing at all.
      *
      * @param cullReport {@link CullReport} what the vision pass decided
      * @param applyReport {@link ApplyReport} what applying those decisions actually did
@@ -111,9 +105,8 @@ public sealed interface CullJobOutcome {
     /**
      * A cull run whose shard set is complete but whose apply refused to carry it out.
      *
-     * <p>The findings are the same typed list {@code ApplyException} carries. A run card, a
-     * troubleshoot screen and the CLI shim all render from this one source rather than from parsed
-     * message text.
+     * <p>The findings are the same typed list {@code ApplyException} carries, so a surface renders
+     * from them rather than from parsed message text.
      *
      * @param job {@link WaitingCullJob} the blocked job's own scope, prep dir and shard tally
      * @param findings a {@link List} of {@link Finding} every problem apply's validation refused on

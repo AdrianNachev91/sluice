@@ -44,8 +44,6 @@ class QuitFlowTest {
         FxToolkit.cleanupStages();
     }
 
-    // Typed work is gone the moment the window is, and a run can still be kept. So a reader who
-    // stays with what they typed is never asked about the run, and nothing winds down behind them.
     @Test
     void stayingWithTypedWorkIsNeverAskedAboutTheRun() throws Exception {
         this.leavingLosesWork.set(() -> true);
@@ -75,7 +73,6 @@ class QuitFlowTest {
         verify(this.presenter, never()).stopAndWait();
     }
 
-    // Nothing typed, so the only question is the one about the run.
     @Test
     void aScreenHoldingNothingGoesStraightToTheQuestionAboutTheRun() throws Exception {
         when(this.presenter.quitDialog()).thenReturn(aRunningJob());

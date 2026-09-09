@@ -88,8 +88,8 @@ class SettingsPaneTest {
     }
 
     // A save rebuilds every card, so the question has to reach the controls that draw put up. The
-    // edit has to come after the save: the fields the save replaced hold exactly what it stored, so
-    // reading those instead would agree with disk and report nothing to lose either way.
+    // edit has to come after the save. The fields the save replaced hold exactly what it stored, so
+    // reading those would agree with disk and report nothing to lose.
     @Test
     void anEditAfterASaveIsStillSomethingToLose() throws Exception {
         final SettingsPane.Mounted screen =
@@ -118,10 +118,6 @@ class SettingsPaneTest {
         assertThat(onFxThread(() -> screen.hasUnsavedEdits().getAsBoolean())).isFalse();
     }
 
-    // A save that would move the library root raises a dialog, and only after it is answered does
-    // the move actually run. Each of the three exercises one real branch inside
-    // resolveLibraryRootMove: the copy resolution, the fresh-index resolution, and Cancel's early
-    // return before anything runs.
     @Test
     void choosingCopyRunsTheCopyMoveAndShowsItsOwnOutcome() throws Exception {
         final var jobRunner = new JobRunner();
@@ -167,8 +163,7 @@ class SettingsPaneTest {
 
     // onSave returning after Cancel proves nothing on its own. The library use case runs on its own
     // virtual thread, so a check made the moment the button handler returns can beat it there.
-    // Proving the negative needs a bounded wait instead, the same shape a latch's own timed await
-    // gives when there is no latch to ask.
+    // Proving the negative needs a bounded wait instead.
     @Test
     void cancellingTheMoveDialogRunsNoMoveAtAll() throws Exception {
         final var jobRunner = new JobRunner();
@@ -192,10 +187,8 @@ class SettingsPaneTest {
         assertThat(onFxThread(() -> pane.lookup("#settings-report-banner"))).isNull();
     }
 
-    // Not the failure handler. SettingsPresenter.moveLibraryRoot catches every RuntimeException a
-    // move can throw and answers a failed MoveOutcome instead, so task.call() has no path left that
-    // reaches task.setOnFailed through this presenter. This is the succeeded()-but-failed branch of
-    // setOnSucceeded instead: the move ran, and what it ran into is the outcome, not a thrown one.
+    // Not the failure handler, but the succeeded()-but-failed branch: the move ran, and what it ran
+    // into is the outcome rather than a thrown exception.
     @Test
     void aFailedMoveIsReportedAsARefusalRatherThanAConfirmation() throws Exception {
         final var jobRunner = new JobRunner();
@@ -213,8 +206,7 @@ class SettingsPaneTest {
         assertThat(reportIsARefusal(pane)).isTrue();
     }
 
-    // Types a library root other than the one in force, which is the only thing that raises the
-    // question this dialog exists to ask, then presses Save.
+    // A library root other than the one in force is the only thing that raises the dialog.
     private static void saveMovingTheLibraryRoot(final Parent pane) {
         ((TextField) pane.lookup("#settings-library-root")).setText("D:\\moved-library");
         ((Button) pane.lookup("#settings-save-button")).fire();
@@ -225,16 +217,12 @@ class SettingsPaneTest {
         return ((TextArea) banner.getChildren().getFirst()).getText();
     }
 
-    // The presenter pair this screen reads and writes through.
     private record Presenters(SettingsPresenter settings, VisionProviderPresenter vision) {
     }
 
-    // Its own settings use case rather than a shared fixture: this is the one save that must ask for
-    // a resolution rather than succeed or refuse.
-    //
-    // It refuses while the library root being saved differs from the one in force, which is the real
-    // seam's own rule. A double that refused every save would also refuse the save the presenter
-    // makes after the move, and that save is what keeps the rest of what the user was storing.
+    // Refuses only while the library root being saved differs from the one in force, which is the
+    // real seam's own rule. A double that refused every save would also refuse the one the presenter
+    // makes after the move. That save keeps the rest of what the user was storing.
     private static Presenters presenterNeedingLibraryRootResolution(final LibraryRootUseCase libraryRoot) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),

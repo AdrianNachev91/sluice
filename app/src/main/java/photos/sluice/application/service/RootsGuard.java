@@ -7,7 +7,7 @@ import photos.sluice.domain.paths.PathViolation;
 import java.util.List;
 
 /**
- * Refuses work whose folder roots are not usable: unset, missing, or sitting inside each other.
+ * Refuses work whose folder roots are not usable, in any of the ways {@link PathViolation} names.
  *
  * <p>A class of its own rather than a method on {@link Pipeline}, because a watcher's auto-resume
  * needs the same refusal without passing the facade at all.
@@ -28,7 +28,8 @@ final class RootsGuard {
     /**
      * Checks the roots in force and refuses if any is unusable.
      *
-     * @throws PathsMisconfiguredException if any of the three roots is unset, missing, or overlapping
+     * @throws PathsMisconfiguredException if any of the three roots is unset, unparsable, missing,
+     *     unreadable, or overlapping another
      */
     void requireUsable() {
         final List<PathViolation> violations = this.pathValidation.violationsInForce();

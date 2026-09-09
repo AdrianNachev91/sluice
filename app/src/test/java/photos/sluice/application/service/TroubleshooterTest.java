@@ -23,9 +23,6 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static photos.sluice.application.service.CullPrepTestSupport.fixedCategories;
 
-// Fixture-writing helpers below mirror ApplyPlannerTest's and PrepDirDoctorTest's own.
-// Troubleshooter reuses both PrepDirDoctor.diagnose() and ReconcileEngine.reconcile() internally,
-// so the same shard/sidecar/index fixtures apply.
 class TroubleshooterTest {
 
     @Test
@@ -105,8 +102,7 @@ class TroubleshooterTest {
 
     @Test
     void aCorruptIndexThatCannotBeRebuiltStaysBlockedWithIndexRebuiltFalse(@TempDir final Path root) throws IOException, ApplyException {
-        // The sole sidecar is itself unparseable - the rebuild guard has no ground truth to work
-        // from, so it must refuse rather than write a silently-empty index.
+        // The sole sidecar is unparseable too, so the rebuild has nothing to read a fresh index off.
         final Path prepDir = prepDir(root);
         Files.writeString(prepDir.resolve("montage-001.json"), "not valid json");
         Files.writeString(prepDir.resolve("index.json"), "not valid json");
@@ -121,10 +117,8 @@ class TroubleshooterTest {
     @Test
     void aStrayShardWithNoMontageActuallyUnclaimedIsLeftUnchanged(@TempDir final Path root) throws IOException,
             ApplyException {
-        // index.json declares only montage-001, which already has its own shard - so no montage is
-        // unclaimed for the stray decisions-002.json to claim. autoRepairStrayShard()'s unambiguity
-        // gate (exactly one montage currently missing a shard) never holds here. troubleshoot() must
-        // therefore leave it exactly as diagnose() found it, rather than guessing at a repair.
+        // index.json declares only montage-001, which already has its own shard, so there is no
+        // unclaimed montage for the stray decisions-002.json to be renamed into.
         final Path prepDir = prepDir(root);
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
@@ -145,9 +139,8 @@ class TroubleshooterTest {
     @Test
     void anUnambiguousStrayShardIsAutoRenamedIntoTheUnclaimedMontageAndTheRunGoesReady(@TempDir final Path root)
             throws IOException, ApplyException {
-        // montage-002 is declared but has no shard yet; a culler numbering slip wrote its decision
-        // into decisions-003.json instead. Every file that shard names is a member of montage-002's
-        // own sidecar, so the repair is unambiguous: it gets renamed into place and the run clears.
+        // montage-002 is declared but has no shard yet. A numbering slip wrote its decision into
+        // decisions-003.json instead, and every file that shard names is in montage-002's sidecar.
         final Path prepDir = prepDir(root);
         final Path claimed = root.resolve("Sorted/Photos/2019/06/a.jpg");
         final Path misnamed = root.resolve("Sorted/Photos/2019/06/b.jpg");
@@ -157,17 +150,13 @@ class TroubleshooterTest {
         writeSidecar(prepDir, "montage-001", sidecarEntry(claimed));
         writeSidecar(prepDir, "montage-002", sidecarEntry(misnamed));
         writeShard(prepDir, "montage-001", classificationJson(claimed, "junk", "blurry"));
-        // Written under decisions-003.json - no montage-003 entry exists, so this is the stray. Its
-        // one decision names misnamed, a member of montage-002's own sidecar.
+        // No montage-003 entry exists, which is what makes this file the stray.
         Files.writeString(prepDir.resolve("decisions-003.json"),
                 "{ \"montage\": \"montage-002\", \"decisions\": [ %s ] }"
                         .formatted(classificationJson(misnamed, "junk", "also blurry")));
 
         final TroubleshootReport report = troubleshooter(root).troubleshoot(prepDir);
 
-        // montage-002 has no shard of its own yet, so the run is WAITING, not BLOCKED, at the point
-        // the stray shard is reported. A StrayShard finding surfaces from the WAITING branch too,
-        // not just once the shard contract is otherwise complete.
         assertThat(report.before().state()).isEqualTo(State.WAITING);
         assertThat(report.before().findings()).containsExactly(new StrayShard("decisions-003.json"));
         assertThat(report.strayShardsRepaired()).containsExactly("decisions-003.json -> montage-002");
@@ -180,9 +169,8 @@ class TroubleshooterTest {
     @Test
     void aStrayShardNamingAFileOutsideTheCandidateMontagesSidecarIsLeftForAChoice(@TempDir final Path root)
             throws IOException, ApplyException {
-        // montage-002 is the only unclaimed montage, but the stray shard's decision names a file that
-        // was never part of montage-002's own sidecar. That is not a genuine numbering slip, so AUTO
-        // must refuse rather than guess. setAsideStrayShard() (or leaving it) is the CHOICE fallback.
+        // montage-002 is the only unclaimed montage, but the stray shard's decision names a file
+        // that was never in montage-002's own sidecar. So it is not a numbering slip.
         final Path prepDir = prepDir(root);
         final Path claimed = root.resolve("Sorted/Photos/2019/06/a.jpg");
         final Path candidateOnly = root.resolve("Sorted/Photos/2019/06/b.jpg");
@@ -209,8 +197,8 @@ class TroubleshooterTest {
     void aMissingSourceFindingTriggersReconcileAndClearsOnceItRebuildsTheMissingRecord(@TempDir final Path root)
             throws IOException, ApplyException {
         final Path prepDir = prepDir(root);
-        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - stands in for an
-        // already-moved file
+        // Never written, so it stands in for a file already moved.
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         final Path dest = root.resolve("Review/junk/a.jpg");
         writeFile(dest, "already-moved-content");
         writeIndex(prepDir, 1, List.of("montage-001"));
@@ -232,8 +220,8 @@ class TroubleshooterTest {
     void aMissingSourceThatReconcileCannotAccountForStaysBlockedAfterTroubleshooting(@TempDir final Path root)
             throws IOException, ApplyException {
         final Path prepDir = prepDir(root);
-        final Path photo = root.resolve("Sorted/Photos/2019/06/gone.jpg"); // never written, no destination candidate
-        // either
+        // Never written, and no destination candidate either.
+        final Path photo = root.resolve("Sorted/Photos/2019/06/gone.jpg");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
@@ -269,8 +257,6 @@ class TroubleshooterTest {
         }
     }
 
-    // The whole point of splitting the ledger: a repair triggered by a lost move record must not
-    // cost the user an unrelated answer they already gave.
     @Test
     void anAnsweredSkipSurvivesAReconcileTriggeredByAnUnrelatedMissingSource(@TempDir final Path root)
             throws IOException, ApplyException {

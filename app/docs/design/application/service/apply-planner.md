@@ -58,8 +58,8 @@ on must sit strictly inside the configured Sorted root. Anything else is a
 
 The root comes from `PathsPort`, which reads configuration. It is deliberately not `index.json`'s own
 `basePath`. That field sits in the very file the rule guards, so it could vouch for an entry an
-editor put there. Prep only ever scans `Sorted/Photos`, so the configured root is also exactly what a
-real run can produce.
+editor put there. Prep only ever scans `Sorted/Photos`, so the configured root is wider than what a
+real run can produce. Anything strictly under `Sorted` passes, `Sorted/Videos` included.
 
 Both source lists are checked. `index.json` carries the unreviewable entries, which nothing else on
 disk corroborates. The sidecars carry the `src` set. A decision's own file is admitted only because

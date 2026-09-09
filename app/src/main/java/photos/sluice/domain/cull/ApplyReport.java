@@ -22,8 +22,7 @@ import java.util.Map;
  * from that same fixed scope ({@link PrepDir#unreviewable()}{@code .size()}) but can shrink: a file
  * the disposition ledger resolved TRUST_DECISION is no longer counted as unreviewable at all (see
  * {@code ApplyPlanner.resolvedUnreviewable()}). {@code heals}
- * lists every path {@link ShardValidator} auto-corrected via a unique sidecar basename, for a
- * caller to surface as non-fatal warnings.
+ * lists every path {@link ShardValidator} auto-corrected via a unique sidecar basename.
  */
 public record ApplyReport(
         int reviewed,

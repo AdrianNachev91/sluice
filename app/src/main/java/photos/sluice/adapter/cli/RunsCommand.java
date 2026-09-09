@@ -23,9 +23,8 @@ import java.util.stream.IntStream;
 /**
  * Lists every sift run on disk, and how far each one has got.
  *
- * <p>How far, rather than what is standing in the way. A blocked run is reported as a count of open
- * problems, not as the problems themselves, which is what {@code troubleshoot} is for. The count is
- * enough to say which run needs somebody.
+ * <p>A blocked run is reported as a count of open problems rather than as the problems themselves,
+ * which is what {@code troubleshoot} is for. The count is enough to say which run needs somebody.
  *
  * <p>It only reads, so it claims nothing. A folder claim here would mean this failing whenever the
  * desktop app happened to be open, which teaches people to close the app before looking at

@@ -88,8 +88,7 @@ class StylesheetTest {
         }
     }
 
-    // A size of its own is what the window must not get: it would count the frame, which the two
-    // constants do not. NaN is what never-sized looks like.
+    // NaN is what a never-sized stage reads back as, so it is what proves no size was set.
     @Test
     void aDisplayCapsTheWindowAndNeverSizesIt() throws Exception {
         final Opened opened = openedWithin(new Rectangle2D(0, 0, 1366, 728));
@@ -100,8 +99,6 @@ class StylesheetTest {
         assertThat(opened.height()).isNaN();
     }
 
-    // A display with room to spare still gets the cap. It binds nothing, the scene asking for less
-    // than the area holds, so there is no size to compare against and no boundary to get wrong.
     @Test
     void aDisplayWithRoomToSpareIsStillTheCeiling() throws Exception {
         final Opened opened = openedWithin(new Rectangle2D(0, 0, 2560, 1440));
@@ -110,8 +107,6 @@ class StylesheetTest {
         assertThat(opened.maxHeight()).isEqualTo(1440);
     }
 
-    // Showing the window is what the cap was for, so it goes once that has happened. A reader who
-    // moves the window to a roomier display can then resize into it.
     @Test
     void showingTheWindowLiftsTheCap() throws Exception {
         final Opened opened = shownWithin(new Scene(new StackPane(), 400, 300),
@@ -121,7 +116,6 @@ class StylesheetTest {
         assertThat(opened.maxHeight()).isEqualTo(Double.MAX_VALUE);
     }
 
-    // A window with room to spare keeps the size its scene asked for, the cap binding nothing.
     @Test
     void aShownWindowWithRoomToSpareKeepsTheSizeItsSceneAsked() throws Exception {
         final Opened opened = shownWithin(new Scene(new StackPane(), 640, 480),
@@ -170,18 +164,22 @@ class StylesheetTest {
         assertThat(opened.maxHeight()).isEqualTo(Double.MAX_VALUE);
     }
 
-    // Reading the sheet is the only way to check: a font size is not a value any control reports
-    // until a scene is built and dressed.
+    // Read as text rather than through a dressed scene. A scene reaches only the controls some
+    // scenario happens to build, where the sheets carry every rule.
+    //
+    // Only a px size can be judged against a floor. An em or a percentage is a multiple of whatever
+    // its parent resolved to, so it has no size of its own to check.
     @Test
-    void noRuleInTheStylesheetSetsTypeBelowTheLegibilityFloor() throws Exception {
-        final var sheet = new String(
-                Objects.requireNonNull(Stylesheet.class.getResourceAsStream("/ui/sluice.css")).readAllBytes(),
-                StandardCharsets.UTF_8);
-        final Matcher sizes = Pattern.compile("-fx-font-size:\\s*(\\d+)px").matcher(sheet);
-
+    void noSheetSetsAFixedTypeSizeBelowTheLegibilityFloor() throws Exception {
         final List<Integer> found = new ArrayList<>();
-        while (sizes.find()) {
-            found.add(Integer.valueOf(sizes.group(1)));
+        for (final String name : List.of("sluice.css", DARK_SHEET)) {
+            final var sheet = new String(
+                    Objects.requireNonNull(Stylesheet.class.getResourceAsStream("/ui/" + name)).readAllBytes(),
+                    StandardCharsets.UTF_8);
+            final Matcher sizes = Pattern.compile("-fx-font-size:\\s*(\\d+)px").matcher(sheet);
+            while (sizes.find()) {
+                found.add(Integer.valueOf(sizes.group(1)));
+            }
         }
 
         assertThat(found).isNotEmpty();

@@ -38,9 +38,8 @@ import static photos.sluice.application.service.CullPrepTestSupport.writeMoveRec
 import static photos.sluice.application.service.CullPrepTestSupport.writeShard;
 import static photos.sluice.application.service.CullPrepTestSupport.writeSidecar;
 
-// The repairs a damaged prep dir can be put through. A remedy records a disposition rather than
-// editing a shard. So most of these prove the remedy by running a real apply() afterwards and
-// asserting on what it then does.
+// A remedy records a disposition rather than editing a shard. So most of these prove one by
+// running a real apply() afterwards, and assert on what it then does.
 class PrepDirRemediesTest {
 
     @Test
@@ -84,9 +83,6 @@ class PrepDirRemediesTest {
         assertThat(Files.exists(root.resolve("Unreviewable"))).isFalse();
     }
 
-    // Classification checks the disposition ledger's Skipped status before its NearDupChosen-shaped
-    // copy exception. A skip must win even for a decision type that would otherwise always be
-    // Unresolved once its source is missing.
     @Test
     void skipMissingSourceWinsOverANearDupChosenDecisionThatWouldOtherwiseAlwaysBeUnresolved(@TempDir final Path root)
             throws IOException, ApplyException {
@@ -113,9 +109,6 @@ class PrepDirRemediesTest {
         assertThat(Files.exists(dupDir.resolve("b.jpg"))).isTrue();
     }
 
-    // classify() checks whether the source is still on disk before it consults the ledger's skips.
-    // A skip is the remedy for a file that has gone missing. Once that file is back, there is
-    // nothing left for the skip to excuse, so the decision applies normally.
     @Test
     void aSkippedDecisionWhoseFileIsRestoredIsAppliedNormally(@TempDir final Path root) throws IOException,
             ApplyException {
@@ -270,9 +263,6 @@ class PrepDirRemediesTest {
         assertThat(rebuilt.get().unreviewable()).isEmpty();
         assertThat(rebuilt.get().scope()).isEqualTo("scope1");
         assertThat(rebuilt.get().basePath()).isEqualTo(root.resolve("Sorted/Photos/2019/06"));
-        // The one genuinely lossy field, alongside the unreviewable list above. No sidecar carries
-        // the category set, so the currently configured one is substituted. Named here rather than
-        // left implicit, since a rebuilt run is judged against today's rules from this point on.
         assertThat(rebuilt.get().categories()).isEqualTo(fixedCategories());
         // Persisted, not just returned - a later read sees the rebuilt content.
         assertThat(readIndex(prepDir).entries()).containsExactly("montage-001", "montage-002");
@@ -287,8 +277,8 @@ class PrepDirRemediesTest {
     void rebuildIndexRefusesWhenTheSidecarSequenceHasAGap(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
         writeSidecar(prepDir, "montage-001", sidecarEntry(root.resolve("Sorted/Photos/2019/06/a.jpg")));
-        writeSidecar(prepDir, "montage-003", sidecarEntry(root.resolve("Sorted/Photos/2019/06/c.jpg"))); // montage
-        // -002 missing
+        // montage-002 is missing from the sequence.
+        writeSidecar(prepDir, "montage-003", sidecarEntry(root.resolve("Sorted/Photos/2019/06/c.jpg")));
 
         final Optional<PrepDir> rebuilt = prepDirRemedies(root, root.resolve("Library")).rebuildIndex(prepDir);
 
@@ -306,10 +296,6 @@ class PrepDirRemediesTest {
         assertThat(rebuilt).isEmpty();
     }
 
-    // A sidecar that merely failed to read is not evidence the rebuild should refuse. Refusing here
-    // sends the user to discard-and-redo over what is very likely a passing lock, throwing away every
-    // shard and the model spend behind them. Propagating instead lets the caller's job fail loudly and
-    // retry, the same shape a failed shard read already has elsewhere in this class.
     @Test
     void rebuildIndexLetsAFailedSidecarReadPropagateInsteadOfRefusingTheRebuild(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -348,7 +334,7 @@ class PrepDirRemediesTest {
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
-        // No sidecar ever backs this decision's file - a healthy run would report it FileOutOfScope.
+        // No sidecar backs this decision's file, so a healthy run reports it FileOutOfScope.
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         final PrepDirRemedies remedies = prepDirRemedies(root, libraryRoot);
         final ApplyEngine engine = applyEngine(root, libraryRoot);
@@ -401,8 +387,8 @@ class PrepDirRemediesTest {
         assertThat(Files.exists(graveyard.resolve("index.json"))).isTrue();
         assertThat(Files.exists(graveyard.resolve("montage-001.json"))).isTrue();
         assertThat(Files.exists(graveyard.resolve("decisions-001.json"))).isTrue();
-        // Both halves of the ledger ride along. The sweep is name-blind, so this is what would catch
-        // a future allowlist quietly leaving one of them behind to be deleted with the images.
+        // Neither half of the ledger is named in discard(): everything that is not a montage image
+        // moves. An allowlist put in its place could drop one and delete it with the images.
         assertThat(Files.exists(graveyard.resolve("move-records.log"))).isTrue();
         assertThat(Files.exists(graveyard.resolve("choices.log"))).isTrue();
         assertThat(Files.exists(graveyard.resolve("disasters/2026-01-01_00-00-00-something.txt"))).isTrue();

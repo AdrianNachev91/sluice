@@ -57,7 +57,7 @@ public record CullProviderSettings(@Nullable String model, @Nullable String endp
     }
 
     /**
-     * The longest a model id may be. For a control that stops a reader typing past it.
+     * The longest a model id may be.
      *
      * @return int the character ceiling
      */

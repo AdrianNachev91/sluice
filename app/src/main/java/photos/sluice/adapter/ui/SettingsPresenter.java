@@ -63,8 +63,8 @@ public class SettingsPresenter {
             .map(choice -> new SettingsView.ThemeOption(choice.name(), themeLabel(choice)))
             .toList();
 
-    // These four numbers are plausible rather than measured. Nobody has derived them. Whoever next
-    // holds real cost data for a sheet replaces them and says why.
+    // These bounds are plausible rather than measured. Nobody has derived them. Whoever next holds
+    // real cost data for a sheet replaces them and says why.
     private static final SettingsView.NumberRange TILE_SIZE_RANGE = new SettingsView.NumberRange(16, 1024, 16);
     private static final SettingsView.NumberRange TILES_PER_ROW_RANGE = new SettingsView.NumberRange(1, 12, 1);
 
@@ -111,7 +111,7 @@ public class SettingsPresenter {
      *
      * <p>A move copies a whole library, which is long enough that a static line reads as a screen
      * that has stopped. The copy already reports its phases to the same port a run's progress area
-     * reads, and nothing on this screen was listening.
+     * reads.
      *
      * <p>The line names the last phase reported rather than all of them, because a dialog has one
      * line rather than a page of bars. A phase that has not said how much work it has keeps the
@@ -162,8 +162,8 @@ public class SettingsPresenter {
     /**
      * Puts the saved look in force, for a window about to open.
      *
-     * <p>Without this the app would follow the desktop until the session's first save. A user who
-     * chose Light on a dark desktop would then meet a dark window every launch.
+     * <p>Without this the app follows the desktop until the session's first save, so a user who
+     * chose Light on a dark desktop meets a dark window every launch.
      */
     public void applySavedTheme() {
         ThemeSelection.set(this.settingsUseCase.settings().theme());
@@ -213,13 +213,11 @@ public class SettingsPresenter {
      * <p>Built from the settings already on disk with only the theme swapped, never from what the
      * screen currently shows. An unsaved folder path or a typed-but-not-yet-saved model is then
      * never persisted by clicking a radio. The paths carried through are therefore always equal to
-     * what is already in force. That is what lets the save seam take its unchanged-paths fast path,
-     * with no path validation and no job-in-progress check.
+     * what is already in force.
      *
      * <p>The file is still written, so a settings file that cannot be read, or one another program
      * is holding, refuses this as it refuses any other save. The look changes only once the file
-     * has taken it. Changed first, a refused write would leave the app wearing a look its own
-     * settings do not name, and the next start would undo it.
+     * has taken it.
      *
      * @param themeId {@link String} the id of the {@link SettingsView.ThemeOption} just picked
      * @return {@link ThemeOutcome} the theme now in force, and what to say where the save was
@@ -383,7 +381,7 @@ public class SettingsPresenter {
      *
      * <p>The move cannot run: it checks the roots in force, and one of those is unset. Refusing the
      * whole save would leave the reader unable to fix that. Filling the empty folder in is itself a
-     * save, and it carries the same library root that raised this. The way out would be to
+     * save, and it carries the same library root that raised this. Their only way out would be to
      * put the library field back by hand, which nothing tells them to do.
      *
      * <p>So the folders land and the library stays where it is. By the time the reader reads the
@@ -407,10 +405,10 @@ public class SettingsPresenter {
         // Worded by what this save actually left behind. A save that filled the empty folders in has
         // cleared the way and only has to ask again. One made while they are still empty has not,
         // and telling that reader their folders were saved names folders they never gave.
+        //
         // The one refusal that says its own piece rather than sending the reader to the marked
-        // field. Every other one is wholly a refusal, so pointing at the fault is the most useful
-        // thing the summary can do. This one is half a save, and "the fields with a problem are
-        // marked" would report the half that landed as a failure.
+        // field. This one is half a save, and "the fields with a problem are marked" would report
+        // the half that landed as a failure.
         if (this.pathValidation.violations(keeping).isEmpty()) {
             return new SaveOutcome.Refused("Your other folders were saved. Your Library folder "
                     + "stayed where it is, because it could not move while another folder was empty. "
@@ -520,9 +518,7 @@ public class SettingsPresenter {
      * <p>Blocking, so a caller runs this off the FX thread.
      *
      * <p>Whichever provider Settings would show is the one checked. So a configured id naming no
-     * provider this install has is answered for by the substitute that screen selects instead. That
-     * substitution is resolved here and passed down, rather than resolved a second time inside
-     * {@link VisionProviderPresenter}.
+     * provider this install has is answered for by the substitute that screen selects instead.
      */
     public void refreshModelsAtStartup() {
         this.visionProvider.refreshModelsAtStartup(this.resolvedProviderId(this.settingsUseCase.settings().provider()));
@@ -579,15 +575,11 @@ public class SettingsPresenter {
         };
     }
 
-    // Both halves earn their place. Told only that something outranks this field, a user reads it as
-    // dead and stops. A save here does change the running app, and only stops applying at the next
-    // launch, which is the part that decides whether saving is worth anything.
     /**
      * What to ask a user whose save would move the library root.
      *
      * <p>Worded here rather than taken from the refusal's own message. That one is written for a
-     * log, and a sentence a person reads is this class's job, the same as every other on this
-     * screen.
+     * log, and a sentence a person reads is this class's job.
      *
      * @param previousLibraryRoot {@link Path} the root the library would move away from
      * @return {@link String} the question, in the same terms as the buttons answering it
@@ -599,6 +591,16 @@ public class SettingsPresenter {
                 + "fill up as you go.";
     }
 
+    /**
+     * What to say under a field something outside the config file outranks.
+     *
+     * <p>Both halves earn their place. Told only that something outranks this field, a user reads it
+     * as dead and stops. A save here does change the running app, and only stops applying at the
+     * next launch.
+     *
+     * @param override {@link SettingOverride} what is outranking the saved value
+     * @return {@link String} the note to put under the field
+     */
     private static String wordOverride(final SettingOverride override) {
         return switch (override) {
             case final ByEnvironmentVariable env -> "The " + env.variableName() + " environment variable "
@@ -609,6 +611,15 @@ public class SettingsPresenter {
         };
     }
 
+    /**
+     * What a finished library move says for itself.
+     *
+     * <p>A cancelled copy leaves files in both folders, so it says where they are and that removing
+     * either is the reader's own to do. Sluice never removes a library folder.
+     *
+     * @param outcome {@link LibraryRootMoveOutcome} what the move reported
+     * @return {@link String} what to show
+     */
     private static String wordMoveOutcome(final LibraryRootMoveOutcome outcome) {
         return switch (outcome) {
             case final LibraryRootMoveOutcome.CopiedAndMoved copied -> copiedAndMoved(copied);
@@ -632,8 +643,8 @@ public class SettingsPresenter {
      * The copy-and-keep ending in the user's terms, including files it deliberately did not copy.
      *
      * <p>A copy into a folder already holding some of the library skips what is already there, so
-     * the copied count can honestly be low or zero. Left unexplained that reads as a copy that did
-     * not happen. The skip is said outright instead.
+     * the copied count can be low or zero. Left unexplained that reads as a copy that did not
+     * happen, so the skip is said outright.
      *
      * @param copied {@link LibraryRootMoveOutcome.CopiedAndMoved} what the move reports
      * @return {@link String} what to show
@@ -655,9 +666,8 @@ public class SettingsPresenter {
     /**
      * The configured provider id, or what to fall back to when it names none this install has.
      *
-     * <p>A screen has to select something in its dropdown. Falling back here, rather than in the
-     * view, keeps that choice a decision this class makes. The alternative is a search-and-guess the
-     * view performs on its own.
+     * <p>A screen has to select something in its dropdown. Falling back here rather than in the view
+     * keeps that choice a decision this class makes, not a search-and-guess the view performs.
      *
      * <p>The fallback prefers a provider that needs no credential. Whoever lands here has a setting
      * naming something this build cannot cull with, and the next thing they do is likely to be
@@ -684,8 +694,7 @@ public class SettingsPresenter {
      *
      * <p>Without this the substitution is silent. Someone whose configuration says one thing opens
      * this screen, reads another, and is given nothing connecting the two. Their next Save
-     * overwrites the line they wrote. The only other place that value surfaces is a cull refusing
-     * with a message written for a log.
+     * overwrites the line they wrote.
      *
      * @param configured {@link String} the provider id the settings in force name
      * @return {@link String} what to tell the user, or null when the id is one this install has
@@ -765,6 +774,16 @@ public class SettingsPresenter {
         return "This overlaps with the " + PathRoleLabels.of(other) + " folder.";
     }
 
+    /**
+     * Creates a folder root left exactly as this screen suggested it, and only then.
+     *
+     * <p>A path a user typed or picked is theirs, and creating it would put folders on their disk
+     * they never asked for. Our own suggestion is different: offering it and then refusing the save
+     * because it does not exist is a trap this screen sets itself.
+     *
+     * @param value {@link String} the field's text
+     * @param suggestion {@link String} what this screen offered for that field
+     */
     private static void createIfItIsOurOwnSuggestion(final String value, final String suggestion) {
         if (!value.equals(suggestion)) {
             return;
@@ -1019,7 +1038,7 @@ public class SettingsPresenter {
      * answered. That is what the Settings picker offers somebody who has connected nothing yet,
      * which is who this card is for. A first run on a machine whose key sits in an environment
      * variable can therefore store a recommendation the account's real list would not have led
-     * with. The Settings picker is where that is corrected, and it says which list it is showing.
+     * with. The Settings picker is where that is corrected.
      *
      * @param providerId {@link String} the provider being saved
      * @return {@link String} the model id to save, empty for a provider that runs no model

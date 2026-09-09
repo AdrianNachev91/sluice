@@ -34,12 +34,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static photos.sluice.application.service.CullPrepTestSupport.fixedCategories;
 import static photos.sluice.application.service.PipelineTestSupport.listed;
 
-// Fixture-writing helpers below mirror ApplyPlannerTest's own. PrepDirDoctor reuses ApplyPlanner's
-// validate()/checkMissingSources() internally, so the same shard/sidecar/index fixtures apply.
-//
-// The never-throws tests share one stake, stated here rather than repeated on each. A dashboard poll
-// and the startup scan both call diagnose() and runs(), so an escape takes down a whole reading or
-// the app's own startup. Each test below names only what is distinct about its own failure.
+// The never-throws tests share one stake, stated here rather than repeated on each. An escape from
+// diagnose() or runs() takes down a whole dashboard reading, or the app's own startup. Each test
+// below names only what is distinct about its own failure.
 class PrepDirDoctorTest {
 
     @Test
@@ -60,9 +57,6 @@ class PrepDirDoctorTest {
 
     @Test
     void aCompleteRunReportsCompleteEvenWhenIndexJsonIsCorrupt(@TempDir final Path root) throws IOException {
-        // The completion check reads only decisions.json, since a COMPLETE run needs nothing else.
-        // A corrupt index.json past that point must never surface as a blocking problem. It could
-        // have been clobbered long after the run already finished.
         final Path prepDir = prepDir(root);
         Files.writeString(prepDir.resolve("index.json"), "not valid json");
         Files.writeString(prepDir.resolve("decisions.json"), "{}");
@@ -114,9 +108,8 @@ class PrepDirDoctorTest {
                 .containsExactly(new Finding.SourceOutsideSorted(outside, root.resolve("Sorted")));
     }
 
-    // The shard-count branch is checked before validity, so a run still being culled reports WAITING
-    // even carrying a finding no shard can resolve. A watcher then arms and auto-resume runs, and the
-    // refusal lands as Blocked at apply. Pinned because that sequence is what a user sees.
+    // Pinned because what a user sees is the whole sequence: WAITING here, then a watcher arming,
+    // then the refusal landing as Blocked at apply.
     @Test
     void anUnreviewableEntryOutsideSortedStillReportsWaitingWhileAShardIsOutstanding(@TempDir final Path root)
             throws IOException {
@@ -135,9 +128,6 @@ class PrepDirDoctorTest {
                 .containsExactly(new Finding.SourceOutsideSorted(outside, root.resolve("Sorted")));
     }
 
-    // A read that merely failed is DAMAGED, never corrupt. CorruptIndex carries an AUTO remedy, so
-    // calling this one corrupt would offer to rebuild an index that was never broken. The finding's
-    // NONE remedy offers no repair, because nothing has been established as broken.
     // Injected at the reader rather than provoked through the filesystem, so the assertion holds
     // identically on every platform.
     @Test
@@ -152,9 +142,7 @@ class PrepDirDoctorTest {
         assertThat(health.findings().getFirst().remedy()).isEqualTo(Finding.Remedy.NONE);
     }
 
-    // Every read past the index can fail the same transient way the index itself can, and all of
-    // them land on DAMAGED rather than escaping. This one fails on a shard, which reaches the
-    // planner rather than the index read.
+    // This one fails on a shard, which reaches the planner rather than the index read.
     @Test
     void aFailedShardReadReportsDamagedRatherThanThrowing(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -170,11 +158,9 @@ class PrepDirDoctorTest {
         assertThat(health.findings()).containsExactly(new Finding.UnreadablePrepDir(prepDir));
     }
 
-    // The same classification reached the way a user actually reaches it, through the filesystem
-    // rather than an injected reader. A directory sitting where index.json belongs is a real read
-    // failure. That is distinct from "not valid json" (malformed content) and from "never written
-    // at all" (permanently absent, diagnosed the same as corrupt). Which of the reader's own catch
-    // clauses sees it differs by platform, so this pins both platforms to the same verdict.
+    // The same classification reached through the filesystem rather than an injected reader. Which
+    // of the reader's own catch clauses sees a directory standing where a file belongs differs by
+    // platform, so this pins both platforms to the same verdict.
     @Test
     void aDirectoryWhereIndexJsonBelongsReportsDamagedOnEveryPlatform(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -184,11 +170,8 @@ class PrepDirDoctorTest {
     }
 
     // A line well-formed enough to reach the parser and garbled where it counts, so its resolution
-    // field cannot become a CorruptSidecarResolution. Dropped rather than thrown, so the disposition
-    // it named reads as never given. The sidecar it was meant to answer for was never written
-    // either, standing in for the corrupt one that answer was about. The run diagnoses to its real
-    // state, with the original finding re-raised, rather than reporting the whole dir damaged over
-    // one bad line.
+    // field cannot become a CorruptSidecarResolution. The sidecar it was meant to answer for was
+    // never written either, standing in for the corrupt one that answer was about.
     @Test
     void aGarbledChoicesLineIsDroppedAndTheOriginalFindingIsReRaisedInstead(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -203,11 +186,9 @@ class PrepDirDoctorTest {
         assertThat(health.findings()).containsExactly(new Finding.CorruptSidecar("montage-001"));
     }
 
-    // The same guarantee one layer up: a dir runs() cannot diagnose becomes a row rather than an
-    // exception. The healthy dir alongside it proves the scan carried on rather than ending there.
-    // Injected at the CullPrepPort seam rather than through the filesystem. That way the
-    // classification does not depend on how a given platform's filesystem treats a directory
-    // standing in for a file.
+    // The healthy dir alongside it proves the scan carried on rather than ending there. Injected
+    // at the CullPrepPort seam, so the classification does not depend on how a given platform
+    // treats a directory standing in for a file.
     @Test
     void runsListsADirItCannotDiagnoseInsteadOfThrowing(@TempDir final Path root) throws IOException {
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
@@ -244,8 +225,8 @@ class PrepDirDoctorTest {
         assertThat(health.findings().getFirst().remedy()).isEqualTo(Finding.Remedy.CHOICE);
     }
 
-    // A shard file present but unparseable counts toward the tally as present, so the dir is past
-    // WAITING and lands on the real gate. Diagnosis describes it rather than throwing.
+    // Present but unparseable counts toward the tally as present, so the dir is past WAITING and
+    // lands on the real gate.
     @Test
     void aCorruptShardReportsBlockedWithAnInformationalFinding(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -265,9 +246,8 @@ class PrepDirDoctorTest {
 
     // A montage with an unreadable sidecar and no shard looks like one still being culled and is
     // not. A culler keys its verdicts against the sidecar, so it can never produce a shard here.
-    // The run stays WAITING because other montages genuinely are still coming, but the finding has
-    // to be there. An empty list would leave the troubleshoot screen with nothing to offer, and
-    // only a discard to escape by.
+    // Without the finding, a troubleshoot screen has nothing to offer and only a discard to escape
+    // by.
     @Test
     void aCorruptSidecarForAMontageWithNoShardYetStillReportsItsFinding(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -373,9 +353,8 @@ class PrepDirDoctorTest {
 
     @Test
     void findingsAreOrderedAutoRemedyBeforeNoneRemedy(@TempDir final Path root) throws IOException {
-        // A stray shard (AUTO) and an off-contract decision (NONE) are both shard-contract findings,
-        // so both surface together. A MissingSource (CHOICE) is different - it only ever surfaces
-        // once the shard contract is already clean (see PrepDirDoctor.diagnose()'s own doc for why).
+        // A stray shard (AUTO) and an off-contract decision (NONE) are both shard-contract
+        // findings, so both surface together and the ordering has something to sort.
         final Path prepDir = prepDir(root);
         final Path offContract = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(offContract, "x");
@@ -393,10 +372,8 @@ class PrepDirDoctorTest {
 
     @Test
     void aShardContractProblemSuppressesMissingSourceCheckingForAnUnrelatedDecision(@TempDir final Path root) throws IOException {
-        // Guards against a misleading double finding. An off-contract decision already reports
-        // InvalidCategory. An unrelated decision in the same batch, whose file is genuinely missing,
-        // must not ALSO surface a MissingSource. The whole batch is already blocked on the shard
-        // contract, the same gate apply() enforces before ever checking file existence.
+        // Two decisions in one batch. One is off-contract, and the other's file is genuinely
+        // missing, which is what makes a second, misleading finding possible at all.
         final Path prepDir = prepDir(root);
         final Path offContract = root.resolve("Sorted/Photos/2019/06/a.jpg");
         final Path missingSource = root.resolve("Sorted/Photos/2019/06/b.jpg"); // never written, no move record
@@ -439,9 +416,8 @@ class PrepDirDoctorTest {
         assertThat(Files.exists(photo)).isTrue();
     }
 
-    // The purge deletes every listed file then prunes the dir, and removeIfEmptyOfFiles walks raw.
-    // A listFiles hiding a half-written transfer leaves the dir standing while this still reports
-    // it purged.
+    // A listFiles hiding a half-written transfer would leave the dir standing while the purge
+    // still reported it gone.
     @Test
     void purgeCompletedClearsAPrepDirHoldingATransferThatNeverLanded(@TempDir final Path root) throws IOException {
         final Path complete = prepDir(root, "complete1");
@@ -459,8 +435,8 @@ class PrepDirDoctorTest {
         assertThat(Files.exists(complete)).isFalse();
     }
 
-    // A dir holding shards but no index is exactly the run worth not overwriting, so the sweep has
-    // to see it. Keyed on index.json it would be invisible here and in every other enumeration.
+    // A dir holding shards but no index is exactly the run worth not overwriting. Keyed on
+    // index.json the sweep would not see it here, or in any other enumeration.
     @Test
     void purgeCompletedSeesAPrepDirWithNoIndexAndReportsItSkipped(@TempDir final Path root) throws IOException {
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
@@ -475,10 +451,7 @@ class PrepDirDoctorTest {
         assertThat(Files.exists(indexless)).isTrue();
     }
 
-    // Two exclusions from what counts as a run. A loose file directly in the root belongs to no
-    // run at all. A file inside a prep dir's own subdirectory - the disaster drawer is one - belongs
-    // to that run, not to a run named after the subdirectory. Both fixtures below would produce a
-    // spurious extra entry if either rule were dropped.
+    // Both fixtures below would produce a spurious extra entry if either exclusion were dropped.
     @Test
     void runsCountsNeitherALooseRootFileNorASubdirectoryAsItsOwnRun(@TempDir final Path root) throws IOException {
         final Path cullPrepRoot = root.resolve("logs/sift-prep");
@@ -504,8 +477,6 @@ class PrepDirDoctorTest {
         assertThat(report.skipped()).isEmpty();
     }
 
-    // A dir whose own occupancy could not be determined diagnoses DAMAGED. It lands in the report's
-    // own unreadable bucket, distinct from skipped, and its healthy sibling still purges normally.
     @Test
     void purgeCompletedReportsAnUnreadableOccupancyCheckInItsOwnBucketAndStillPurgesItsSibling(
             @TempDir final Path root) throws IOException {
@@ -530,9 +501,6 @@ class PrepDirDoctorTest {
         assertThat(Files.exists(unreadable)).isTrue();
     }
 
-    // purgeDir() guards itself, so a delete failing on one prep dir does not abandon the sweep with
-    // no report at all. That dir lands in the unreadable bucket instead of purged, and its sibling
-    // still purges normally.
     @Test
     void purgeCompletedReportsAFailedDeleteInItsOwnBucketAndContinuesTheSweep(@TempDir final Path root)
             throws IOException {
@@ -562,8 +530,8 @@ class PrepDirDoctorTest {
         assertThat(Files.exists(second)).isFalse();
     }
 
-    // Fails delete() for anything under one target prep dir, standing in for a lock or permission
-    // denial on one of the files a purge is deleting. Every other dir's delete behaves normally.
+    // Stands in for a lock or a permission denial on one of the files a purge is deleting. Scoped
+    // to one target prep dir, so every other dir's delete behaves normally.
     private static final class FailingDeleteUnder extends NioMediaStore {
 
         private final Path target;
@@ -597,8 +565,7 @@ class PrepDirDoctorTest {
         assertThat(doctor(root).runs(cullPrepRoot)).isEqualTo(new CullRuns.Listed(List.of()));
     }
 
-    // The epoch reads as "as old as anything", putting a dir nobody can stat at the top of a list
-    // ordered by neglect. The working-store assertion first, so this cannot pass with the guard gone.
+    // The working-store assertion comes first, so this cannot pass with the guard gone.
     @Test
     void aPrepDirWhoseMtimeCannotBeReadIsAgedAsTheEpoch(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root, "2019");
@@ -650,8 +617,7 @@ class PrepDirDoctorTest {
                 .formatted(file.toString().replace("\\", "\\\\"), category, reason);
     }
 
-    // The existence check reaches the same port as the listing does. So the guard covers it too,
-    // not only the call that looks like the risky one.
+    // The guard has to cover this call too, not only the listing that looks like the risky one.
     @Test
     void runsSaysTheRootCouldNotBeReadWhenTheExistenceCheckItselfFails(@TempDir final Path root)
             throws IOException {
@@ -662,9 +628,6 @@ class PrepDirDoctorTest {
                 .isEqualTo(new CullRuns.Unlistable(cullPrepRoot));
     }
 
-    // The new, narrower guard: only one candidate's own occupancy check fails, so only that one
-    // candidate is affected. Its healthy sibling still gets enumerated and diagnosed normally,
-    // proving isolation rather than the root-level guard above, which fails the whole enumeration.
     @Test
     void runsListsTheHealthySiblingAlongsideADamagedEntryForTheOneWhoseOccupancyCouldNotBeRead(
             @TempDir final Path root) throws IOException {
@@ -690,8 +653,8 @@ class PrepDirDoctorTest {
         Files.writeString(file, content);
     }
 
-    // A stat that fails with a plain unchecked exception - the guard holds for the whole unchecked
-    // space, not a list of expected types.
+    // A plain unchecked exception, so the guard is proven over the whole unchecked space rather
+    // than a list of expected types.
     private static final class FailingLastModified extends NioMediaStore {
 
         @Override
@@ -708,9 +671,8 @@ class PrepDirDoctorTest {
         return CullPrepTestSupport.prepDirDoctor(root, cullPrepPort);
     }
 
-    // A media store whose directory listing fails with a plain unchecked exception rather than an
-    // I/O one. A port constrains nothing about what its adapters may raise. So the doctor's guards
-    // hold for the whole unchecked space, rather than for a list of expected types.
+    // A plain unchecked exception rather than an I/O one. A port constrains nothing about what its
+    // adapters may raise, so the guards have to hold for the whole unchecked space.
     private static final class FailingListing extends NioMediaStore {
 
         @Override
@@ -719,9 +681,8 @@ class PrepDirDoctorTest {
         }
     }
 
-    // Fails listFiles() for exactly one candidate prep dir. Stands in for that one dir's own read
-    // failing - a locked disaster-drawer file, say. Every sibling and the root-level shallow listing
-    // behave normally.
+    // Stands in for one candidate dir's own read failing, over a file something else holds open.
+    // Every sibling and the root-level shallow listing behave normally.
     private static final class FailingListingOf extends NioMediaStore {
 
         private final Path target;
@@ -739,7 +700,6 @@ class PrepDirDoctorTest {
         }
     }
 
-    // A media store whose existence check fails the same way FailingListing's listing does.
     private static final class FailingExists extends NioMediaStore {
 
         @Override
@@ -754,13 +714,10 @@ class PrepDirDoctorTest {
         return new UncheckedIOException(new IOException("simulated read failure"));
     }
 
-    // The two readers below fail at different depths of one call sequence. That is why they are two
-    // classes rather than one. readIndex() runs before readShard(). A single reader failing both
-    // would always stop at the index, leaving the shard test unable to reach the planner it exists
-    // to exercise.
+    // The two readers below are two classes rather than one because readIndex() runs before
+    // readShard(). A single reader failing both would always stop at the index, leaving the shard
+    // test unable to reach the planner it exists to exercise.
 
-    // Fails on the shard read, with the index reading normally, so a diagnosis gets all the way into
-    // the planner before this bites.
     private static final class FailingShardRead extends DelegatingPrepStore {
 
         @Override
@@ -778,8 +735,7 @@ class PrepDirDoctorTest {
         }
     }
 
-    // Fails the index read for exactly one target prep dir, so a sibling prep dir's own diagnosis
-    // reads normally alongside it.
+    // Scoped to one prep dir, so a sibling's own diagnosis reads normally alongside it.
     private static final class FailingIndexReadOf extends DelegatingPrepStore {
 
         private final Path target;

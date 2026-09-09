@@ -65,7 +65,6 @@ public class CullCommand implements Callable<Integer> {
     @SuppressWarnings("unused")
     private @Nullable String months;
 
-    // Not a shared mixin: this description is specific to what sift orders as oldest.
     @Option(names = ScopeArguments.OLDEST, paramLabel = "N",
             description = "The N oldest photos by file timestamp instead of a year.")
     @SuppressWarnings("unused")
@@ -133,8 +132,6 @@ public class CullCommand implements Callable<Integer> {
 
     /**
      * Prints what this sift is expected to consume, on the error stream.
-     *
-     * <p>Silent when the caller asked for quiet, or when the configured provider spends nothing.
      *
      * @param scope {@link CullScope} what is being sifted
      */

@@ -19,10 +19,9 @@ public final class CullScopeSelector {
 
     /**
      * Directories to scan under photosRoot for a scope. Year confines the scan to the requested
-     * month subdirectories (sorted, deduplicated), or the whole year directory when months is null.
-     * That covers every month present, for a caller that wants a whole year without listing every
-     * month explicitly. OldestN scans the whole Photos root, since the N oldest files can come from
-     * any year.
+     * month subdirectories (sorted, deduplicated), or the whole year directory when months is null,
+     * which covers every month present. OldestN scans the whole Photos root, since the N oldest
+     * files can come from any year.
      *
      * @param photosRoot {@link Path} the Sorted Photos root
      * @param scope {@link CullScope} the cull scope to resolve

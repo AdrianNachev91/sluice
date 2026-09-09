@@ -27,7 +27,6 @@ final class CliHarness {
     private CliHarness() {
     }
 
-    // What one invocation left behind.
     record Result(int exitCode, String out, String err) {
     }
 

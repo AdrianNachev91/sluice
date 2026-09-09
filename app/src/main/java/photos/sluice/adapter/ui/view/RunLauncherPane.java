@@ -56,12 +56,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * The dashboard's working state: what to do, what to do it to, and the button that starts it.
  *
  * <p>Every control is built once and filled in afterwards. A button's own press asks the presenter
- * and then fills the screen again. A fill that replaced a control would be destroying the one the
- * user is still pressing, so a fill writes onto controls and never replaces one.
+ * and then fills the screen again, so a fill that replaced a control would be destroying the one
+ * the user is still pressing.
  *
  * <p>The year rows are the exception, since how many there are is not known until the counts land.
- * They are replaced by {@code drawCounts} alone. That runs when the screen is built, when a
- * finished run has changed what is staged, and when a read finds something else has.
+ * They are replaced by {@code drawCounts} alone.
  *
  * <p>The counts come from walking two folder trees, which takes long enough on a full Inbox to be
  * seen. That read runs on a thread of its own once the window is painted, and the Inbox card says
@@ -186,8 +185,6 @@ final class RunLauncherPane {
         estimate.managedProperty().bind(estimate.visibleProperty());
         estimate.visibleProperty().bind(figure.textProperty().isNotEmpty());
 
-        // The same box Settings puts a standing fact in, for the same reason. This one stays on the
-        // page rather than fading, and it warns about nothing.
         final TextArea freeHeadline = SelectableText.prose();
         freeHeadline.setId("run-free-headline");
         freeHeadline.getStyleClass().add("run-free-headline");
@@ -211,7 +208,7 @@ final class RunLauncherPane {
         // No grow priority, and a floor of nothing. With the cards short the pane takes only their
         // height, so the scope field sits under them rather than across a gap. With more years than
         // fit, the pane is the one thing the column can shrink, so it scrolls and the field stays
-        // where it is. Growing it instead would strand the field at the foot of every short page.
+        // where it is.
         final var scroll = SettingsRows.scrolling(body);
         scroll.setMinHeight(0);
 
@@ -264,8 +261,8 @@ final class RunLauncherPane {
      * Reads both folder trees again, over and over, for as long as this screen is in the window.
      *
      * <p>What changes the Inbox is somebody dropping files into it in their own file manager, which
-     * this app is told nothing about. Without this the count a reader is looking at is the one taken
-     * when they arrived, and only leaving the screen and coming back corrects it.
+     * this app is told nothing about. Without this the count a reader is looking at stays the one
+     * taken when they arrived.
      *
      * <p>Bound to the scene rather than to a hook of the presenter's. The shell drops a screen it
      * replaces without telling it anything. A timer held anywhere else would outlive the pane and
@@ -286,8 +283,7 @@ final class RunLauncherPane {
                                                         final Controls controls) {
         final var reading = new AtomicBoolean();
         final var poll = new Timeline(new KeyFrame(RECOUNT_INTERVAL, _ -> {
-            // Only the launcher's own face reads these counts. A job under way has the progress
-            // face up and reports itself, and a finished card stands until the reader closes it.
+            // Only the launcher's own face reads these counts. The other two report themselves.
             if (!(presenter.stage() instanceof RunStage.Setup) || !reading.compareAndSet(false, true)) {
                 return;
             }
@@ -369,8 +365,7 @@ final class RunLauncherPane {
     /**
      * Starts the work, asking first where the presenter says a question is owed.
      *
-     * <p>The dialog blocks, so nothing else happens while it is open. Backing out of it leaves the
-     * screen exactly as it was.
+     * <p>The dialog blocks, so nothing else happens while it is open.
      *
      * <p>Drawn rather than filled afterwards, because a press that starts something takes the whole
      * page onto the progress area. A press the facade refuses leaves it on the launcher, and the
@@ -614,8 +609,7 @@ final class RunLauncherPane {
         /**
          * Builds the mode buttons, once, with an arrow drawn in every gap.
          *
-         * <p>The row never changes, so it is built here and only re-selected afterwards. Building it
-         * again on each fill would replace the button whose press caused the fill.
+         * <p>The row never changes, so it is built here and only re-selected afterwards.
          *
          * <p>An arrow goes in every gap rather than in chosen ones, so nothing here judges which
          * modes follow which.
@@ -669,8 +663,7 @@ final class RunLauncherPane {
         /**
          * One arrow between two mode buttons, drawn rather than typed so no font has to carry it.
          *
-         * <p>A shaft and a filled head, 15 by 10.8, with the shaft 4.4 thick. Solid at that size
-         * where a glyph at the row's font size reads as punctuation.
+         * <p>Solid at this size, where a glyph at the row's font size reads as punctuation.
          *
          * @return {@link Polygon} the arrow, pointing right
          */
@@ -698,9 +691,9 @@ final class RunLauncherPane {
         /**
          * Builds the year rows from the counts as they stand, then fills the whole screen in.
          *
-         * <p>The one place rows are replaced, and every row control goes with them. So a caller
-         * that has not established the counts moved is throwing away the reader's focus, hover and
-         * any press in flight for nothing.
+         * <p>The one place rows are replaced, and every row control goes with them. So it costs the
+         * reader's focus, hover and any press in flight, and is worth calling only where the counts
+         * have moved.
          *
          * @param setup {@link RunSetupPresenter} decides everything this screen shows
          */
@@ -744,12 +737,11 @@ final class RunLauncherPane {
         /**
          * Puts everything the presenter says onto the controls that already exist.
          *
-         * <p>This is also what keeps a toggle from being clicked back to nothing. A press on an
-         * already-selected mode tells the presenter the same thing it already held, and the fill
-         * that follows puts the selection back. A press on the already-chosen year folds its months
-         * away and leaves the year itself chosen, so the fill puts that selection back too. Holding
-         * the {@link ToggleGroup} itself would do the same job for modes and the wrong job for
-         * years. No year chosen is a state the presenter draws on purpose.
+         * <p>This is also what keeps a toggle from being clicked back to nothing. A press on one
+         * already selected tells the presenter what it already held, and the fill that follows puts
+         * the selection back. Holding the {@link ToggleGroup} itself would do the same job for modes
+         * and the wrong job for years, since no year chosen is a state the presenter draws on
+         * purpose.
          *
          * @param view {@link RunLauncherView} what the screen shows now
          */
@@ -800,9 +792,7 @@ final class RunLauncherPane {
          * Marks whichever year row the scope now names, leaving the rows themselves alone.
          *
          * <p>Disabled where a press on them would scope nothing. A row that keeps its full colour
-         * and its hand cursor while ignoring the click reads as broken. What being disabled looks
-         * like is the stylesheet's to say, and it draws these the way it draws the other two
-         * unpressable controls on this screen.
+         * and its hand cursor while ignoring the click reads as broken.
          *
          * @param years a {@link List} of {@link YearChoice} the rows and which of them is chosen
          * @param pressable boolean whether a press on one of them scopes the run
@@ -833,9 +823,6 @@ final class RunLauncherPane {
          */
         private Node yearRow(final YearChoice year, final ToggleGroup group,
                              final RunSetupPresenter setup) {
-            // The same two steps a mode button takes: tell the presenter, then draw what it says.
-            // The scope field is one of the things a fill writes, so a click and a keystroke reach
-            // the screen by the same route.
             final ToggleButton row = this.scopeRow(year.id(), "run-year-row",
                     rowInside("run-year-label", year.label(), year.counts(), null,
                             unfinishedMark(year.hasUnfinishedSift())),
@@ -915,9 +902,8 @@ final class RunLauncherPane {
          * <p>Everything below reads geometry: each box's own width and height, the page's height,
          * and where the box sits in it. A press arrives on the application thread between pulses,
          * so the layout those readings want can still be pending. Forcing it first is what makes
-         * the travel land where the rows actually end up. Left to chance, the pane travels to a
-         * position worked out from the page as it stood before the rows it is about to move. A
-         * year opened below the fold then never comes into view at all.
+         * the travel land where the rows actually end up, and what brings a year opened below the
+         * fold into view at all.
          *
          * <p>Free where nothing is pending: a clean tree lays out in no time, and this runs on
          * every fill.
@@ -959,9 +945,8 @@ final class RunLauncherPane {
         /**
          * What one year's months are about to do, or null where they are already doing it.
          *
-         * <p>A box nobody can watch takes its end state here and joins no timeline. That is the
-         * screen being built. It is also how a render captures a year already open, rather than one
-         * caught at the first frame of opening.
+         * <p>A box nobody can watch takes its end state here and joins no timeline, so a year that
+         * opens off screen is already open the moment anyone sees it.
          *
          * @param year {@link YearChoice} the row and whether it shows its months
          * @return {@link Turn} the movement to make, or null where there is none to make
@@ -1153,8 +1138,8 @@ final class RunLauncherPane {
         /**
          * The mark a timeframe row carries when an unfinished sift already covers it.
          *
-         * <p>The row is still pressable. What the mark changes is what the button under the field
-         * then offers, and the legend under the rows says so.
+         * <p>The row is still pressable. The mark changes what a press then offers, not whether one
+         * is taken.
          *
          * @param unfinished boolean whether a sift of this row has not finished
          * @return {@link Node} the mark, or null where the row carries none
@@ -1256,8 +1241,7 @@ final class RunLauncherPane {
     /**
      * The redraw the faces are handed before the thing that does it exists.
      *
-     * <p>Does nothing until it is told what it is. That state is never reachable from a press: the
-     * faces are built and told within the same method, before either is on a window.
+     * <p>Does nothing until it is told what it is.
      */
     private static final class Redraw implements Runnable {
 

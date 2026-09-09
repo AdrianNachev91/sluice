@@ -28,8 +28,8 @@ import java.util.function.Supplier;
  * job into its card. What is kept here is the job itself, because that is the one thing all three
  * faces describe and none of them owns.
  *
- * <p>One presenter bean stands for the dashboard, and its faces are constructed here. So the screen
- * has one thing to ask which face is up, and the faces are wired together in one place.
+ * <p>One presenter bean stands for the dashboard and its faces are constructed here, so the screen
+ * has one thing to ask which face is up.
  */
 @Component
 @Profile("!cli")
@@ -208,7 +208,8 @@ public class RunLauncherPresenter {
     }
 
     /**
-     * Brings photos into the Inbox and removes each original once its bytes have arrived.
+     * Brings photos into the Inbox and removes each original once the copy in the Inbox has been
+     * read back and hashed against it.
      *
      * <p>The screen offering the choice names which of its own two answers was taken, never what
      * that answer means. What it amounts to is this side's to say.
@@ -301,8 +302,8 @@ public class RunLauncherPresenter {
     /**
      * Puts the launcher back, dropping the report of the run that ended.
      *
-     * <p>The counts behind the launcher were read again the moment that run ended. So what comes
-     * back describes the folders as they now stand, not as the run found them.
+     * <p>The counts behind the launcher were read again the moment that run ended, so what comes
+     * back describes the folders as they now stand.
      */
     public void dismissResult() {
         this.endedCard = null;

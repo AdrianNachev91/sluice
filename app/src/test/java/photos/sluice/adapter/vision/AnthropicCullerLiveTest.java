@@ -51,26 +51,26 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
 // Live verify against the real Anthropic API. Skipped unless both gates hold: the run opts in
-// explicitly, and a key is reachable. Only the first guards spending: nobody opts in by accident.
-// The second exists so a machine with no key skips rather than going red, and it asks the same
-// question this test's own client asks.
+// explicitly, and a key is reachable. Only the first guards spending, since nobody opts in by
+// accident. The second is so a machine with no key skips rather than going red.
 //
-// Opting in takes either SLUICE_LIVE_CULL=true in the environment or -Dsluice.live.cull=true on the
-// command line. The property is there because an environment variable cannot be set for a single
-// Maven invocation on every shell this project is run from. Pair it with -Dtest= to reach one test:
-// the forecast and credential checks below cost nothing, and only the montage cull spends.
+// Opting in takes either SLUICE_LIVE_CULL=true in the environment or -Dsluice.live.cull=true on
+// the command line. The property is there because an environment variable cannot be set for a
+// single Maven invocation on every shell this project is run from. Pair it with -Dtest= to reach
+// one test: the forecast and credential checks cost nothing, and only the montage cull spends.
 //
 // One run proves the two things the mocked tests cannot. The live API accepts the montage request
-// shape: image block, photo table, JSON-schema structured output, the structured-output schema. And it
-// accepts the corrective-retry conversation: assistant echo of the failed reply plus a correction
-// turn. A decorator forces the retry by flipping one filename in the first live response. The name
-// check then fails, and the genuine second request goes out. Verdict content is deliberately not
-// asserted - models vary. Schema validity and request acceptance are the contract here. A model
-// that answers the retry with invalid content still fails the run loud. That is accepted for an
-// opt-in smoke test.
+// shape, meaning the image block, the photo table and the structured-output schema. And it accepts
+// the corrective-retry conversation, meaning an assistant echo of the failed reply plus a
+// correction turn. A decorator forces that retry by flipping one filename in the first live
+// response, so the name check fails and a genuine second request goes out.
 //
-// The montage is real: four distinct synthetic photos run through the full imaging pipeline, so the
-// API sees exactly what a production cull sends. Cost per run is a fraction of a cent.
+// Verdict content is deliberately not asserted, models being what they are. Schema validity and
+// request acceptance are the contract. A model answering the retry with invalid content still
+// fails the run loud, which is accepted for an opt-in smoke test.
+//
+// The montage is real: four distinct synthetic photos run through the full imaging pipeline, so
+// the API sees exactly what a production cull sends. Cost per run is a fraction of a cent.
 @EnabledIf("liveRunIsPossible")
 class AnthropicCullerLiveTest {
 
@@ -290,8 +290,7 @@ class AnthropicCullerLiveTest {
         return liveRunRequested() && aKeyIsReachable();
     }
 
-    // Either route opts in. Two rather than one because a single Maven invocation can carry a
-    // property but not an environment variable, and CI carries the variable but no command line.
+    // Two routes rather than one because CI carries the variable but no command line.
     private static boolean liveRunRequested() {
         return "true".equals(System.getenv("SLUICE_LIVE_CULL"))
                 || Boolean.getBoolean("sluice.live.cull");

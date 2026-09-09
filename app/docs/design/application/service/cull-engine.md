@@ -177,10 +177,10 @@ there is nothing for a culler to judge, so dispatching would only produce an emp
 rebuilt or re-rendered by a resume.
 
 It checks the folder roots first, and refuses with `PathsMisconfiguredException` if any is unset,
-missing or overlapping. `Pipeline` runs the same check on its own way in, so the one this buys is a
-watcher's auto-resume, which reaches this method without passing the facade. Apply moves files, and
-a move recreates any missing ancestor of its destination. So a resume against roots the app has
-already refused would put a folder back that the user had removed.
+unparsable, missing, unreadable or overlapping another. `Pipeline` runs the same check on its own
+way in, so the one this buys is a watcher's auto-resume, which reaches this method without passing
+the facade. Apply moves files, and a move recreates any missing ancestor of its destination. So a
+resume against roots the app has already refused would put a folder back that the user had removed.
 
 Listing what is on disk is not this class's job at all. `PrepDirDoctor.runs()` enumerates the
 sift-prep root and diagnoses each dir, and `Pipeline.cullRuns()` exposes it - see

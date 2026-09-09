@@ -31,8 +31,7 @@ public record Settings(PathSettings paths, String provider,
     private static final int MAX_CATEGORIES = 20;
 
     /**
-     * The most photo categories one install may hold. For a screen that has to refuse a set before
-     * building one of these, and say the number.
+     * The most photo categories one install may hold.
      *
      * @return int the ceiling
      */
@@ -43,10 +42,6 @@ public record Settings(PathSettings paths, String provider,
     /**
      * Copies the category list and the settings map, and refuses categories holding two cards under
      * the same name. Two such cards would silently alias one category.
-     *
-     * <p>The check lives here rather than on either producer. Bound config and an editing screen
-     * both arrive as one of these. So this is the one place that sees every category set the app
-     * ever runs on.
      *
      * @param paths {@link PathSettings} the three configured folder roots
      * @param provider {@link String} id of the vision provider a cull routes through

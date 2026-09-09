@@ -45,9 +45,8 @@ final class PageHeader {
         /**
          * Takes the last operation's message off the bar.
          *
-         * <p>Called by a page as it redraws. The bar is built once and outlives every rebuild.
-         * Without this, a line about the last page stands over the one that has replaced it. A
-         * key being checked, say, or a save that was refused.
+         * <p>The bar is built once and outlives every rebuild, so without this a line about the
+         * last draw stands over the one that has replaced it.
          */
         void clearStatus() {
             this.status.setText("");
@@ -55,9 +54,6 @@ final class PageHeader {
         }
     }
 
-    /**
-     * Prevents instantiation of this static factory class.
-     */
     private PageHeader() {
     }
 
@@ -65,7 +61,7 @@ final class PageHeader {
      * Builds the bar.
      *
      * @param heading {@link String} the page's own name
-     * @param saveId {@link String} the node id the page's tests and gallery find Save by
+     * @param saveId {@link String} the node id Save carries
      * @param above a control to sit above the heading, such as the way back, or null for none
      * @return {@link Result} the bar and its controls
      */
@@ -87,7 +83,7 @@ final class PageHeader {
         final TextArea status = SelectableText.prose();
         status.getStyleClass().add("settings-save-status");
         // No text, no line. A bar that always reserved a row for a message would put a permanent
-        // gap between the heading and the page. Every screen with nothing to say would carry it.
+        // gap between the heading and the page.
         SettingsRows.showWhileItSaysSomething(status);
 
         final var header = new VBox();
@@ -161,8 +157,7 @@ final class PageHeader {
      * radio all consume Enter without doing anything with it. Listening on the way up would hear
      * the key only from the controls that must not save, which is the opposite of the rule.
      *
-     * <p>A control that owes the reader the key still gets it. {@link #midInput} answers true
-     * there, and this returns without consuming, so the event carries on down to it untouched.
+     * <p>A control that owes the reader the key still gets it, untouched.
      *
      * @param page {@link VBox} the whole page, header and scrolling body alike
      * @param save {@link Button} the button Enter stands in for

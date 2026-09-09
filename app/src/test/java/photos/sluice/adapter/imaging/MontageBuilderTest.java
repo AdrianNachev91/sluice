@@ -63,7 +63,6 @@ class MontageBuilderTest {
 
         final int cellWidth = TILE_SIZE + 2 * CELL_PADDING;
         final int cellHeight = TILE_SIZE + MontageBuilder.labelBandHeight() + 2 * CELL_PADDING;
-        // Row 2 (index 1) has only the first of its 3 columns filled - canvas stays full 3-wide.
         assertThat(montage.getWidth()).isEqualTo(3 * cellWidth);
 
         final int secondRowMidY = cellHeight + cellHeight / 2;
@@ -114,8 +113,8 @@ class MontageBuilderTest {
         assertThat(new Color(montage.getRGB(imageCenter, imageCenter))).isEqualTo(Color.RED);
 
         // A pixel differing from the flat background proves real glyph pixels were drawn. Not
-        // "equals white" - anti-aliased glyph edges render slightly differently across the
-        // project's Ubuntu/Windows CI matrix.
+        // "equals white": anti-aliased glyph edges render slightly differently across the
+        // platforms CI runs on.
         final int bandTop = CELL_PADDING + TILE_SIZE;
         final int bandBottom = bandTop + MontageBuilder.labelBandHeight();
         final int width = montage.getWidth();
@@ -135,7 +134,6 @@ class MontageBuilderTest {
         final BufferedImage montage = this.builder.compose(List.of(firstTile, secondTile), config);
 
         final int cellWidth = TILE_SIZE + 2 * CELL_PADDING;
-        // The second tile's own image area is unaffected by the first cell's overflowing label.
         final int secondImageCenterX = cellWidth + CELL_PADDING + TILE_SIZE / 2;
         assertThat(new Color(montage.getRGB(secondImageCenterX, CELL_PADDING + TILE_SIZE / 2)))
                 .isEqualTo(Color.BLUE);

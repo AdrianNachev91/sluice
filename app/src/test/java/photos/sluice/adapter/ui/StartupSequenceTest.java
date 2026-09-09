@@ -31,9 +31,7 @@ class StartupSequenceTest {
 
     private final Pipeline pipeline = mock(Pipeline.class);
 
-    // The claim has to come first, not merely happen. Both housekeeping steps reach files: the
-    // sweep deletes outright, and an armed watcher can auto-resume a waiting run into an apply. So
-    // the lock is verified inside the same ordered chain as the two calls, rather than beside it.
+    // The lock is verified inside the same ordered chain as the two calls, rather than beside it.
     // Checked separately, an implementation that swept first and claimed afterwards would pass.
     @Test
     void runClaimsTheWorkingRootBeforeAnythingReachesAFile(@TempDir final Path root) {
@@ -48,8 +46,6 @@ class StartupSequenceTest {
         order.verify(this.pipeline).sweepExpiredDisasterDrawers();
     }
 
-    // An install with no folders chosen has nothing to claim, and the claim is not this class's to
-    // take on its behalf. The save that first names a working root takes it.
     @Test
     void unusableRootsStopTheSequenceBeforeTheClaim(@TempDir final Path root) {
         final var lock = mock(WorkingRootLock.class);
@@ -86,8 +82,6 @@ class StartupSequenceTest {
         verifyNoInteractions(this.pipeline);
     }
 
-    // The sweep deletes and an armed watcher can auto-resume into an apply. A run that could not
-    // claim the root must therefore stop before either, not merely report the refusal afterwards.
     @Test
     void aRefusedClaimStopsBeforeTheHousekeeping(@TempDir final Path root) {
         final var sequence = new StartupSequence(new RefusingLock(), paths(root), this.pipeline, usableRoots());
@@ -199,8 +193,7 @@ class StartupSequenceTest {
         }
     }
 
-    // Only repoRoot() is ever asked for here. The rest of the port exists for engines this sequence
-    // never reaches.
+    // Only repoRoot() is ever asked for here.
     private record FixedPaths(Path root) implements PathsPort {
         @Override
         public Path repoRoot() {

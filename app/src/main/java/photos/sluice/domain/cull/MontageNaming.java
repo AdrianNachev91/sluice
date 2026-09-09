@@ -17,14 +17,14 @@ import java.util.regex.Pattern;
  */
 public final class MontageNaming {
 
-    // The mirror image of shardFileFor(): recovers a montage id's number from a sidecar filename.
-    // Rebuilding a lost index.json is the case that needs this reverse direction, since whatever
-    // sidecars survive on disk are the only remaining record of which montages existed.
+    // Recovers a montage id's number from its own sidecar filename. That direction exists because
+    // surviving sidecars are the only remaining record of which montages a prep dir held.
     private static final Pattern SIDECAR_NAME = Pattern.compile("^montage-(\\d+)\\.json$");
 
-    // What montageIdFor() produces, stated so a reader off disk can be held to it. An id becomes a
-    // filename under the prep dir through shardFileFor(). One of those names a move destination, so
-    // an id is a path segment as much as an identifier.
+    // The shape an id read off disk is held to. Deliberately wider than what montageIdFor()
+    // produces, which pads to at least three digits. An id becomes a filename under the prep dir
+    // through shardFileFor(). One of those names a move destination, so an id is a path segment as
+    // much as an identifier.
     private static final Pattern MONTAGE_ID = Pattern.compile("montage-\\d+");
 
     /**

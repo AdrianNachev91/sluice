@@ -67,7 +67,6 @@ class TroubleshootPaneTest {
                 .contains("A photo this sift wants to move is not where it was.", PHOTO.toString());
     }
 
-    // Nothing else would fail if the heading were never drawn.
     @Test
     void faultsOfOneKindAreDrawnUnderOneCountedHeading() throws Exception {
         final Parent pane = onFxThread(() -> built(State.BLOCKED,

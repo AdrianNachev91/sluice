@@ -55,9 +55,8 @@ class CullWatchersTest {
         }
     }
 
-    // The tally is changed only once a poll has read the one before it. The first poll announces
-    // nothing, having nothing to compare against. A change made before it is seeded as the starting
-    // value, and is then never a change at all.
+    // The tally is changed only once a poll has read the one before it. A change made before that
+    // first poll is seeded as the starting value, and is then never a change at all.
     @Test
     void aSheetArrivingIsAnnouncedWithoutTheRunHavingToFinish() {
         this.arm();
@@ -70,8 +69,8 @@ class CullWatchersTest {
         assertThat(requireNonNull(this.watchers).isWatchActive(PREP_DIR)).isTrue();
     }
 
-    // A poll that announced whatever it read would fire on every tick, which nothing asserting
-    // that a sheet arrived can tell apart from the real thing.
+    // A poll that announced whatever it read would fire on every tick. No test asserting that a
+    // sheet arrived could tell that apart from the real thing.
     @Test
     void aFolderThatHasNotMovedIsAnnouncedOnNoTickAtAll() {
         this.arm();
@@ -81,9 +80,8 @@ class CullWatchersTest {
         assertHoldsFor(Duration.ofMillis(200), () -> this.announcements.get() == atArming);
     }
 
-    // The wait is what makes it the readable-to-unreadable transition rather than a watcher that
-    // read nothing from its very first poll. Without it the null is already in place when polling
-    // starts, and the guard this exercises is never reached.
+    // The wait is what makes this the readable-to-unreadable transition. Without it the null is
+    // already in place when polling starts, and the guard under test is never reached.
     @Test
     void aFolderThatCouldNotBeReadIsAnnouncedAsNothing() {
         this.arm();

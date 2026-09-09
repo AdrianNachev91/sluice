@@ -113,9 +113,7 @@ public record RunLauncherView(List<ModeChoice> modes, RowLink rowLink, String mo
      * One of the buttons across the top of the launcher.
      *
      * <p>A mode with nothing behind it yet is still pressable. What such a mode can and cannot do
-     * is said by the hint under the scope field and by whether the start button is live. A button
-     * drawn dead would say the same thing less clearly, and would leave the row looking different
-     * from the row this screen ends up with.
+     * is said by the hint under the scope field and by whether the start button is live.
      *
      * <p>What does draw the whole row dead is a job in flight. The line reporting how that job
      * ended names the work it was started as. A row that could still move would let a user change
@@ -161,8 +159,7 @@ public record RunLauncherView(List<ModeChoice> modes, RowLink rowLink, String mo
      *
      * <p>{@code year} is an identity handed back when the row is chosen, never something for the
      * screen to render. What the row says is {@code label}, already written out, and what it is
-     * found by is {@code id}. A screen composing that id from the year would be spelling a naming
-     * rule, in the one place meant to decide nothing.
+     * found by is {@code id}.
      *
      * @param year int which year the row stands for
      * @param id {@link String} the control's id, for the screen to set on it

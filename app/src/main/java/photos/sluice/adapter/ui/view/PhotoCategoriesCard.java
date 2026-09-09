@@ -9,7 +9,7 @@ import javafx.scene.layout.VBox;
  *
  * <p>Its own screen rather than another card here. A card holds one control per setting, and this
  * holds a variable number of cards, each with three fields of its own. It is reached from here
- * rather than from the sidebar, which is settled at three destinations.
+ * rather than from the sidebar, whose entries are settled.
  */
 final class PhotoCategoriesCard {
 

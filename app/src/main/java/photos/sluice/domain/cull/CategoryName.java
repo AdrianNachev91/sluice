@@ -25,10 +25,8 @@ public final class CategoryName {
      * The one category name with a destination of its own: the library's flat Funny/ folder, rather
      * than a folder under the Review root like every other card.
      *
-     * <p>Here so the two places that have to agree on it read one definition. The class resolving a
-     * destination branches on it, and an editing surface has to know which card it must not let be
-     * renamed. Renaming it routes library keepers into Review instead, silently, since nothing else
-     * in the app decides a card's destination.
+     * <p>One definition, because renaming it routes library keepers into Review instead, silently.
+     * Nothing else in the app decides a card's destination.
      */
     public static final String LIBRARY_CATEGORY = "funny";
 
@@ -70,9 +68,8 @@ public final class CategoryName {
         if (name.length() > MAX_LENGTH) {
             return "is longer than the " + MAX_LENGTH + " characters a folder name may take here";
         }
-        // Only Windows reserves these names, and ReservedDeviceNames says why they are refused
-        // everywhere anyway. So this clause names no platform. A Mac reader is getting the refusal
-        // too, and would be reading about a machine they are not on.
+        // The clause names no platform on purpose. Only Windows reserves these names, and a Mac
+        // reader gets the same refusal.
         if (ReservedDeviceNames.isReserved(name)) {
             return "is reserved by the operating system and cannot become a folder";
         }

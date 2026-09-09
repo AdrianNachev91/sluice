@@ -20,9 +20,8 @@ class CliHeifDecoderTest {
 
     private final CliHeifDecoder decoder = new CliHeifDecoder("heif-convert");
 
-    // Reuses the existing HEIC fixture from the dating tests - a real iPhone photo, no new
-    // fixture needed. Confirms the adapter actually decodes real HEVC pixel data end to end,
-    // not just that a process gets launched.
+    // The dating tests' HEIC fixture is a real iPhone photo, so the decode runs over genuine HEVC
+    // pixel data rather than a synthetic file.
     @Test
     void decodesARealHeicFixtureToItsFullResolution() {
         final Optional<BufferedImage> result = this.decoder.decode(DECODABLE_FIXTURE);
@@ -44,9 +43,8 @@ class CliHeifDecoderTest {
         assertThat(result.get().getHeight()).isEqualTo(1063);
     }
 
-    // The command is resolved against PATH at process-launch time. A nonexistent command name
-    // reproduces exactly what happens on a machine with no decoder installed at all - the case
-    // TileRenderer's placeholder fallback exists for.
+    // The command is resolved against PATH at process-launch time, so a nonexistent command name
+    // reproduces a machine with no decoder installed at all.
     @Test
     void missingBinaryDegradesGracefullyToEmpty(@TempDir final Path tempDir) throws IOException {
         final Path file = tempDir.resolve("photo.heic");
@@ -59,8 +57,7 @@ class CliHeifDecoderTest {
     }
 
     // Scratch-file creation can fail unchecked as well as checked, and the injectable factory is
-    // the only seam that reproduces the unchecked half deterministically. SecurityException stands
-    // in for any unchecked failure a filesystem provider can raise there. The fixture is a real,
+    // the only seam that reproduces the unchecked half deterministically. The fixture is a real,
     // decodable HEIC, so the refused scratch file is the only thing that can turn this result
     // empty.
     @Test
@@ -75,8 +72,7 @@ class CliHeifDecoderTest {
     }
 
     // A real heif-convert binary, given a file that isn't actually HEIF/AVIF at all, exits
-    // non-zero (verified empirically: "Input file is not an HEIF/AVIF file"). Distinguishes this
-    // from the missing-binary case above - here the process runs, but fails.
+    // non-zero (verified empirically: "Input file is not an HEIF/AVIF file").
     @Test
     void corruptFileDegradesGracefullyToEmpty(@TempDir final Path tempDir) throws IOException {
         final Path file = tempDir.resolve("garbage.heic");

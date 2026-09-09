@@ -104,8 +104,9 @@ public class CommitEngine implements CommitUseCase {
         int current = 0;
 
         // One session for the whole move loop. Each moved file's index row is written and flushed
-        // immediately, so a crash mid-run never leaves an already-moved file with no index row. The
-        // header/leading-newline checks still only run once, instead of once per file.
+        // immediately. A crash mid-run then costs at most the row of the file it was moving, not
+        // every row the run had accumulated. The header and leading-newline checks still only run
+        // once, instead of once per file.
         try (final HashIndexPort.Session session = this.hashIndexPort.openSession()) {
             // Checked after each file's move, so an in-flight file is never interrupted; already-
             // committed files stay committed, matching the no-undo model.

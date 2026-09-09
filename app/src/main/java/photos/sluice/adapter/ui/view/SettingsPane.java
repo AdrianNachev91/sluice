@@ -21,17 +21,11 @@ import java.util.function.Consumer;
  * the credential and model catalogue, {@link VisionProviderPresenter}. This class lays those out
  * and forwards a click or an edit back to whichever one owns it. It never decides on its own what a
  * field means or whether it is valid.
- *
- * <p>Assembles the cards ({@link FoldersCard}, {@link VisionProviderCard},
- * {@link PhotoCategoriesCard}, {@link PhotoSheetsCard}, {@link AppearanceCard}) and wires Save, off
- * the shared row vocabulary in {@link SettingsRows}.
  */
 final class SettingsPane {
 
     private static final String SAVED = "Settings saved.";
-    /**
-     * Prevents instantiation of this static factory class.
-     */
+
     private SettingsPane() {
     }
 
@@ -150,9 +144,6 @@ final class SettingsPane {
                     provider.secretCard());
             // Both rebuilt rather than toggled. A credential and a model catalog each belong to the
             // provider that owns them, so what these say and offer has to change with the choice.
-            //
-            // fillSecretCard leaves Test's own enabled state current as part of that. A credential
-            // is exactly what that state depends on.
             VisionProviderCard.fillSecretCard(provider.secretCard(), visionProvider, provider.providerBox(),
                     provider.providerFields(), null, view.keyLimit());
             VisionProviderCard.selectModelPickerFor(VisionProviderCard.controlsOf(provider.providerFields()).model(),
@@ -186,7 +177,28 @@ final class SettingsPane {
         }
     }
 
-
+    /**
+     * Takes a press on Save: hands every field's value to the presenter, then draws what it made of
+     * them.
+     *
+     * <p>A save that lands is followed by a fresh model check, since the key or the provider it
+     * belongs to may just have changed. The page waits on that before it redraws, so the picker a
+     * reader comes back to is the one this account can actually run.
+     *
+     * @param container {@link VBox} the pane's own body, which a banner is put at the top of
+     * @param presenter {@link SettingsPresenter} judges the values and stores them
+     * @param visionProvider {@link VisionProviderPresenter} runs the model check that follows
+     * @param workingRoot {@link SettingsRows.FolderRow} the working root field and its mark
+     * @param libraryRoot {@link SettingsRows.FolderRow} the library root field and its mark
+     * @param inbox {@link SettingsRows.FolderRow} the inbox field and its mark
+     * @param provider {@link SettingsView.ProviderChoice} the provider the dropdown is on
+     * @param providerFields {@link VBox} the model and endpoint rows, read for their values
+     * @param tileSize int the sheet's tile size as the spinner has it
+     * @param tilesPerRow int the sheet's tiles per row as the spinner has it
+     * @param themeId {@link String} the look the radios are on
+     * @param status {@link TextArea} the line beside Save
+     * @param showBanner {@link Consumer} of {@link String} redraws the page and says what happened
+     */
     private static void onSave(final VBox container, final SettingsPresenter presenter,
                                final VisionProviderPresenter visionProvider,
                                final SettingsRows.FolderRow workingRoot,
@@ -241,8 +253,10 @@ final class SettingsPane {
      * <p>The page travels to the bar, which is where a refusal has to be read from. Which field is
      * at fault is said by the mark on that field, so the reader goes back down to it.
      *
+     * @param container {@link VBox} the pane's own body, which the bar is put at the top of
      * @param status {@link TextArea} the line beside Save
      * @param message what was refused, or null where nothing was
+     * @param warning boolean true where this is a caution rather than a refusal
      */
     private static void showRefusal(final VBox container, final TextArea status,
                                     final @Nullable String message, final boolean warning) {
@@ -261,6 +275,7 @@ final class SettingsPane {
      * user typed it, because the save they were carrying never happened and a rebuild would read
      * back the values on disk over the top of it.
      *
+     * @param container {@link VBox} the pane's own body, which a report is put at the top of
      * @param outcome {@link SettingsPresenter.MoveOutcome} what the move reported
      * @param status {@link TextArea} the line beside Save
      * @param showBanner {@link Consumer} of {@link String} redraws the page and says what happened

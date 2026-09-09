@@ -16,9 +16,7 @@ import java.util.concurrent.Callable;
  * Opens the desktop window.
  *
  * <p>Declared here so the help lists it and the parser knows the name, not because this class opens
- * anything. The window is launched before this surface exists. A command line that loaded a window
- * toolkit would start threads a one-shot run has no use for, and a machine with no desktop has no
- * toolkit to load at all.
+ * anything. The window is launched before this surface exists.
  *
  * <p>So the only invocation that reaches this class is one carrying something besides the verb,
  * which is what it refuses. The window takes no settings of its own from a command line.

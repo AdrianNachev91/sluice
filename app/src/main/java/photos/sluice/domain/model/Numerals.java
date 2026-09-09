@@ -3,9 +3,8 @@ package photos.sluice.domain.model;
 /**
  * Zero-pads a non-negative integer into a fixed-width ASCII decimal string. A bare
  * {@code "%0Nd".formatted(...)} draws its digits and zero-padding character from the JVM's
- * default {@code FORMAT} locale instead. Every path segment, id, and prep-dir tag built from a
- * year, month, or sequence number routes through here instead. A single shared site covers every
- * caller, rather than a convention each new one has to separately remember.
+ * default {@code FORMAT} locale instead. A single shared site holding that off is stronger than a
+ * convention every new call site has to separately remember.
  */
 public final class Numerals {
 

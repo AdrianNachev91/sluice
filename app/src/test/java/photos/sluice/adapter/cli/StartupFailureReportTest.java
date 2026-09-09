@@ -88,7 +88,7 @@ class StartupFailureReportTest {
 
     // One refusal, two places that word it. A command meeting a held root reads the exception's own
     // sentence. A startup meeting the same thing has only the folder and a trace to work from, so
-    // this class writes the sentence itself. Nothing but this stops the two drifting apart.
+    // this class writes the sentence itself.
     @Test
     void aHeldRootIsWordedTheSameWhetherItStoppedTheStartupOrJustTheCommand() {
         this.report(false).write(new StartupFailure.WorkingRootBusy(WORKING_ROOT, "the trace"));

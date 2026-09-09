@@ -14,9 +14,8 @@ import java.util.List;
 /**
  * Turns what a caller typed to name one sift into the folder that sift lives in.
  *
- * <p>Two spellings. The scope tag, which is what {@code runs} prints in its first column, so a
- * caller resumes or discards a sift by copying what it just read. And a full path, for a caller
- * that has one in hand.
+ * <p>Two spellings. The scope tag, which is what {@code runs} prints in its first column. And a
+ * full path, for a caller that has one in hand.
  *
  * <p>A tag is matched against the sifts that are there rather than pieced into a path. So a tag
  * naming no sift is refused here, with the ones that do exist named. And nothing here has to know

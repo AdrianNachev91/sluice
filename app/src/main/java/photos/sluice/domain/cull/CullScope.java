@@ -67,9 +67,8 @@ public sealed interface CullScope {
     }
 
     /**
-     * The on-disk tag identifying this scope's prep dir (logs/sift-prep/<tag>/). Also PrepDir.scope()
-     * and a WaitingCullJob's own scope() - both carry this same string. Lives here rather than in the
-     * adapter that names the directory, so the application layer can compute it too.
+     * The on-disk tag identifying this scope's prep dir (logs/sift-prep/<tag>/), which is also the
+     * string {@code PrepDir.scope()} carries.
      *
      * @param scope {@link CullScope} the cull scope to tag
      * @return {@link String} the scope's on-disk tag
@@ -98,9 +97,8 @@ public sealed interface CullScope {
     /**
      * The year scope a tag stands for, or null where it names no year.
      *
-     * <p>The inverse of {@link #tag} over its {@link Year} case, and it lives beside it so the two
-     * cannot drift apart. A caller comparing what somebody has chosen against the runs already on
-     * disk needs the months back, not just the string.
+     * <p>The inverse of {@link #tag} over its {@link Year} case, and it sits beside it so the two
+     * cannot drift apart.
      *
      * <p>{@link OldestN} answers null, because a count of files names no timeframe. So does anything
      * else found in the sift-prep root, including a folder somebody made by hand.

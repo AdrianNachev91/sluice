@@ -97,9 +97,7 @@ final class SettingsRows {
     /**
      * One panel of the screen: its name, a line saying what the whole panel is for, then its rows.
      *
-     * <p>The description is what stops a panel being a name over some controls. A reader who does
-     * not already know how photos reach a vision model learns nothing from two numbers under a
-     * heading.
+     * <p>The description is what stops a panel being a name over some controls.
      *
      * @param eyebrow {@link String} the panel's name, in capitals
      * @param description what the panel is for, or null where the name says it
@@ -121,12 +119,12 @@ final class SettingsRows {
     /**
      * Has a spinner keep track of whether the reader is in its text or on its arrows.
      *
-     * <p>A spinner reports itself as holding focus in both cases, never its editor, so nothing about
-     * the focus owner separates them. It has to remember which the reader last reached for.
+     * <p>Focus sits inside the spinner either way, on the control or on its editor, so nothing
+     * about the focus owner separates them. It has to remember which the reader last reached for.
      *
-     * <p>A press inside the text puts the caret there, which is enough on its own. The reader is in
-     * the field whether or not they have typed a character yet. A press on an arrow, or either
-     * arrow key, is the other case, and the value it lands on is whole at every step.
+     * <p>A press inside the text counts as reaching for the field whether or not a character has
+     * been typed yet. An arrow, by press or by key, is the other case, and the value it lands on is
+     * whole at every step.
      *
      * <p>Filters rather than handlers. The editor consumes a typed character before the spinner's
      * own handlers run, so listening on the way up hears nothing.
@@ -175,13 +173,6 @@ final class SettingsRows {
      * A muted line built empty and written onto later, which takes no room at all while it has
      * nothing to say.
      *
-     * <p>A screen reserving a row for every line it might one day show would carry those gaps on
-     * every screen that has nothing to put in them.
-     *
-     * <p>Its sibling {@link #helpLine} is the other kind: built with its words and never changed.
-     * The two take an id and a sentence respectively, which is a difference nothing but the name
-     * would show at a call site.
-     *
      * @param id {@link String} the control's id
      * @return {@link TextArea} the line
      */
@@ -196,8 +187,8 @@ final class SettingsRows {
     /**
      * Puts what a screen has to report on the line it reports from.
      *
-     * <p>Only a refusal wears the caution colour, and the class comes off again on every fill. A
-     * report that worked would otherwise be dressed as whatever the last refusal was.
+     * <p>The caution class comes off again on every fill, so a report that worked is not dressed as
+     * whatever the last refusal was.
      *
      * @param line {@link TextArea} the screen's own report line
      * @param said {@link Message} what to report, or null for nothing
@@ -253,8 +244,8 @@ final class SettingsRows {
     static void pointAt(final Hyperlink link, final @Nullable Location location,
                         final ScreenNavigation navigation) {
         link.setText(location == null ? "" : location.label());
-        // Re-pointed on every fill. The same control serves whichever screen the line now names,
-        // and an action left over from the last one would open a screen this sentence never named.
+        // The same control serves whichever screen the line now names, so an action left over from
+        // the last one opens a screen this sentence never named.
         link.setOnAction(location == null ? null : _ -> navigation.setScreen(location));
     }
 
@@ -290,8 +281,7 @@ final class SettingsRows {
     static HBox locationLines(final TextArea sentence, final Hyperlink locationLink) {
         final var pair = new HBox(sentence, locationLink);
         pair.getStyleClass().add("location-lines");
-        // The link reads as the end of the sentence rather than as a control under it. So it sits
-        // level with the last line of the words and follows them across.
+        // The link reads as the end of the sentence rather than as a control under it.
         pair.setAlignment(Pos.BOTTOM_LEFT);
         // The words take the room they need and no more, which is what puts the link against them
         // rather than out at the far edge. Capped by the row, so a sentence longer than the card
@@ -332,9 +322,6 @@ final class SettingsRows {
 
     /**
      * A button that asks before it acts.
-     *
-     * <p>The question is asked before anything happens, so a reader who backs out leaves what the
-     * press was about exactly as it was.
      *
      * @param id {@link String} the button's own id
      * @param label {@link String} what it says
@@ -430,8 +417,7 @@ final class SettingsRows {
     }
 
     /**
-     * A page's body in the pane that scrolls it. Both settings pages are built this way, so the
-     * one that is reached from the other does not arrive with different chrome.
+     * A page's body in the pane that scrolls it.
      *
      * @param body {@link VBox} the page's own contents
      * @return {@link ScrollPane} the pane to hand the shell
@@ -440,8 +426,6 @@ final class SettingsRows {
         final var scroll = new ScrollPane(body);
         scroll.getStyleClass().add("settings-scroll");
         scroll.setFitToWidth(true);
-        // Left on the body so a refusal can reach it. A refusal is raised from a button deep in the
-        // page, which knows the body it sits in and nothing about what scrolls it.
         body.getProperties().put(SCROLL, scroll);
         return scroll;
     }
@@ -450,14 +434,10 @@ final class SettingsRows {
      * Puts a report at the head of a page, in the tone the outcome deserves.
      *
      * <p>Every outcome of a save is said the same way, so none of them reads as less finished than
-     * the others. A refusal left on its own line in the header was the one report with no ground of
-     * its own.
+     * the others.
      *
-     * <p>Replaces whatever this page was saying before. Two reports of the same save stacked up
-     * would leave the reader deciding which one is current.
-     *
-     * <p>A refusal and a caution stay until they are dismissed. Only a plain confirmation fades: it
-     * says a thing the reader already knows they asked for, and there is nothing in it to act on.
+     * <p>Replaces whatever this page was saying before, so two reports of the same save never stack
+     * up for the reader to decide between.
      *
      * @param body {@link VBox} the page's own scrolling body
      * @param tone the style class saying which kind of report this is, or null for a plain
@@ -491,10 +471,9 @@ final class SettingsRows {
      * <p>Travelled rather than jumped, so a save reads as the page moving rather than as a
      * different screen appearing.
      *
-     * <p>Nothing puts the reader back where they were first. A scrolling pane keeps its own place
-     * across a rebuild, adjusting what it holds so the same contents stay in view. It clamps to the
-     * end where the new page is too short to reach the old position. Both are what a reader would
-     * expect, so the movement starts from where they actually are.
+     * <p>Nothing resets the position first. A scrolling pane keeps its own place across a rebuild,
+     * clamping to the end where the new page is too short to reach it, so the movement starts from
+     * where the reader actually is.
      *
      * @param body {@link VBox} the page's own scrolling body
      */
@@ -523,8 +502,8 @@ final class SettingsRows {
     /**
      * Scrolls the body holding one node until another sits at the top of the view.
      *
-     * <p>Travelled rather than jumped. Every caller is an arrival at something the reader asked
-     * for, so the movement is what tells them where it came from.
+     * <p>Travelled rather than jumped, so the movement is what tells the reader where the new
+     * position came from.
      *
      * @param inBody {@link Node} anything inside the scrolling body, used to find what scrolls
      * @param target {@link Node} what to bring to the top
@@ -597,9 +576,9 @@ final class SettingsRows {
      * refuse. It is the other half of a bound the value type also holds, never a replacement for it.
      * A config file reaches that type without passing any control.
      *
-     * <p>A paste that would cross the ceiling is truncated to what fits rather than dropped whole.
-     * Losing the tail of a long paste is a visible outcome the reader can act on. Losing the paste
-     * is one they read as the app ignoring them.
+     * <p>A paste that crosses the ceiling is truncated to what fits rather than dropped whole.
+     * Losing the tail is visible and can be acted on; losing the paste reads as the app ignoring
+     * the reader.
      *
      * @param field {@link TextInputControl} the field to bound
      * @param characters int the most it may hold
@@ -622,8 +601,7 @@ final class SettingsRows {
      * A heading for a block sitting inside a card, below that card's own name.
      *
      * <p>Quieter than an eyebrow, because an eyebrow announces a panel and this announces a part of
-     * one. The credential block is inside the provider panel, since a key belongs to the provider it
-     * authenticates and means nothing beside a provider that takes none.
+     * one.
      *
      * @param text {@link String} what the block is called
      * @return {@link TextField} the heading
@@ -669,8 +647,7 @@ final class SettingsRows {
         final var fieldRow = new HBox(text, useSuggestedButton(text, field.suggestion()),
                 browseButton(text, field.suggestion()));
         fieldRow.getStyleClass().add("settings-field-row");
-        // A folder path is as long as it is, and the ones a user cares about are the long ones. The
-        // field takes whatever width the row has left rather than truncating at a default.
+        // A folder path is as long as it is, and the ones a user cares about are the long ones.
         HBox.setHgrow(text, Priority.ALWAYS);
 
         final var violation = violationLabel();
@@ -689,9 +666,8 @@ final class SettingsRows {
      * <p>Disabled once the field holds anything, rather than appearing and disappearing. A control
      * that comes and goes resizes the field beside it on the first character typed.
      *
-     * <p>Suggested, never "default". These roots have no configured default at all, which is why an
-     * install with none set meets the first-run card instead of running against guessed folders.
-     * A button calling them defaults would claim a property the app does not have.
+     * <p>Suggested, never "default". These roots have no configured default at all, so a button
+     * calling them defaults claims a property the app does not have.
      *
      * @param text {@link TextField} the field to fill
      * @param suggestion {@link String} the folder this row suggests
@@ -735,9 +711,6 @@ final class SettingsRows {
      * not submit without it, and this one does: the folders can be filled in over several saves.
      * What is actually true is that nothing runs until all three are set, and this is where that is
      * said.
-     *
-     * <p>Placed by whichever card draws the rows, and never further away than the rows themselves.
-     * A mark whose legend is on another screen explains nothing.
      *
      * @return {@link TextArea} the legend
      */
@@ -835,8 +808,7 @@ final class SettingsRows {
     /**
      * The banner a screen puts at its top to say what just happened, and the way to close it early.
      *
-     * <p>The stylesheet dresses the label inside the row, not the row itself. So the banner is the
-     * row, and the message is a label within it.
+     * <p>The stylesheet dresses the label inside the row, not the row itself.
      *
      * <p>A short confirmation fades on its own. One left standing is still there the next time
      * something is refused, where it reads as a claim about that. A report carrying counts, a path
@@ -905,9 +877,8 @@ final class SettingsRows {
      * How long a self-dismissing banner stays up, which is what there is to read plus a moment to
      * notice it.
      *
-     * <p>A fixed time suits one length of sentence and no other. The same wait that is generous for
-     * a three-word confirmation is gone before a reader reaches the end of a sentence explaining
-     * what happened to their photo.
+     * <p>A fixed time suits one length of sentence and no other: generous for a three-word
+     * confirmation, gone before the end of a paragraph.
      *
      * @param text {@link String} what the banner says
      * @return {@link Duration} how long to hold it before it starts fading
@@ -1001,14 +972,13 @@ final class SettingsRows {
      * A number field over one range: typeable, refusing anything outside it keystroke by keystroke,
      * and taking a typed value the moment focus leaves.
      *
-     * <p>An editable {@link Spinner} does not commit its editor's text on its own. A value typed
-     * and then left by clicking Save would be discarded, in favour of whatever the spinner last
-     * held.
+     * <p>An editable {@link Spinner} does not commit its editor's text on its own, so a value typed
+     * and then left by clicking Save is discarded in favour of whatever the spinner last held.
      *
-     * <p>Committing has to be safe before it can be automatic. The commit parses the editor's text,
-     * and a spinner hands an empty or non-numeric editor straight to its converter, which throws.
-     * That throw lands in a focus listener with nobody to catch it, and leaves the spinner holding
-     * null. So the formatter refuses what the converter cannot take.
+     * <p>Committing has to be safe before it can be automatic. The commit parses the editor's text
+     * through the converter, which throws on anything non-numeric and answers null for an empty
+     * field. So the formatter refuses what the converter cannot take, and an empty field is put
+     * back to the last value known good.
      *
      * <p>Only the ceiling is enforced while typing. Every number passes through its own shorter
      * prefixes on the way to being typed, so refusing those would make anything above the floor
@@ -1032,15 +1002,14 @@ final class SettingsRows {
             // What it must never do is reach the commit below.
             return proposed.isEmpty() || Integer.parseInt(proposed) <= range.most() ? change : null;
         }));
-        // Spinner's own built-in focus-lost handling runs before this listener and commits the
-        // editor's text through the value factory's converter regardless. An empty string commits
-        // to null rather than throwing, so by the time this runs spinner.getValue() can already be
-        // null. The last value known good is tracked independently rather than trusted from there.
+        // Spinner's own focus-lost handling runs first and commits the editor's text through the
+        // converter regardless. So spinner.getValue() can already be null here, and the last value
+        // known good is tracked independently rather than read from there.
         final int[] lastValid = {value};
         spinner.valueProperty().addListener((_, _, newValue) -> {
             // The property's declared type is not nullable, so the IDE reads this guard as always
-            // true. The null is the state described above: the converter commits one for empty
-            // text, and a test proves it by failing without this.
+            // true. The converter commits a null for empty text, and a test proves it by failing
+            // without this.
             //noinspection ConstantValue
             if (newValue != null) {
                 lastValid[0] = newValue;

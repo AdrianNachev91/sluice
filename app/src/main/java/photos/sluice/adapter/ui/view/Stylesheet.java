@@ -27,9 +27,6 @@ final class Stylesheet {
     // lives. An identity of its own rather than a string, so nothing else can name it by accident.
     private static final Object RESTYLE_LISTENER = new Object();
 
-    /**
-     * Prevents instantiation of this static utility class.
-     */
     private Stylesheet() {
     }
 
@@ -65,8 +62,7 @@ final class Stylesheet {
      * <p>A maximum rather than a size, because the two are different quantities. A window's size
      * counts its frame, and a scene is laid out in the area inside that frame. Setting a size here
      * would cost the scene whatever the platform's title bar and borders take, and the frame is not
-     * measurable before the window is shown. A maximum caps the outer edge and leaves the scene to
-     * ask for the size it wants.
+     * measurable before the window is shown.
      *
      * <p>The maximum is lifted once the window is up. It exists to shape the opening only, and a
      * reader who moves the window to a roomier display can then resize into it.

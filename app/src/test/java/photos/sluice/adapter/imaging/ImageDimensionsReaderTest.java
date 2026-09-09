@@ -62,9 +62,7 @@ class ImageDimensionsReaderTest {
         assertThat(result).contains(new Dimensions(512, 400));
     }
 
-    // A real Canon EOS 20D CR2 exposes exactly one Exif SubIFD, and it already carries the true
-    // capture resolution directly. Not a regression-prone case on its own, but it confirms the
-    // multi-directory scan still returns the correct value when only one SubIFD exists.
+    // This camera exposes exactly one Exif SubIFD, already carrying the true capture resolution.
     @Test
     void readsTrueCaptureResolutionFromARealCr2WithASingleSubIfd() {
         final Path cr2 = CULL_FIXTURES.resolve("raw-samples/canon-eos-20d.cr2");
@@ -74,11 +72,10 @@ class ImageDimensionsReaderTest {
         assertThat(result).contains(new Dimensions(3504, 2336));
     }
 
-    // A real Nikon D40 NEF exposes multiple Exif SubIFD directories. The first (the embedded
-    // preview's own) has no width/height tags at all - only a later one holds the true 3040x2014
-    // native capture resolution. Trusting only the first SubIFD would return the tiny 160x120
-    // embedded thumbnail instead, wrongly flagging a real high-res photo as low-res in LowResGate.
-    // Verified against the actual fixture bytes, not a synthesized case.
+    // This camera exposes several Exif SubIFD directories. The first, the embedded preview's own,
+    // carries no width or height tags at all, and only a later one holds the native capture
+    // resolution. Trusting the first alone would return the tiny embedded thumbnail, flagging a
+    // real high-resolution photo as low-res.
     @Test
     void readsTrueCaptureResolutionFromARealNefWhereTheFirstSubIfdHasNoDimensions() {
         final Path nef = CULL_FIXTURES.resolve("raw-samples/nikon-d40.nef");
@@ -88,10 +85,8 @@ class ImageDimensionsReaderTest {
         assertThat(result).contains(new Dimensions(3040, 2014));
     }
 
-    // A current-generation (2023) Sony ILCE-6700 carries the true 6656x4608 native capture
-    // resolution under the generic TIFF tag pair on one SubIFD, and a separate, smaller
-    // 6192x4128 embedded-preview resolution under the EXIF-specific tag pair on another. The
-    // largest-across-directories rule correctly picks the true capture size, not the preview.
+    // This camera carries the native capture resolution under the generic TIFF tag pair on one
+    // SubIFD, and a smaller embedded-preview resolution under the EXIF-specific pair on another.
     @Test
     void readsTrueCaptureResolutionFromARealModernSonyArw() {
         final Path arw = CULL_FIXTURES.resolve("raw-samples/sony-ilce-6700.arw");
@@ -101,11 +96,8 @@ class ImageDimensionsReaderTest {
         assertThat(result).contains(new Dimensions(6656, 4608));
     }
 
-    // A real AVIF file (verified genuine ftyp/avif box structure) carries no embedded EXIF at all,
-    // unlike the iPhone HEIC fixture above. It exposes its dimensions only via the HEIF container's
-    // own native width/height box, as a separate HeifDirectory rather than an Exif SubIFD. Confirmed
-    // by directly dumping every directory metadata-extractor found for this file: a real 1600x1063,
-    // matching the file's actual known dimensions.
+    // This file carries no embedded EXIF at all. It exposes its dimensions only through the HEIF
+    // container's own width and height box, as a HeifDirectory rather than an Exif SubIFD.
     @Test
     void readsDimensionsFromARealAvifFixtureViaItsHeifDirectory() {
         final Optional<Dimensions> result = this.reader.read(CULL_FIXTURES.resolve("arctic-sky.avif"));
@@ -113,10 +105,8 @@ class ImageDimensionsReaderTest {
         assertThat(result).contains(new Dimensions(1600, 1063));
     }
 
-    // The added TwelveMonkeys imageio-webp dependency (added for TileRenderer's tile decode) also
-    // extends this class's readViaImageIo fallback for free, with no code change needed here.
-    // This just confirms it actually works, rather than assuming it from the dependency addition
-    // alone.
+    // The imageio-webp reader extends this class's ImageIO fallback with no code of its own here,
+    // so nothing but a real decode says whether that works.
     @Test
     void readsDimensionsFromARealWebpFixture() {
         final Optional<Dimensions> result = this.reader.read(CULL_FIXTURES.resolve("webp-sample.webp"));
@@ -124,10 +114,9 @@ class ImageDimensionsReaderTest {
         assertThat(result).contains(new Dimensions(1024, 772));
     }
 
-    // A JPEG whose EXIF pixel-dimension tags sit at 400x300 while its encoded picture is 1024x768.
-    // That is the shape an editor leaves behind when it resizes pixels but not the tags. 400 is
-    // under LowResGate's 640 bar and 1024 is over it. Trusting the tags alone would route a
-    // perfectly good photo to Review as low-res. The decode is what settles it.
+    // A JPEG whose EXIF pixel-dimension tags sit under the low-res bar while its encoded picture
+    // sits over it. That is the shape an editor leaves behind when it resizes pixels but not tags.
+    // Trusting the tags alone would route a perfectly good photo to Review.
     @Test
     void aSubThresholdMetadataSizeLosesToTheLargerSizeADecodeFinds() {
         final Path jpeg = CULL_FIXTURES.resolve("stale-exif-dimensions.jpg");
@@ -179,10 +168,7 @@ class ImageDimensionsReaderTest {
         assertThat(result).contains(new Dimensions(300, 200));
     }
 
-    // Fast, isolated coverage of subIfdDimensions's tag-priority order, direct from hand-built
-    // directories. The real-fixture tests above already prove the two actual observed cases work,
-    // but they don't pin down the priority rule against a regression in an untested branch
-    // combination (e.g. a directory carrying both tag pairs with different values).
+    // Hand-built, because no real fixture here carries both tag pairs with different values.
     @Test
     void subIfdDimensionsPrefersTheExifSpecificTagPairWhenBothAreDirectlyPresent() {
         final var directory = new ExifSubIFDDirectory();
@@ -255,9 +241,7 @@ class ImageDimensionsReaderTest {
         assertThat(ImageDimensionsReader.heifDimensions(directory)).isNull();
     }
 
-    // No real fixture exercises this branch - every real fixture in this suite carries
-    // dimensions in exactly one directory type. Direct coverage against hand-built values pins
-    // the cross-type comparison itself, since that's the part with no empirical case yet.
+    // Hand-built, because every real fixture here carries dimensions in one directory type only.
     @Test
     void largestOfPrefersTheBiggerOfTwoPresentValues() {
         final var subIfd = new Dimensions(160, 120);
@@ -267,9 +251,8 @@ class ImageDimensionsReaderTest {
         assertThat(ImageDimensionsReader.largestOf(heif, subIfd)).isEqualTo(heif);
     }
 
-    // Pins down the tie-break rule (keep the first argument) now that it's an observable choice,
-    // not just an implementation detail - which side wins doesn't matter functionally, since both
-    // report the same maxDimension, but the rule itself should stay verified rather than incidental.
+    // Which side wins changes nothing functionally, both reporting the same maxDimension, so
+    // nothing else would notice the tie-break rule moving.
     @Test
     void largestOfKeepsTheFirstArgumentWhenBothMaxDimensionsAreEqual() {
         final var first = new Dimensions(4000, 3000);

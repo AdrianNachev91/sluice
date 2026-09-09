@@ -32,11 +32,11 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
-// The Phase 6 parity gate: runs the reference sort engine and SortEngine on two identical copies of
-// the same real Google Takeout export, then asserts MoveDiffer sees no unexplained difference in the
-// resulting Sorted/Review/Inbox trees. Opt-in only - never runs on CI (the gate property below is
-// never set there), and requires a real, not-yet-processed Takeout export on disk that this test
-// only ever copies from, never writes to.
+// The sort parity gate. It runs the reference sort engine and SortEngine on two identical copies
+// of the same real Google Takeout export. It then asserts MoveDiffer sees no unexplained
+// difference in the resulting Sorted, Review and Inbox trees. Opt-in only, never running on CI,
+// since the gate property below is never set there. It requires a real, not-yet-processed Takeout
+// export on disk that this test only ever copies from, never writes to.
 //
 // Local invocation:
 //   mvn -f app/pom.xml test -Dtest=SortEngineRealDataParityTest ^
@@ -51,8 +51,8 @@ import static org.assertj.core.api.Assertions.fail;
 class SortEngineRealDataParityTest {
 
     private static final String DEFAULT_SOURCE_FOLDERS = "Photos from 2014,Photos from 2016";
-    // Every copied file, whatever the scope. OldestN is only here because it takes the whole Inbox
-    // when n is large enough, and the run is meaningless if it silently sorts a subset.
+    // Large enough that OldestN takes the whole Inbox whatever the scope. A run that silently
+    // sorted a subset would be meaningless.
     private static final int SCOPE_SIZE = 1_000_000;
     private static final int REFERENCE_TIMEOUT_MINUTES = 45;
     private static final String REASONS_NOTE = "_reasons.txt";
@@ -83,8 +83,7 @@ class SortEngineRealDataParityTest {
         sortEngine(rootB).sort(new SortScope.OldestN(SCOPE_SIZE));
 
         final MoveDiffer differ = new MoveDiffer();
-        // The destination trees hold only media, so nothing about the sidecar sweep can legitimately
-        // show up in them. Any difference there is real, .json or not.
+        // The destination trees hold only media, so any difference there is real, .json or not.
         assertNoUnexplainedDiff("Sorted", differ.diffTrees(rootA.resolve("Sorted"), rootB.resolve("Sorted")), false);
         assertNoUnexplainedDiff("Review", differ.diffTrees(rootA.resolve("Review"), rootB.resolve("Review")), false);
         assertNoUnexplainedDiff("Inbox", differ.diffTrees(rootA.resolve("Inbox"), rootB.resolve("Inbox")), true);
@@ -132,9 +131,8 @@ class SortEngineRealDataParityTest {
         // two unrelated processing failures and pass them.
         final Set<String> refiled = sidecarRulesApply ? Set.of()
                 : drainRefiledUnderADifferentDate(unexplainedOnlyInA, unexplainedOnlyInB);
-        // Printed on every run, pass or fail. A silent 0-diff pass and a filter-swallowed-a-real-bug
-        // pass both print "explained=0" here. So anyone re-reading the log after the fact can tell
-        // whether the divergence filter actually did anything on this run's real data.
+        // Printed on every run, pass or fail, so a log read after the fact says whether the
+        // divergence filter did anything on this run's real data.
         System.out.printf("[parity] %s: json-kept-only-by-reference=%d, json-kept-only-by-java=%d, "
                         + "refiled-under-a-different-date=%d, unexplained-only-in-reference=%d, "
                         + "unexplained-only-in-java=%d%n",
@@ -143,9 +141,9 @@ class SortEngineRealDataParityTest {
         if (!refiled.isEmpty()) {
             System.out.printf("[parity] %s: refiled by name = %s%n", label, refiled);
         }
-        // Named, not just counted. This is the direction where Java deleted a .json the reference
-        // kept, which is the shape of the very defects this sweep was rebuilt to prevent. A count
-        // alone would make a real one indistinguishable from the expected handful.
+        // Named rather than counted. This is the direction where a .json was deleted that the
+        // reference kept, and a count alone would make a real one indistinguishable from the
+        // expected handful.
         if (!jsonOnlyInReference.isEmpty()) {
             System.out.printf("[parity] %s: json kept only by the reference = %s%n", label, jsonOnlyInReference);
         }
@@ -220,9 +218,8 @@ class SortEngineRealDataParityTest {
         return explained;
     }
 
-    // Walks upward from the JVM's working directory until a directory containing the reference
-    // engine's entry script is found - robust to Surefire's actual working directory rather than
-    // assuming app/ or the mvn invocation directory.
+    // Walks upward until the reference engine's entry script is found, rather than assuming
+    // Surefire's working directory is app/ or the mvn invocation directory.
     private static Path findRepoRoot() {
         final Path startingDirectory = Path.of("").toAbsolutePath();
         Path candidate = startingDirectory;
@@ -237,8 +234,8 @@ class SortEngineRealDataParityTest {
     private static void runReferenceEngine(final Path repoRoot, final Path rootA) throws IOException,
             InterruptedException {
         final Path exifTool = repoRoot.resolve("tools").resolve("exiftool.exe");
-        // Process implements Closeable (closes its inherited-IO streams on exit; does not itself wait
-        // for or kill the process, so waitFor/destroyForcibly below are still needed).
+        // Process implements Closeable, closing its inherited-IO streams on exit. It neither waits
+        // for nor kills the process, so waitFor and destroyForcibly below are both still needed.
         try (final Process process = new ProcessBuilder(
                 "powershell.exe", "-NoProfile", "-NonInteractive",
                 "-File", repoRoot.resolve("scripts").resolve("sort.ps1").toString(),
@@ -247,10 +244,9 @@ class SortEngineRealDataParityTest {
                 "-ExifTool", exifTool.toString())
                 .inheritIO()
                 .start()) {
-            // Bounded rather than an indefinite waitFor(): a manually-gated local run should fail
-            // loudly on a hung child process (e.g. a corrupt file wedging exiftool) instead of
-            // hanging forever. The bound is generous because the scope is an input, and a big one
-            // spends most of its time in per-file exiftool calls.
+            // Bounded rather than an indefinite waitFor(), so a hung child process fails loudly
+            // instead of hanging forever. Generous because the scope is an input, and a big one
+            // spends most of its time in per-file metadata calls.
             final boolean finished = process.waitFor(REFERENCE_TIMEOUT_MINUTES, TimeUnit.MINUTES);
             if (!finished) {
                 process.destroyForcibly();

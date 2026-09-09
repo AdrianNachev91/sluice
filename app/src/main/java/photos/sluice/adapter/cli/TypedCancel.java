@@ -17,8 +17,7 @@ import java.util.Locale;
  *
  * <p>A typed line rather than Ctrl-C, because a reader expects Ctrl-C to end the program and it
  * still does. Stopping a run is a different act: the work stops, the run says what it did, and the
- * process leaves with a code naming that. Answering Ctrl-C with a process that keeps running would
- * take the one key a terminal reserves for ending things.
+ * process leaves with a code naming that.
  *
  * <p>A line also reaches this surface from either kind of caller. A person at a terminal types it,
  * and an agent driving a command writes it to that process's own input.
@@ -49,8 +48,7 @@ public class TypedCancel {
      */
     private static final String BYTE_ORDER_MARK = Character.toString(0xFEFF);
 
-    // Names no unit, because every verb routed through here stops between a different one. Naming
-    // the file would promise a wait of one file on a run whose real wait is far longer.
+    // Names no unit, because every verb routed through here stops between a different one.
     private static final String STOPPING =
             "Stopping. It finishes what it is on, then says what it did.";
 
@@ -65,8 +63,7 @@ public class TypedCancel {
      *
      * <p>Explicit {@code @Autowired}: Spring's implicit single-constructor injection only applies
      * to a class with exactly one constructor. The second constructor makes two, so this one
-     * has to be named as the one to build from. Without it the whole command line fails to start,
-     * since Spring finds no constructor it may use and this class has no default one.
+     * has to be named as the one to build from.
      *
      * @param progress {@link ConsoleProgressPort} owns the stream these notes share with progress
      */
@@ -131,8 +128,7 @@ public class TypedCancel {
      * One typed line, as it is compared against the word that cancels.
      *
      * <p>A byte-order mark is dropped along with the blanks around it. Windows shells write one at
-     * the head of what they send, and Java's own readers hand it straight through. So the first
-     * line a run receives there opens with a character nobody typed and nobody can see. Left in, it
+     * the head of what they send, and Java's own readers hand it straight through. Left in, it
      * makes a correctly typed cancel do nothing at all, with no sign of why.
      *
      * @param line {@link String} the line as it arrived
@@ -147,8 +143,7 @@ public class TypedCancel {
      *
      * <p>The first asks the run to stop between files. The second gives up on a file already being
      * copied, rather than waiting for it to finish. A third and any after it repeat the second,
-     * there being nothing further to escalate to. What ends a run outright is Ctrl-C, which this
-     * surface leaves alone.
+     * there being nothing further to escalate to.
      *
      * @param job a {@link JobHandle} the running job to stop
      * @param asked int how many cancels have arrived, this one included

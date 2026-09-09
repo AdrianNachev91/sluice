@@ -120,6 +120,7 @@ final class RunProgressPane {
      *
      * @param phases a {@link List} of {@link PhaseBar} the phases, oldest first
      * @param bars {@link VBox} the box to draw them in
+     * @param reserved int how many rows the box holds even where fewer phases have arrived
      */
     private static void drawBars(final List<PhaseBar> phases, final VBox bars, final int reserved) {
         final List<Node> rows = new ArrayList<>();

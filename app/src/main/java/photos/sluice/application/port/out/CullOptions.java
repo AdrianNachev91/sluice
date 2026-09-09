@@ -10,8 +10,7 @@ import java.time.Duration;
  * {@code timeout} field is meant to bound how long an automated provider waits on its own work.
  * The {@code ceiling} bounds what the run may consume, and is null for a run nobody is paying for.
  *
- * <p>Providers honor these unevenly and each documents its own take. The external culler ignores
- * timeout and never blocks. The Anthropic culler wires the ceiling but not the timeout.
+ * <p>Providers honor these unevenly, and each documents its own take.
  */
 public record CullOptions(boolean allowPartial, @Nullable Duration timeout, @Nullable SpendCeiling ceiling) {
 

@@ -28,10 +28,8 @@ class CullWatcherTest {
         });
 
         watcher.start();
-        // A bounded negative proof via the latch's own timeout, not a guessed-duration Thread.sleep
-        // plus a manual counter check. await() returns the moment either the countdown happens
-        // (proving a bug) or the timeout elapses (the expected path here) - no slower than the
-        // window actually needs and no less deterministic than the positive-wait case below.
+        // The latch's own timeout bounds the negative. await() returns the moment the countdown
+        // happens, so a bug fails this fast rather than after a guessed sleep.
         assertThat(consumed.await(POLL_INTERVAL.toMillis() * 3, TimeUnit.MILLISECONDS)).isFalse();
         assertThat(consumeAttempts.get()).isZero();
         assertThat(watcher.isActive()).isTrue();
@@ -58,8 +56,6 @@ class CullWatcherTest {
         watcher.start();
 
         assertThat(firstConsume.await(2, TimeUnit.SECONDS)).isTrue();
-        // Same bounded-negative-proof idiom as doesNotAttemptConsumeUntilReady above: a second
-        // countdown should never come, since a successful consume stops the watcher.
         assertThat(secondConsume.await(POLL_INTERVAL.toMillis() * 3, TimeUnit.MILLISECONDS)).isFalse();
         assertThat(consumeAttempts.get()).isEqualTo(1);
         assertThat(watcher.isActive()).isFalse();
@@ -84,11 +80,6 @@ class CullWatcherTest {
         watcher.stop();
     }
 
-    // A ScheduledExecutorService silently suppresses every future execution of a task that throws,
-    // and the exception vanishes into a ScheduledFuture nobody inspects. So without poll()'s catch,
-    // the first bad tick ends the watch while isActive() keeps reporting true. The waiting cull
-    // then never auto-resumes, with nothing anywhere saying why. The route in is real: the readiness
-    // check reads shards an agent outside this app wrote, so malformed input is the expected case.
     @Test
     void keepsPollingAfterAReadinessCheckThrows() throws InterruptedException {
         final var readyChecks = new AtomicInteger(0);
@@ -141,8 +132,7 @@ class CullWatcherTest {
             if (Instant.now().isAfter(deadline)) {
                 throw new AssertionError("condition not met within " + timeout);
             }
-            // Throttles the poll loop itself, not a guess at how long the watcher takes - same
-            // pattern as PipelineTestSupport.waitUntil's own suppression.
+            // Throttles the poll loop itself, not a guess at how long the watcher takes.
             //noinspection BusyWait
             Thread.sleep(5);
         }

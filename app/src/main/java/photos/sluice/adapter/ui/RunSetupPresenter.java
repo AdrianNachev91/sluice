@@ -42,11 +42,7 @@ import java.util.stream.IntStream;
  * {@link RunScope}.
  *
  * <p>The counts themselves are {@link FolderCounts}, read by calling {@link #refreshCounts} or
- * {@link #refreshCountsUnprompted}. Each walks three folders and blocks while it does, so the
- * caller runs it off whatever thread paints.
- *
- * <p>Whether a job is running is not held here. {@link RunLauncherPresenter} owns that, and answers
- * the question through the supplier handed in.
+ * {@link #refreshCountsUnprompted}.
  */
 public class RunSetupPresenter {
 
@@ -54,8 +50,6 @@ public class RunSetupPresenter {
 
     private static final String SCOPE_LABEL = "Timeframe for this run";
 
-    // Careful about whose money it is. Sluice calls no model for these providers, so it spends
-    // nothing. An agent somebody runs themselves still bills them, and that is not ours to report.
     private static final String FREE_DETAIL = "Sluice only spends from your provider account "
             + "balance when it calls an agent for you. An agent you run yourself still costs "
             + "whatever you pay for it.";
@@ -69,19 +63,18 @@ public class RunSetupPresenter {
 
     // A folder, because the picker behind it is a DirectoryChooser and takes one.
     private static final String IMPORT_LABEL = "Import a folder...";
-    // The drop target only shows itself once something is already held over it. Without this line
-    // the route is found by accident or not at all, and it is the only way loose files get in.
+    // The drop target only shows itself once something is already held over it, and it is the only
+    // way loose files get in.
     private static final String IMPORT_HINT = "Or drop folders and files anywhere on this screen.";
 
     private static final String IMPORT_QUESTION = "Would you like to copy or move your files?";
     private static final String IMPORT_COPY = "Copy";
     private static final String IMPORT_MOVE = "Move";
     private static final String IMPORT_CANCEL = "Cancel";
-    // One card reports a failed read for both, so it names neither. Any of the three folder
-    // settings can be what broke, and this card cannot tell which.
+    // Any of the three folder settings can be what broke, and the card cannot tell which, so it
+    // names none of them.
     private static final String FOLDERS_UNREADABLE = "Your folders could not be read.";
-    // The card has no control on it, so the way to Settings has to be words there. The report line
-    // below the field says the same thing and offers the screen itself.
+    // The card has no control on it, so the way to Settings has to be words there.
     private static final String INBOX_UNREADABLE = FOLDERS_UNREADABLE + " Check them in Settings.";
 
     private static final String BUSY_ELSEWHERE = "Something else is running now, and only one "
@@ -90,8 +83,7 @@ public class RunSetupPresenter {
     private static final String STILL_READING = "Still reading your folders. Try again in "
             + "a moment.";
 
-    // What the mark means, once under the rows. A reader who never hovers a row would otherwise
-    // meet a bare asterisk. The screen opens this line with the mark itself, in its own colour.
+    // What the mark means, once under the rows, for a reader who never hovers one.
     private static final String UNFINISHED_LEGEND =
             "This timeframe already has a sift that has not finished.";
 
@@ -113,11 +105,11 @@ public class RunSetupPresenter {
             "A sift looks at photos filed under a year, and these have no date.";
 
     // One paragraph, so a reader meets a single statement about the figure rather than two they
-    // have to reconcile. Only the middle varies, and it is absent where the warning box says it.
+    // have to reconcile. Only the middle varies.
     private static final String ESTIMATE_OPENING = "An estimate, not a quote.";
 
-    // The load-bearing part: what a reader needs is not that the number is right, but that
-    // something stops a run that outgrows it. So it closes all three.
+    // What a reader needs is not that the number is right, but that something stops a run that
+    // outgrows it. So it closes every version of the disclaimer.
     private static final String ESTIMATE_CEILING = " The sift stops and asks whether to continue "
             + "if it goes far past the estimate.";
 
@@ -129,8 +121,7 @@ public class RunSetupPresenter {
             + "It starts showing your actual numbers after a sift or two.";
 
     // The same figure as the line above, and a different thing to tell somebody. That one resolves
-    // itself on the next finished sift. This one does not, because a broken record stays broken,
-    // and every estimate falls back to the guess until somebody deals with it.
+    // itself on the next finished sift. A broken record stays broken until somebody deals with it.
     private static final String HISTORY_UNREADABLE = "The record of what your past sifts cost is "
             + "broken, so this figure is a starting guess rather than an average of your own "
             + "sifts. It will keep guessing until that record is replaced.";
@@ -153,14 +144,12 @@ public class RunSetupPresenter {
     private volatile String scopeText = "";
     private volatile @Nullable Message message;
 
-    // Plain, because no other thread touches this one. It is written by a press and by a keystroke,
-    // and read while drawing, all on the thread that paints. Volatile would not make its own toggle
-    // atomic anyway, and would suggest a second writer that does not exist.
+    // Plain, because no other thread touches this one: written by a press and by a keystroke, read
+    // while drawing, all on the thread that paints. Volatile would not make the toggle atomic.
     private boolean monthsCollapsed;
 
-    // Written value first and key second, and read the other way round. Between them that is what
-    // makes a reader finding its own count in the key certain of the answer beside it. Either half
-    // alone gives nothing.
+    // Written value first and key second, and read the other way round. That pairing is what makes
+    // a reader finding its own count in the key certain of the answer beside it.
     private volatile @Nullable SpendEstimate lastEstimate;
     private volatile int lastEstimateCovered = -1;
 
@@ -277,8 +266,8 @@ public class RunSetupPresenter {
      */
     public void setScope(final String text) {
         this.scopeText = text;
-        // Typing is a fresh intent, so a folded year opens again. Typing a month while its year is
-        // folded would otherwise narrow the run to a row nobody can see.
+        // Typing is a fresh intent, so a folded year opens again: a month typed under a folded year
+        // narrows the run to a row nobody can see.
         this.monthsCollapsed = false;
         this.message = null;
     }
@@ -287,8 +276,7 @@ public class RunSetupPresenter {
      * Empties the field where nothing is left in what it names.
      *
      * <p>What a run empties, the field still says. A reader coming back from a finished move over
-     * 2019 meets a refusal of the very thing that just worked. The better the run went, the more
-     * certain that refusal.
+     * 2019 meets a refusal of the very thing that just worked.
      *
      * <p>Keyed on the scope being refused rather than on the run having finished. A run the reader
      * stopped leaves something behind, so its scope is not refused and it stays, which is what they
@@ -311,8 +299,7 @@ public class RunSetupPresenter {
      * still marked when the months come back. Writing the year again would drop it.
      *
      * <p>The year goes into the scope text rather than being remembered beside it, so there is one
-     * answer to "what is this run scoped to". A row that scoped a run without the field showing it
-     * would leave two places to look and no way to tell which one the run used.
+     * answer to "what is this run scoped to".
      *
      * @param year int the year whose row was pressed
      */
@@ -341,8 +328,8 @@ public class RunSetupPresenter {
      * rather than a typed list. Taking the last one out leaves the whole year, never nothing, since
      * a month row is only reachable under the year the field already names.
      *
-     * <p>A year press switches and a month press accumulates. That is the scope's own shape rather
-     * than an inconsistency. Every scope names one year and any number of its months.
+     * <p>A year press switches and a month press accumulates, which is the scope's own shape rather
+     * than an inconsistency: every scope names one year and any number of its months.
      *
      * <p>Written back as a comma list rather than collapsed to a run, because the two spell the
      * same set and the field already reads both. A gap is left to be refused where the mode cannot
@@ -372,14 +359,14 @@ public class RunSetupPresenter {
      * loud what it is about to move.
      *
      * <p>Sifting is not asked about here, because the launcher has already put what it will cost in
-     * the box above the button. Nothing is weighed twice. {@link #siftNowNeeds} is where a
-     * sift does get a question, on the one screen carrying no such box.
+     * the box above the button. {@link #siftNowNeeds} is where a sift does get a question, on the
+     * one screen carrying no such box.
      *
      * @return {@link Confirmation} what to ask, or null where nothing needs asking
      */
     public @Nullable Confirmation confirmationNeeded() {
-        // Nothing to ask where the counts are not in. Start stays live so the facade can name the
-        // folder at fault, and this question names years and a file count it has neither of.
+        // Nothing to ask where the counts are not in: this question names years and a file count it
+        // has neither of.
         if (this.chosen != RunMode.MOVE_TO_LIBRARY || !this.folders.countsAreIn()
                 || !(this.scope() instanceof RunScope.Everything)) {
             return null;
@@ -399,14 +386,11 @@ public class RunSetupPresenter {
      * <p>One answer rather than a question and a separate guard, so the whole decision is taken
      * from one read of the counts.
      *
-     * <p>A question is always put, whatever the provider costs. The launcher says what a run
-     * covers and what it costs above its own button, and this card has room for neither. So the
-     * dialog is the only place a reader learns either, and skipping it on a free provider would
-     * skip the scope along with the money.
+     * <p>A question is always put, whatever the provider costs. The launcher says what a run covers
+     * and what it costs above its own button, and this card has room for neither, so the dialog is
+     * the only place a reader learns either.
      *
-     * <p>The question names the whole timeframe and splits out what this run put there. A sort that
-     * added two months to a year already holding others yields a sift over every month of it. The
-     * photos it did not add are the ones a reader would not think they were paying for.
+     * <p>The question names the whole timeframe and splits out what this run put there.
      *
      * @param year int the timeframe the card offered to sift
      * @param justSorted int how many photos this run filed into that timeframe
@@ -419,8 +403,7 @@ public class RunSetupPresenter {
         }
         final int photos = this.photosIn(new RunScope.OfYear(year, List.of()));
         // A sort files videos under a year as readily as photos, so a timeframe can reach this card
-        // holding nothing a provider could look at. The launcher refuses the same timeframe in the
-        // same words.
+        // holding nothing a provider could look at.
         if (photos == 0) {
             return new SiftNow.Refuse(new Message(nothingToSift(year), true));
         }
@@ -437,8 +420,8 @@ public class RunSetupPresenter {
      * reason to expect the other two hundred. A single total hides those behind a number that
      * reads as the run's own.
      *
-     * <p>Falls back to the total alone where the two cannot be told apart. A stale count can put
-     * the timeframe behind what the run reported. A sentence claiming a negative remainder is worse
+     * <p>Falls back to the total alone where the two cannot be told apart. A stale count can put the
+     * timeframe behind what the run reported, and a sentence claiming a negative remainder is worse
      * than one that simply says how many there are.
      *
      * @param year int the timeframe
@@ -528,10 +511,9 @@ public class RunSetupPresenter {
      * @return {@link RunScope} the parsed scope, or a refusal saying what is wrong with it
      */
     RunScope scope() {
-        // A run over the Inbox takes the oldest year in it, whatever the field holds. Nothing on
-        // this screen could tell a reader which years the Inbox has. Finding that out means reading
-        // a date off every file in it, which is the work a sort does. So the field is left out of
-        // it rather than asking for a year nobody can check.
+        // A run over the Inbox takes the oldest year in it, whatever the field holds. Saying which
+        // years the Inbox has means reading a date off every file in it, which is the work a sort
+        // does. So the field is left out of it.
         if (this.readsInbox()) {
             return this.blankScope();
         }
@@ -662,8 +644,8 @@ public class RunSetupPresenter {
      *
      * <p>Silent while the read that would answer has failed, and while none has finished. An empty
      * list means the walk never got far enough in either case, not that a folder is empty. Saying
-     * nothing is staged would claim something nobody could look at. Worse, the advice attached to
-     * it is to run the very thing that just failed. The Inbox card reports the failure for both.
+     * nothing is staged would claim something nobody could look at, and the advice attached to it
+     * is to run the very thing that just failed.
      *
      * <p>A read merely in flight keeps the last answer, the way the Inbox card keeps its figures.
      * The two cards describe the same moment and must not take opposite views of it.
@@ -692,8 +674,8 @@ public class RunSetupPresenter {
         // out, as though the click had missed.
         //
         // Nothing marked at all where the run reads the Inbox. These are Sorted years, holding
-        // Sorted counts, and a sort works on files the Inbox holds. A marked row would say this one
-        // describes the run, and the number beside it counts a different folder.
+        // Sorted counts, and a sort works on files the Inbox holds. A mark would put the run's own
+        // timeframe beside a number counting a different folder.
         final RunScopeText.Typed typed = RunScopeText.parse(this.scopeText);
         final int selected = this.readsSorted() ? this.typedYear() : 0;
         final List<Integer> narrowed =
@@ -709,8 +691,7 @@ public class RunSetupPresenter {
      * One year's row, and the month rows under it.
      *
      * <p>The mark is drawn whatever mode is chosen, since it is about the timeframe rather than the
-     * mode. A reader looking at Sorted is looking at the same timeframes whichever mode they came
-     * here for.
+     * mode.
      *
      * @param row {@link YearRow} the year's counts
      * @param selected int the year the field names, or 0 where it names none
@@ -733,10 +714,8 @@ public class RunSetupPresenter {
      * refuse the very scope clicking it writes.
      *
      * <p>Videos counted alongside the photos, in the same words the year row above uses. A move
-     * takes both, so a row naming photos alone would understate what clicking it does. A month
-     * holding only video would have no row at all, while the year above it counted that video. A
-     * sift narrowed to such a month finds nothing to look at, which its own empty-scope refusal
-     * says.
+     * takes both, so a row naming photos alone would understate what clicking it does, and a month
+     * holding only video would have no row while the year above it counted that video.
      *
      * @param row {@link YearRow} the year to break down
      * @param narrowed a {@link List} of {@link Integer} the months the scope names, empty for none
@@ -770,11 +749,10 @@ public class RunSetupPresenter {
     /**
      * What the screen says about money for the chosen mode and scope.
      *
-     * <p>Only the two modes that reach a vision provider say anything. A sort and a move to the
-     * library spend nothing whatever the provider is, so a line beside either would be answering a
-     * question nobody asked.
+     * <p>Only a mode that reaches a vision provider says anything. A sort and a move to the library
+     * spend nothing whatever the provider is, so neither says anything about money.
      *
-     * <p>Those two always say something. Where the provider spends nothing the box says so and
+     * <p>Such a mode always says something. Where the provider spends nothing the box says so and
      * carries the disclaimer, since what a user's own agent costs them is not Sluice's to know.
      *
      * @param scope {@link RunScope} what the field and mode come to
@@ -815,8 +793,7 @@ public class RunSetupPresenter {
             return null;
         }
         final SpendEstimate expected = this.expectedFor(photos);
-        // A spending provider forecasting nothing is a state nothing produces today. A figure of
-        // zero tokens beside a money disclaimer would be the wrong thing to draw for it.
+        // A figure of zero tokens beside a money disclaimer is the wrong thing to draw.
         if (expected.totalTokens() == 0) {
             return null;
         }
@@ -830,7 +807,7 @@ public class RunSetupPresenter {
      * The broken record of past spend, and the way out of it.
      *
      * <p>Offered only where the record is the thing holding the figure back. An install that has
-     * simply not finished a sift yet has nothing to put right. A control there would invite a
+     * simply not finished a sift yet has nothing to put right, and a control there would invite a
      * reader to throw away a record that is fine.
      *
      * @return {@link Cost.Warning} what is wrong and the control that ends it
@@ -872,8 +849,7 @@ public class RunSetupPresenter {
      * @return {@link SpendEstimate} what the facade says about that many
      */
     private SpendEstimate expectedFor(final int photos) {
-        // Key first, then the value, against a writer that does it the other way round. Reading the
-        // value first would let a stale one be handed back beside a key that had already moved on.
+        // Key first, then the value, against a writer that does it the other way round.
         final int covered = this.lastEstimateCovered;
         final SpendEstimate held = this.lastEstimate;
         if (covered == photos && held != null) {
@@ -918,12 +894,10 @@ public class RunSetupPresenter {
             // The oldest year of an empty Inbox is no year at all, so the run would be over nothing.
             case SORT -> this.folders.inboxIsEmpty() ? new RunScope.Nothing() : new RunScope.OldestYear();
             // Everything means everything staged, and on an install with nothing staged that is a
-            // run over no files behind a confirm naming none of them. The Sorted card says so, in
-            // the same words a line here would use and in a tone that does not read as a fault.
-            // Everything is the one press that reaches the whole library at once, and the confirm
-            // in front of it names the years and the file count. A read that failed leaves neither
-            // knowable, so the press is withheld rather than offered without its question. A typed
-            // year still goes through: it is bounded, and the facade names the folder at fault.
+            // run over no files behind a confirm naming none of them. The confirm names the years
+            // and the file count, and a read that failed leaves neither knowable. So the press is
+            // withheld rather than offered without its question. A typed year still goes through:
+            // it is bounded, and the facade names the folder at fault.
             case MOVE_TO_LIBRARY -> this.folders.countsAreIn() && !this.folders.stagedYears().isEmpty()
                     ? new RunScope.Everything()
                     : new RunScope.Nothing();
@@ -986,8 +960,7 @@ public class RunSetupPresenter {
         if (this.chosen == RunMode.SIFT) {
             final RunScope sift = new RunScope.OfYear(year, months);
             // A year can hold videos alone, and months can be named that hold nothing. Both leave a
-            // sift with no photo to look at, and neither is caught by the year check above. Said
-            // here rather than left to an absent cost line, which a free provider draws too.
+            // sift with no photo to look at, and neither is caught by the year check above.
             return this.folders.countsAreIn() && this.photosIn(sift) == 0
                     ? new RunScope.Refused(months.isEmpty()
                             ? nothingToSift(year)
@@ -1004,8 +977,7 @@ public class RunSetupPresenter {
                 return new RunScope.OfYear(year, months);
             }
             // The way out is worded for a click as much as for a keystroke. Three presses on the
-            // rows reach this state without the field being touched, and an answer that only says
-            // what to type names nothing the user did.
+            // rows reach this state without the field being touched.
             return new RunScope.Refused(this.chosen.verb()
                     + " narrows to a span of months, not a list. Reading "
                     + RunWords.joined(months) + " as " + months.getFirst() + "-" + months.getLast()
@@ -1074,14 +1046,12 @@ public class RunSetupPresenter {
     /**
      * What the sift question says about money.
      *
-     * <p>Split out because the figure can be missing while the spending is certain. A provider
-     * forecasting nothing leaves the estimate empty, and the sentence still has to say that this
-     * press spends.
+     * <p>The figure can be missing while the spending is certain. A provider forecasting nothing
+     * leaves the estimate empty, and the sentence still has to say that this press spends.
      *
      * <p>The ceiling rides with the figure and not without it. It is the reassurance the launcher's
-     * own disclaimer carries. This route is the only other way to start a sift, so a reader who
-     * never sees that box hears it here instead. With no figure there is nothing for a reader to
-     * measure "far past" against.
+     * own disclaimer carries, for a reader who never sees that box. With no figure there is nothing
+     * to measure "far past" against.
      *
      * @param photos int how many photos the sift would cover
      * @return {@link String} the clause about spending, with a figure where one can be given
@@ -1219,9 +1189,8 @@ public class RunSetupPresenter {
     /**
      * Which months of one year an unfinished sift already covers.
      *
-     * <p>An empty answer means no sift touches that year. A run scoped to the whole year answers
-     * every month there is. So a month row is marked whether the sift named that month or named
-     * the year it sits in.
+     * <p>A run scoped to the whole year answers every month there is, so a month counts as covered
+     * whether a sift named that month or named the year it sits in.
      *
      * @param year int the year the rows belong to
      * @return a {@link Set} of {@link Integer} the months covered, empty where none are
@@ -1249,8 +1218,7 @@ public class RunSetupPresenter {
      * to November reaches exactly the three rows that were pressed.
      *
      * <p>Unanswerable until the counts are in, since they are what says whether a skipped month
-     * holds anything. Unanswered is not the same as empty, and the refusal that follows then says
-     * only that months would be taken rather than naming ones nobody has counted.
+     * holds anything. Unanswered is not the same as empty.
      *
      * @param year int the year the months belong to
      * @param months a {@link List} of {@link Integer} the months chosen, sorted and deduplicated
@@ -1290,9 +1258,7 @@ public class RunSetupPresenter {
      * A question a user answers before work starts.
      *
      * <p>Which of the two is drawn as the way on is settled here rather than by whichever screen
-     * puts the question up. The answer turns on what each choice costs the reader. That is what
-     * the question itself is about, and a screen asking two of them would otherwise weigh both the
-     * same way.
+     * puts the question up, since the answer turns on what each choice costs the reader.
      *
      * @param heading {@link String} the question itself
      * @param detail {@link String} what going ahead would do, in the terms the choices answer it

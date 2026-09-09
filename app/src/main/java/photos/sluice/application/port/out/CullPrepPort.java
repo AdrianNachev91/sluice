@@ -30,10 +30,8 @@ public interface CullPrepPort {
      * lock, a permission denial) throws a plain {@link UncheckedIOException} instead. That is how a
      * caller tells the two apart.
      *
-     * <p>A caller may rely on the answer's own {@code prepDir} being the directory it asked about.
-     * That value decides where a resume applies, which watcher is retired, and what a cleanup
-     * deletes, so a caller acting on it is acting on a path it chose rather than one the file
-     * named.
+     * <p>A caller may rely on the answer's own {@code prepDir} being the directory it asked about,
+     * rather than one the file named.
      *
      * @param prepDir {@link Path} the prep directory to read
      * @return {@link PrepDir} the parsed prep directory index, carrying prepDir as passed here
@@ -41,10 +39,7 @@ public interface CullPrepPort {
     PrepDir readIndex(Path prepDir);
 
     /**
-     * Writes index.json wholesale, replacing whatever was there before. No cull run calls this -
-     * {@code CullMontageRenderer} writes the original via its own adapter. The one caller is
-     * {@link photos.sluice.application.service.PrepDirRemedies#rebuildIndex}, to persist an index
-     * reconstructed from surviving sidecars after the original was found corrupt or missing.
+     * Writes index.json wholesale, replacing whatever was there before.
      *
      * @param prepDir {@link Path} the prep directory to write into
      * @param index {@link PrepDir} the index to persist
@@ -64,7 +59,7 @@ public interface CullPrepPort {
     List<SidecarPhotoEntry> readSidecar(Path prepDir, String montage);
 
     /**
-     * Whether montage's decisions-NNN.json shard is present. Callers check this before readShard.
+     * Whether montage's decisions-NNN.json shard is present.
      *
      * @param prepDir {@link Path} the prep directory to check
      * @param montage {@link String} the montage to check for a shard

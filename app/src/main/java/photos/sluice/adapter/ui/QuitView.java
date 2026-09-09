@@ -4,7 +4,7 @@ package photos.sluice.adapter.ui;
  * What the two dialogs a quit puts up say, chosen from a {@link QuitPresenter} and carrying only
  * display-ready values.
  *
- * <p>Two dialogs rather than one, and the split is what keeps the first honest. Nothing has been
+ * <p>Two dialogs rather than one, and the split is what keeps the first one true. Nothing has been
  * asked to stop while the question is on screen, so keeping the run really does keep it. A single
  * dialog offering a wait would have to start that wait as it opened, and then the way out of it
  * would put nothing back.

@@ -63,8 +63,8 @@ class FindingWordsTest {
         });
     }
 
-    // An arm that lost its plural would draw a row per finding again, and no test would fail for
-    // it. So the two that legitimately have none are pinned by name.
+    // An arm that lost its plural would draw a row per finding again, so the ones that legitimately
+    // have none are pinned by name.
     @Test
     void onlyTheTwoFaultsARunCanHoldOneOfHaveNoPluralAtAll() {
         assertThat(EVERY_KIND).filteredOn(finding -> FindingWords.of(finding).heading(3) == null)
@@ -73,8 +73,7 @@ class FindingWordsTest {
                         .isInstanceOfAny(Finding.CorruptIndex.class, Finding.UnreadablePrepDir.class));
     }
 
-    // The engine's own words for these are montage, shard and cull. None of the three is what a
-    // user calls the thing, and the sentence is where a reader meets it.
+    // The engine's own words for these are montage, shard and cull.
     @Test
     void noProblemSentenceUsesTheEnginesOwnVocabulary() {
         assertThat(EVERY_KIND).allSatisfy(finding -> {
@@ -103,25 +102,22 @@ class FindingWordsTest {
                 .startsWith("Sheet 12,");
     }
 
-    // An id the number cannot be read out of still has to name the sheet somehow. Nothing produces
-    // one today, so without this the fallback is a branch no test ever enters.
+    // Nothing produces an id with no number in it today, so the fixture is built rather than
+    // observed.
     @Test
     void aSheetWhoseIdCarriesNoNumberIsNamedByThatIdInstead() {
         assertThat(FindingWords.of(new Finding.MissingShard("montage-extra", "decisions-extra.json")).about())
                 .isEqualTo("Sheet montage-extra");
     }
 
-    // The reader is being asked to trust answers Sluice could not fully check, so the file it could
-    // not read is named. A filename is exempt from the sheet wording the way an on-screen path is:
-    // it is what they would type to go and look.
+    // A filename is exempt from the sheet wording the way an on-screen path is: it is what a reader
+    // would type to go and look.
     @Test
     void theDamagedRecordIsNamedSoAReaderCanGoAndLookAtIt() {
         assertThat(FindingWords.of(new Finding.CorruptSidecar("montage-002")).about())
                 .isEqualTo("Sheet 2, montage-002.json");
     }
 
-    // Two checks read that record, not one. Naming only the scope check would leave a reader
-    // thinking coverage still held, which is the guarantee they are most likely relying on.
     @Test
     void theUncheckedAnswersQuestionNamesBothChecksTheDamagedRecordCosts() {
         final FindingWords.Choice useAnyway =
@@ -201,8 +197,6 @@ class FindingWordsTest {
                 .containsExactly("Keep it in Sorted", "Leave the photo unjudged");
     }
 
-    // Only the sheet says what survives. Photos left behind are the reader's, where a set of
-    // orphan answers is the run's own bookkeeping and naming where it went tells them nothing.
     @Test
     void leavingASheetOutSaysItsPhotosSurvive() {
         assertThat(requireNonNull(FindingWords.settled(Answer.SET_ASIDE_SHEET)))

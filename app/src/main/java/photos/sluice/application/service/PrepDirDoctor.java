@@ -106,8 +106,8 @@ public class PrepDirDoctor {
      * Finding.UnreadablePrepDir} instead. The files exist and are well formed, and opening them is
      * what did not work. Calling that corrupt would matter. {@link Finding.CorruptIndex} carries an
      * AUTO remedy, so it would offer to rebuild an index that was never broken, discarding it on the
-     * way. The DAMAGED finding's remedy is NONE, the honest answer when the content is the one thing
-     * nobody could look at.
+     * way. The DAMAGED finding's remedy is NONE, which is the only answer left when the content is
+     * the one thing nobody could look at.
      *
      * <p>Past the index the mapping is narrower than DAMAGED alone. A shard that fails to parse
      * reports {@link Finding.CorruptShard}, and a sidecar that fails to parse reports {@link
@@ -228,10 +228,10 @@ public class PrepDirDoctor {
      * it away. {@link #summaryOf} needs both, and recomputing the tally means re-reading every
      * sidecar and every shard in the dir.
      *
-     * <p>The tally is absent whenever {@link #read} did not get far enough to compute one. See
-     * {@link #summaryOf} for which states those are. Worth stating once here: an absent tally does
-     * not mean the montage list was unreadable. A failure anywhere past the index unwinds to the
-     * catch below, with the list already read fine.
+     * <p>The tally is absent whenever {@link #read} did not get far enough to compute one, which
+     * {@link #summaryOf} enumerates. An absent tally does not mean the montage list was unreadable:
+     * a failure anywhere past the index unwinds to the catch below, with the list already read
+     * fine.
      *
      * <p>Being a separate method from {@link #read} is what keeps the guard total. This body is
      * nothing but the try, so no statement can sit outside it. Merging the two would put the reading
@@ -333,8 +333,8 @@ public class PrepDirDoctor {
      * <p>Enumeration and occupancy are two separately guarded reads. The root is listed shallowly
      * for its immediate subdirectories, then each candidate is deep-listed on its own to check
      * occupancy. One candidate's read failing costs that one entry, not every entry after it. An
-     * unreadable candidate is treated as occupied rather than dropped. Its own diagnosis, run
-     * separately by every caller of this method, usually lands on DAMAGED.
+     * unreadable candidate is treated as occupied rather than dropped, and its own diagnosis
+     * usually lands on DAMAGED.
      *
      * <p>A root that does not exist holds no runs, which is what a fresh install looks like. A root
      * that exists and could not be read holds an unknown number, and answers so.

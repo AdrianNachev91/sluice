@@ -134,8 +134,6 @@ class CopyEngineTest {
             assertThat(filesUnder(to)).hasSize(1);
         }
 
-        // A signal already true when the copy starts must reach the check before the first write,
-        // not after it.
         @Test
         void copiesNothingWhenItIsAlreadyCancelled(@TempDir final Path from, @TempDir final Path to) {
             write(from.resolve("one.jpg"), "one");
@@ -189,8 +187,7 @@ class CopyEngineTest {
         return new CopyEngine(new NioMediaStore());
     }
 
-    // Answers false for the first count calls and true after that. A test then names the file the
-    // copy stops before, rather than a duration it waits.
+    // Lets a test name the file the copy stops before, rather than a duration it waits.
     private static CancellationSignal cancelAfter(final int count) {
         final int[] asked = {0};
         return () -> asked[0]++ >= count;

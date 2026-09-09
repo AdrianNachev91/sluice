@@ -52,8 +52,6 @@ class RegisteredVisionProvidersTest {
         assertThat(catalog.byId("nothing-registered")).isEmpty();
     }
 
-    // The dropdown hands back an id, and what a Test button then reaches has to be the provider
-    // that id names rather than whichever culler was injected first.
     @Test
     void asksTheProviderTheIdNames() {
         final var catalog = new RegisteredVisionProviders(cullers(WAITING, CALLING));

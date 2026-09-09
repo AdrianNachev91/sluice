@@ -38,8 +38,6 @@ class SortSummaryTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    // Each bucket is named in the message, so a mismatch points at the counters to look at rather
-    // than just at the totals.
     @Test
     void theRejectionMessageNamesEveryBucketAndItsValue() {
         assertThatThrownBy(() -> summary(0, 1, 2, 3, 4, 5, 6))
@@ -51,9 +49,6 @@ class SortSummaryTest {
                 .hasMessageContaining("unsorted=6");
     }
 
-    // A sidecar is metadata, not media, and one JSON can be shared by several media files. It is
-    // outside the partition the six buckets form, so a non-zero count here must not disturb a sum
-    // that already balances.
     @Test
     void sidecarsDeletedIsOutsideTheSum() {
         final SortSummary summary = new SortSummary(1, 0, 0, 1, 0, 0, 0, 4,

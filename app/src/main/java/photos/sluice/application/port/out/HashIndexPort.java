@@ -50,10 +50,7 @@ public interface HashIndexPort {
     boolean setAside(Path destination);
 
     /**
-     * For a caller appending many entries over a long-running move loop. One session amortizes the
-     * header/leading-newline checks across the whole run instead of redoing them on every entry.
-     * Each entry is still flushed as it's written, so a crash mid-run never loses an already-moved
-     * file's row.
+     * Opens a batched-append session.
      *
      * @return {@link Session} an open session for batched appends
      */

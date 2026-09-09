@@ -6,8 +6,7 @@ package photos.sluice.application.port.out;
  *
  * <p>A port rather than a direct call, because the work this triggers is not every caller's. Arming
  * a watcher is only worth doing in a process that stays open long enough for it to poll in, and a
- * one-shot command line writing a config value is not one. Implementations are injected as a list,
- * so a process that wants none simply registers none.
+ * one-shot command line writing a config value is not one.
  *
  * <p>Any of the three roots fires it, not the working root alone. A watcher's auto-resume is
  * refused while any root is unusable. So repointing the library or the inbox is as much a reason to

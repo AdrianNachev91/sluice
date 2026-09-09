@@ -98,7 +98,6 @@ public class JobReports {
      * than the same counts from a run that finished. Empty ones mean the caller was quick, not that
      * there was nothing to do.
      *
-     *
      * @param <T> what the job answers with
      * @param answer T what the job produced
      * @param stopped boolean whether the job gave up before the end of its scope
@@ -110,8 +109,8 @@ public class JobReports {
      * Reads the arguments, claims the root, runs the job, and reads what it answered.
      *
      * <p>The arguments are read first, so a verb refusing what it was given costs nothing else. The
-     * claim that follows takes a folder off another Sluice and sweeps files out of it. Neither is
-     * worth doing for a command about to be turned down over a typo.
+     * claim that follows locks another Sluice out of the folder and sweeps files out of it. Neither
+     * is worth doing for a command about to be turned down over a typo.
      *
      * @param <S> what the verb was asked to work on
      * @param <T> what the job answers with

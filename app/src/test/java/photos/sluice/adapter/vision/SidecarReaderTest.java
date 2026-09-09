@@ -54,8 +54,6 @@ class SidecarReaderTest {
 
     @Test
     void ignoresFieldsItDoesNotConsume(@TempDir final Path dir) throws IOException {
-        // A field this reader has never heard of must not break the read either - the sidecar's
-        // full shape is the writer's business, including any it grows later.
         final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, """
                 {
@@ -75,8 +73,6 @@ class SidecarReaderTest {
 
     @Test
     void failsLoudWhenTheSidecarFileIsMissing(@TempDir final Path dir) {
-        // Absent entirely is diagnosed the same as corrupt, never as a transient read failure - it
-        // will never resolve on retry.
         assertThatThrownBy(() -> this.reader.readEntries(dir.resolve("montage-404.json")))
                 .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining("montage-404.json");
@@ -84,7 +80,8 @@ class SidecarReaderTest {
 
     @Test
     void aReadFailureThrowsPlainUncheckedIOExceptionNotMalformed(@TempDir final Path dir) throws IOException {
-        // A directory in place of the sidecar is a real read failure, not malformed content.
+        // A directory in place of the sidecar is what makes the open itself fail, rather than the
+        // content parse.
         final Path sidecar = dir.resolve("montage-001.json");
         Files.createDirectory(sidecar);
 
@@ -98,9 +95,8 @@ class SidecarReaderTest {
     // readValue overload. The raw type it forces is a Mockito-generics artifact, not a real cast risk.
     @SuppressWarnings("unchecked")
     void aWrappedReadFailureThrowsPlainUncheckedIOExceptionNotMalformed(@TempDir final Path dir) throws IOException {
-        // The directory seam above only ever exercises one platform's failure path. This proves the
-        // classification directly. Whenever a stream opens fine and fails on a later read, Jackson
-        // wraps the underlying IOException into a JacksonIOException rather than letting it propagate.
+        // A stream that opens fine and then fails mid-read has no portable fixture, so the mapper
+        // is stubbed to throw the JacksonIOException that shape produces.
         final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, "{}");
         final var wrapped = new IOException("simulated mid-stream read failure");
@@ -181,9 +177,8 @@ class SidecarReaderTest {
                 .hasMessageContaining("photo entry missing '" + missing + "'");
     }
 
-    // The sibling of a missing src, and the second way that field can be unusable. A NUL character
-    // is rejected by every mainstream filesystem, so this is illegal on any platform. Left as a raw
-    // InvalidPathException it would escape every caller's read-failure handling.
+    // A NUL character is the one path character Path.of refuses on every platform, so the fixture
+    // reaches InvalidPathException wherever the suite runs.
     @Test
     void failsLoudOnASrcThisPlatformCannotMakeAPathOutOf(@TempDir final Path dir) throws IOException {
         final Path sidecar = dir.resolve("montage-001.json");
@@ -201,9 +196,8 @@ class SidecarReaderTest {
                 .hasMessageContaining("unusable src");
     }
 
-    // The third way the field can be unusable, and the one that parses cleanly. A filesystem root
-    // has no file name at all, so every later step that asks for one gets null back. "/" is a root
-    // on every platform this ships to, which is why the fixture needs no escaping to reach one.
+    // "/" parses cleanly into a path with no name elements, on every platform the suite runs on.
+    // So the fixture needs no escaping to reach one.
     @Test
     void failsLoudOnASrcNamingAFilesystemRoot(@TempDir final Path dir) throws IOException {
         final Path sidecar = dir.resolve("montage-001.json");
@@ -236,7 +230,6 @@ class SidecarReaderTest {
                 .hasMessageContaining("unparseable time '20-06-2019 15:00'");
     }
 
-    // One complete photo entry as raw JSON, with the named field left out.
     private String photoWithout(final String missing, final Path dir) {
         final var fields = new LinkedHashMap<String, String>();
         fields.put("src", "\"" + jsonEscaped(dir.resolve("IMG_001.jpg")) + "\"");

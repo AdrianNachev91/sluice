@@ -3,8 +3,7 @@ package photos.sluice.domain.dating;
 import java.time.LocalDateTime;
 
 /**
- * Shared by every date-resolution chain ({@link DateResolver}, {@link RescueDateResolver}). A
- * resolved date is only trustworthy if it falls within a real, already-past window: not a corrupt
+ * A resolved date is only trustworthy if it falls within a real, already-past window: not a corrupt
  * pre-2000 EXIF value, and not a clock-skewed future one.
  */
 final class DatePlausibility {

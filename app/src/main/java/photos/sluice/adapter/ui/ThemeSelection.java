@@ -20,9 +20,8 @@ import photos.sluice.application.port.out.ThemeChoice;
  * bind to it at all. {@code adapter/ui/view} may not name anything in {@code application}, and
  * resolving a choice against the desktop is a decision besides, so it happens here.
  *
- * <p>Static, like {@link UiBootstrap} beside it, because the windows reading it are built by static
- * factories and the toolkit constructs the application class itself. There is nothing to inject
- * through.
+ * <p>Static, because the windows reading it are built by static factories and the toolkit
+ * constructs the application class itself. There is nothing to inject through.
  *
  * <p>It holds {@link ThemeChoice#SYSTEM} until something sets it. What decides whether a startup
  * failure screen honours a saved choice is therefore whether a context existed to read one from,

@@ -76,13 +76,11 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.BooleanSupplier;
 
-// The real-adapter wiring factory and every fake shared by PipelineTest/CullEngineTest/
-// CurateEngineTest. Each of those three files pulls in what it needs through explicit static
-// imports, so a test body reads as though the helper were declared locally.
+// The real-adapter wiring factory and every fake shared by the pipeline tests.
 final class PipelineTestSupport {
 
-    // Any id a manual-mode fake and the settings pointing at it can agree on. What CullEngine reads
-    // is the type, so no test here needs a real provider's id to reach the manual-mode paths.
+    // Any id a manual-mode fake and the settings pointing at it can agree on. The provider's type
+    // is what selects the manual-mode paths, so no real id is needed.
     static final String MANUAL_PROVIDER_ID = "a-manual-provider";
 
     static final SecretId MANUAL_PROVIDER_KEY =
@@ -109,10 +107,8 @@ final class PipelineTestSupport {
         }
     }
 
-    // waitUntil's negative counterpart, for proving a background thread did NOT act. The condition
-    // is re-checked for the whole window rather than once at the end, so a state that breaks and
-    // recovers mid-window still fails. The window has to be several poll intervals wide to give the
-    // thread real chances to act.
+    // Proves a background thread did NOT act. The window has to be several poll intervals wide, to
+    // give the thread real chances to act.
     static void assertHoldsFor(final Duration window, final BooleanSupplier condition) {
         final Instant deadline = Instant.now().plus(window);
         while (Instant.now().isBefore(deadline)) {
@@ -135,18 +131,16 @@ final class PipelineTestSupport {
         return root.resolve("Inbox");
     }
 
-    // What a test waits on when a background job it holds no handle to has to finish: the run
-    // resolved, and the job that resolved it returned. Both halves are load-bearing. An empty
-    // unresolved list alone goes true at decisions.json, and cleanupIntermediates() deletes inside
-    // the prep dir after that, so teardown would race it. An idle runner alone is true before the
-    // job ever starts. What holds the two together is the run being unresolved when the wait
-    // begins: a caller whose run already reads COMPLETE gets no wait at all.
+    // Both halves are load-bearing. An empty unresolved list alone goes true at decisions.json,
+    // and the prep dir is still being cleaned out after that, so teardown would race it. An idle
+    // runner alone is true before the job ever starts. The run has to be unresolved when the wait
+    // begins, since a caller whose run already reads COMPLETE gets no wait at all.
     static void waitForJobToFinish(final Pipeline pipeline, final Duration timeout) {
         waitUntil(timeout, () -> unresolvedRuns(pipeline).isEmpty() && !pipeline.isBusy());
     }
 
-    // Every run still owing somebody something - anything but COMPLETE. An applied run stays on
-    // disk until purged, so cullRuns() keeps listing it and "no runs at all" would never come true.
+    // An applied run stays on disk until purged, so cullRuns() keeps listing it and "no runs at
+    // all" would never come true.
     static List<CullRunSummary> unresolvedRuns(final Pipeline pipeline) {
         return listed(pipeline.cullRuns()).stream()
                 .filter(run -> run.health().state() != State.COMPLETE)
@@ -174,8 +168,6 @@ final class PipelineTestSupport {
         return pipeline(root, progress, mediaStore, defaultCullSettings(), List.of(new ManualModeCuller()));
     }
 
-    // cull()/cullRuns()/resume() tests always go through this name, wiring the same manual-mode
-    // default (a fake external-agent-shaped VisionCuller) unless a test needs to vary the provider.
     static Pipeline cullPipeline(final Path root, final RecordingProgressPort progress) {
         return pipeline(root, progress, new NioMediaStore(), defaultCullSettings(), List.of(new ManualModeCuller()));
     }
@@ -185,17 +177,14 @@ final class PipelineTestSupport {
         return pipeline(root, progress, new NioMediaStore(), cullSettings, cullers);
     }
 
-    // For the tests of what a run does about a provider's credential. Everything else wires a
-    // provider naming none, so what the machine holds never comes up.
+    // Every other factory here wires a provider naming no credential, so what the machine holds
+    // never comes up.
     static Pipeline credentialPipeline(final Path root, final RecordingProgressPort progress,
                                        final List<VisionCuller> cullers, final SecretStore secretStore) {
         return pipeline(root, progress, new NioMediaStore(), defaultCullSettings(), cullers, null,
                 new JsonCullPrepStore(), secretStore);
     }
 
-    // curate() tests go through this name, wiring AutoApproveCuller as the configured provider.
-    // curate() runs prep/dispatch/apply in one call, with no gap to hand-drop a shard into the way
-    // the manual-mode cull() tests above do.
     static Pipeline curatePipeline(final Path root, final RecordingProgressPort progress) {
         return curatePipeline(root, progress, new NioMediaStore());
     }
@@ -212,9 +201,8 @@ final class PipelineTestSupport {
         return new FixedSettings("auto-approve", List.of());
     }
 
-    // Watcher tests go through this name: same wiring, but with a millisecond-scale poll
-    // interval (via Pipeline's package-private test constructor). A real auto-resume proves out
-    // fast this way, instead of waiting on the production 2-second cadence.
+    // A millisecond-scale poll interval, so a real auto-resume proves out without waiting on the
+    // production cadence.
     static Pipeline watchPipeline(final Path root, final RecordingProgressPort progress,
                                   final CullSettings cullSettings,
                                   final List<VisionCuller> cullers, final Duration pollInterval) {
@@ -239,9 +227,6 @@ final class PipelineTestSupport {
             this.failing = true;
         }
 
-        // The self-healing half of the fixture above. The bytes were never touched, so the very
-        // next read succeeds again, the same way a backup or antivirus handle releasing a locked
-        // file does.
         void stopFailing() {
             this.failing = false;
         }
@@ -286,11 +271,9 @@ final class PipelineTestSupport {
         }
     }
 
-    // Runs onFirstQuery once, the first time anything asks whether target exists. The occupancy
-    // check's own exists() call is that question, so this plants a state change squarely between
-    // cull()'s synchronous ask and claimScope()'s ask on the job thread. The real case is something
-    // outside this process creating a prep dir during a long sort. JobRunner's single slot stops
-    // another in-app job doing it, but nothing stops the user or a sync client.
+    // The real case is something outside this process creating a prep dir during a long sort.
+    // JobRunner's single slot stops another in-app job doing it, but nothing stops the user or a
+    // sync client.
     static final class PlantOnFirstExists implements MediaStore {
         private final MediaStore delegate = new NioMediaStore();
         private final Path target;
@@ -417,8 +400,7 @@ final class PipelineTestSupport {
         }
     }
 
-    // Fails listFiles() for exactly one target path. Stands in for a scope's own occupancy check
-    // failing - a locked disaster-drawer file, say. Every other read behaves normally.
+    // Stands in for a scope's own occupancy check failing, over a file something else holds open.
     static final class FailingListingOfPrepDir extends NioMediaStore {
 
         private final Path target;
@@ -436,8 +418,6 @@ final class PipelineTestSupport {
         }
     }
 
-    // Same wiring, with the prep-dir reader swapped out. Only a test that needs a read to fail at a
-    // seam this code owns passes one.
     static Pipeline cullPipeline(final Path root, final RecordingProgressPort progress,
                                  final CullPrepPort cullPrepPort) {
         return pipeline(root, progress, new NioMediaStore(), defaultCullSettings(), List.of(new ManualModeCuller()),
@@ -457,11 +437,9 @@ final class PipelineTestSupport {
                 new FixedSecretStore(null));
     }
 
-    // The one full wiring every overload above funnels into - real adapters throughout (matching
-    // this project's no-mocks test convention), same as the engines below. CullMontageRenderer's
-    // HeifDecoder dependency is stubbed to always miss: none of these fixtures are HEIC/AVIF, and
-    // real HEIC/AVIF decode already has its own coverage in TileRendererTest. pollInterval null
-    // means "use Pipeline's own production default".
+    // Real adapters throughout. CullMontageRenderer's HeifDecoder dependency is stubbed to always
+    // miss, none of these fixtures being HEIC or AVIF. A null pollInterval means Pipeline's own
+    // production default.
     static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore,
                              final CullSettings cullSettings, final List<VisionCuller> cullers,
                              final @Nullable Duration pollInterval, final CullPrepPort cullPrepPort,
@@ -514,8 +492,7 @@ final class PipelineTestSupport {
                 spendLedger, secretStore, pollInterval);
     }
 
-    // The folder roots have to be there for the pipeline's own path check to pass, the same way a
-    // real install's are.
+    // The folder roots have to exist for the pipeline's own path check to pass.
     private static Path createDirectory(final Path directory) {
         try {
             return Files.createDirectories(directory);
@@ -524,10 +501,8 @@ final class PipelineTestSupport {
         }
     }
 
-    // The same PrepDirRemedies the pipeline() factory above wires into its own Pipeline, built
-    // standalone here. It lets a test record a user's troubleshooting answer against a prep dir and
-    // then watch the pipeline honour it. Pipeline exposes troubleshoot() but not the individual
-    // CHOICE remedies, which a troubleshoot screen calls directly.
+    // Built standalone because Pipeline exposes troubleshoot() but not the individual CHOICE
+    // remedies, which a troubleshoot screen calls directly.
     static PrepDirRemedies prepDirRemedies(final Path root) {
         final var pathsConfig = SettingsFixture.pathsConfig(root, root.resolve("Library"), root.resolve("Inbox"));
         final var mediaStore = new NioMediaStore();
@@ -545,15 +520,13 @@ final class PipelineTestSupport {
         Files.writeString(file, content);
     }
 
-    // 60,000 bytes clears LowResGate's 50KB threshold, same fixture convention as SortEngineTest -
-    // sort's progress-bracket tests aren't testing low-res routing and shouldn't accidentally
-    // exercise it.
+    // Enough bytes to clear LowResGate's size threshold, so a test that is not about low-res
+    // routing cannot accidentally exercise it.
     static String padded(final String marker) {
         return marker + "x".repeat(60_000);
     }
 
-    // Above LowResGate.MIN_DIMENSION (640) on the long side, so these photos are always reviewable -
-    // same fixture convention as CullMontageRendererTest.
+    // Above LowResGate.MIN_DIMENSION on the long side, so these photos are always reviewable.
     static final int PHOTO_WIDTH = 800;
     static final int PHOTO_HEIGHT = 600;
 
@@ -573,13 +546,11 @@ final class PipelineTestSupport {
         return file;
     }
 
-    // Inbox-side sibling of writePhoto() above: that one writes straight into Sorted, where
-    // SortEngine's own low-res gate never runs again, so a small solid-color JPEG is fine there. A
-    // photo that needs to survive an actual sort pass has to clear that gate for real. A solid fill
-    // compresses to only a few KB, well under LowResGate's 50KB floor. Filling every pixel with
-    // random noise instead defeats JPEG compression, so the file clears the floor easily. name must
-    // carry a FilenameSource-recognized date (e.g. "20190601_photo.jpg") since these fixtures have
-    // no EXIF or Takeout JSON.
+    // A photo that has to survive an actual sort pass has to clear the low-res gate for real. A
+    // solid fill compresses to a few KB, well under the floor. Filling every pixel with random
+    // noise defeats JPEG compression instead, so the file clears it easily. name must carry a
+    // FilenameSource-recognized date (e.g. "20190601_photo.jpg"), these fixtures having no EXIF or
+    // Takeout JSON.
     static Path writeInboxPhoto(final Path root, final String name) throws IOException {
         return writeInboxPhoto(root, name, 42);
     }
@@ -600,8 +571,7 @@ final class PipelineTestSupport {
         return file;
     }
 
-    // Hand-drops a shard the same shape a real external agent would write, matching
-    // ApplyEngineTest's own writeShard/classificationJson convention. ShardCodec itself is
+    // Hand-drops a shard the same shape a real external agent would write. ShardCodec itself is
     // package-private to adapter.vision and unreachable from here.
     static void writeShard(final Path prepDir, final String montage, final String... decisionsJson) throws IOException {
         final String shardName = montage.replaceFirst("^montage-", "decisions-") + ".json";
@@ -631,14 +601,11 @@ final class PipelineTestSupport {
 
     static final class RecordingProgressPort implements ProgressPort {
         final List<String> events = new ArrayList<>();
-        // Runs once, on the first tick of any phase. This is how a test cancels a job at an exact
-        // point in its own progress. The engine reports a tick only once the work that tick counts
-        // is genuinely on disk, so it is a real signal rather than a guessed moment.
+        // A tick is reported only once the work it counts is genuinely on disk. A cancellation
+        // hung off this one therefore lands at a real moment rather than a guessed one.
         private @Nullable Runnable onFirstTick;
-        // Runs once, the first time the named phase reports finished. PhaseRunner.run() fires
-        // phaseFinished in a finally, right after the engine call returns and before control moves
-        // on to whatever the caller does next. That is how a test lands a real cancellation in the
-        // exact window between one phase ending and the next one starting.
+        // phaseFinished fires between one phase ending and the next one starting, so a
+        // cancellation hung off this one lands in exactly that window.
         private @Nullable Runnable onPhaseFinished;
         private @Nullable String finishedPhase;
 
@@ -687,8 +654,6 @@ final class PipelineTestSupport {
         }
     }
 
-    // Wraps the real NioMediaStore but always throws on move() - simulates an engine call that dies
-    // mid-phase, to prove Pipeline still brackets phaseFinished on the failure path.
     static final class FailingMoves implements MediaStore {
         private final MediaStore delegate = new NioMediaStore();
 
@@ -802,9 +767,9 @@ final class PipelineTestSupport {
         }
     }
 
-    // Wraps the real NioMediaStore but blocks the first move() call between two latches. A test can
-    // synchronize with the exact moment SortEngine is mid-move this way. That's real observable
-    // proof it hasn't returned yet, not a guessed sleep long enough to "probably" still be running.
+    // Blocks the first move() call between two latches, so a test synchronizes with the exact
+    // moment a move is in flight. That is observable proof the call has not returned, rather than
+    // a sleep long enough to probably still be running.
     static final class BlockingMoves implements MediaStore {
         private final MediaStore delegate = new NioMediaStore();
         private final CountDownLatch moveStarted;
@@ -932,10 +897,8 @@ final class PipelineTestSupport {
         }
     }
 
-    // Wraps the real NioMediaStore but blocks the first listFiles() call between two latches - the
-    // call CullMontageRenderer.collectCandidates() makes while scanning Sorted for candidates, mid-
-    // PREPPING. Lets a test synchronize a cancellation request with that exact moment, the same
-    // technique BlockingMoves above gives the sort/routing loop.
+    // Blocks the first listFiles() call between two latches, which is the one the montage renderer
+    // makes while scanning Sorted for candidates. A test lands a cancellation at that moment.
     static final class BlockingListFiles implements MediaStore {
         private final MediaStore delegate = new NioMediaStore();
 
@@ -1064,10 +1027,8 @@ final class PipelineTestSupport {
         }
     }
 
-    // Wraps the real NioMediaStore but blocks the first moveTo() call between two latches -
-    // ApplyEngine.recordThenMove()'s own move step. Lets a test synchronize a real cancellation
-    // with the exact moment a decision's move is in flight, the same technique BlockingMoves gives
-    // SortEngine/CommitEngine/RescueEngine's own move() call.
+    // Blocks the first moveTo() call between two latches, so a test lands a real cancellation at
+    // the exact moment a decision's move is in flight.
     static final class BlockingMoveTo implements MediaStore {
         private final MediaStore delegate = new NioMediaStore();
         private final CountDownLatch moveStarted;
@@ -1196,16 +1157,12 @@ final class PipelineTestSupport {
     }
 
     // Every double below needs a description because the port has one, and none of them is about
-    // what a settings screen would draw. Named settings and a credential would be fixture that
-    // no assertion here reads.
+    // what a settings screen would draw. Named settings and a credential would be fixture no
+    // assertion here reads.
     static VisionProviderDescriptor describing(final String id) {
         return new VisionProviderDescriptor(id, id, Set.of(), Set.of(), null, null, null, null);
     }
 
-    // The tiers of a machine holding the manual provider's credential, or none. The default above
-    // holds none, which asks nothing of any test wired to a describing() provider: those name no
-    // credential, so the engine's guard never reaches this. A test that does name one says here
-    // what the machine holds.
     record FixedSecretStore(@Nullable String held) implements SecretStore {
 
         @Override
@@ -1214,8 +1171,6 @@ final class PipelineTestSupport {
                     + "credential value, only which tier answers");
         }
 
-        // Answers for the manual provider's own credential and nothing else, so a caller asking
-        // about some other id reads as absent rather than as whatever this holds.
         @Override
         public SecretStatus status(final SecretId id) {
             return this.held == null || !MANUAL_PROVIDER_KEY.equals(id)
@@ -1244,11 +1199,8 @@ final class PipelineTestSupport {
         }
     }
 
-    // Stands in for the real (package-private, unreachable from here) ExternalAgentCuller. Only a
-    // completeness check, gating on hasShard() alone rather than full shard validation. That
-    // validation is ShardValidator/ApplyEngine's job, already covered by their own tests - and by
-    // CullEngine's own tally (ShardTallyCalculator), which runs real ShardValidator logic
-    // independently of this fake.
+    // Stands in for the real ExternalAgentCuller, which is package-private and unreachable from
+    // here. Only a completeness check, gating on hasShard() rather than on full shard validation.
     static final class ManualModeCuller implements VisionCuller {
 
         private final @Nullable SecretId credential;
@@ -1257,9 +1209,8 @@ final class PipelineTestSupport {
             this(null);
         }
 
-        // A provider that authenticates, for the tests of what a run does before it knows whether
-        // the key is there. Manual mode otherwise, so what a dispatch does stays the same either
-        // way and only the credential varies.
+        // A provider that authenticates. Manual mode otherwise, so a dispatch behaves the same
+        // either way and only the credential varies.
         ManualModeCuller(final @Nullable SecretId credential) {
             this.credential = credential;
         }
@@ -1308,10 +1259,8 @@ final class PipelineTestSupport {
         }
     }
 
-    // The same "not complete yet" pause as ManualModeCuller above, but blocking
-    // first. That lets a test synchronize a real cancellation with the exact moment dispatch is
-    // in flight, before it throws the CullException. A real external-agent provider would throw
-    // that same exception for a genuinely incomplete shard set.
+    // Blocks before throwing the "not complete yet" CullException, so a test lands a real
+    // cancellation at the exact moment dispatch is in flight.
     record BlockingIncompleteCuller(CountDownLatch started, CountDownLatch release) implements VisionCuller {
         @Override
         public VisionProviderDescriptor describe() {
@@ -1346,14 +1295,11 @@ final class PipelineTestSupport {
         }
     }
 
-    // Stands in for a real automated provider (Anthropic/OpenAI/Ollama) that always succeeds on its
-    // first try. It writes its own valid shard for every montage in one call, the way a real
-    // automated culler would after resolving its own judgements. No test needs to hand-drop one
-    // mid-run the way ManualModeCuller's tests do above.
+    // Stands in for an automated provider that always succeeds on its first try, writing a valid
+    // shard for every montage in one call.
     //
-    // Unconditional, not gated on hasShard() the way ManualModeCuller is. buildFreshAndDispatch()
-    // always rebuilds the prep dir fresh right before dispatch runs, so a montage here can never
-    // already carry a shard.
+    // Unconditional rather than gated on hasShard(). The prep dir is always rebuilt fresh right
+    // before dispatch runs, so a montage here can never already carry a shard.
     static final class AutoApproveCuller implements VisionCuller {
         @Nullable CullOptions receivedOptions;
 
@@ -1426,8 +1372,8 @@ final class PipelineTestSupport {
         }
     }
 
-    // An automated provider that spends and then gives up, the way the real one does when a montage
-    // fails its corrective retry.
+    // Spends and then gives up, the way a real provider does when a montage fails its corrective
+    // retry.
     static final class SpendingThenFailingCuller implements VisionCuller {
         @Override
         public VisionProviderDescriptor describe() {
@@ -1499,9 +1445,8 @@ final class PipelineTestSupport {
         }
     }
 
-    // An automated provider that judges the first montage and then reports that its ceiling ended
-    // the run. It forecasts a real per-call figure, so the engine has something to build a ceiling
-    // from.
+    // Judges the first montage and then reports that its ceiling ended the run. It forecasts a
+    // real per-call figure, so the engine has something to build a ceiling from.
     static final class CeilingStoppedCuller implements VisionCuller {
         @Nullable SpendCeiling receivedCeiling;
 
@@ -1537,10 +1482,8 @@ final class PipelineTestSupport {
         }
     }
 
-    // A sibling of AutoApproveCuller that writes a real "junk" classification for every photo in
-    // every montage, instead of an all-keeps shard. That gives ApplyEngine an actual move loop to
-    // run - and a test something to synchronize with via BlockingMoveTo - rather than zero
-    // decisions.
+    // Writes a real "junk" classification for every photo in every montage rather than an
+    // all-keeps shard, so apply has an actual move loop to run.
     static final class JunkEverythingCuller implements VisionCuller {
         private final CullPrepPort cullPrepPort = new JsonCullPrepStore();
 
@@ -1581,10 +1524,10 @@ final class PipelineTestSupport {
         }
     }
 
-    // An automated provider that succeeds at its own job and still produces a shard set apply
-    // refuses. Every decision names a file no montage ever showed, and whose basename matches no
-    // in-scope file either, so no unique-basename heal can pull it back into scope. That is the
-    // shape a run needs to reach Blocked without any culler-side failure along the way.
+    // Succeeds at its own job and still produces a shard set apply refuses. Every decision names a
+    // file no montage showed, whose basename matches no in-scope file either, so no
+    // unique-basename heal can pull it back into scope. That is the shape a run needs to reach
+    // Blocked with no culler-side failure along the way.
     static final class OutOfScopeCuller implements VisionCuller {
         @Override
         public VisionProviderDescriptor describe() {

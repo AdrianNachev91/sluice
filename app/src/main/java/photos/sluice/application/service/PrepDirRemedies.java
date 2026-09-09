@@ -231,6 +231,10 @@ public class PrepDirRemedies {
      * {@link #discard} instead. Sidecar health is judged before this rebuild, per the locked
      * dependency order.
      *
+     * <p>A read that merely failed is not damage, so it propagates rather than counting as an
+     * unparseable sidecar. Counting it would route the reader to discard-and-redo over what is very
+     * likely a passing lock. That throws away every shard and the model spend behind them.
+     *
      * <p>The unreviewable list is genuinely unrecoverable - no sidecar or shard mentions it, since
      * it was never montaged at all. So a rebuilt index always reports it empty. Losing it costs a
      * report line, not safety. A photo dropped from the rebuilt list is simply not acted on.

@@ -105,7 +105,7 @@ metrics vary slightly between them.
   class's own `#111111` grid background, so it wouldn't silently blend in.
 - **Pixel-based tests deliberately avoid exact glyph colors.** They check only that label-band
   content "differs from background". That's because anti-aliased text edges render slightly
-  differently across the Ubuntu/Windows CI matrix.
+  differently across the CI platforms.
 
 ## Related
 

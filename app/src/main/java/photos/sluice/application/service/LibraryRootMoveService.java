@@ -135,13 +135,13 @@ public class LibraryRootMoveService implements LibraryRootUseCase {
      *
      * <p>Filing is the work and the save is the commit, the same order the copy resolution runs in.
      * Saving first was the alternative and it loses on which wreckage it leaves. A filing that then
-     * fails would put the app on the new library with an index still describing the old one, which
+     * fails would put the app on the new library with an index still describing the old one. That
      * is the exact state this resolution exists to remove: the next sort reads a hash as already
      * safe somewhere the app has stopped filing into, and deletes the Inbox copy. This order fails
      * the other way, onto an old library with no index, where the cost is that dedup starts over.
      *
      * <p>Both windows are narrow enough that neither is likely, and that is what makes it a
-     * judgement rather than an obvious call. Nothing can read the index between the two steps: this
+     * judgement rather than an obvious call. Nothing can read the index between the two steps. This
      * runs as the job, one job runs at a time, and the save's only listener call no-ops while a job
      * is in flight.
      *
@@ -184,8 +184,7 @@ public class LibraryRootMoveService implements LibraryRootUseCase {
      *
      * <p>An empty path is a legal one, and {@code toAbsolutePath} anchors it at whatever directory
      * the process was started in. So without this, a field left blank moves the library to the app's
-     * own launch folder and copies the whole thing there. The seam took a settings value before this
-     * one, and refused a blank library root then; it has to keep refusing it now.
+     * own launch folder and copies the whole thing there.
      *
      * @param newLibraryRoot {@link Path} the folder the library would move to, as handed over
      * @throws IllegalArgumentException when the path names nothing

@@ -12,7 +12,7 @@ import java.time.Duration;
 import java.time.Instant;
 
 /**
- * Decides what closing the window does while Something is still running.
+ * Decides what closing the window does while something is still running.
  *
  * <p>Closing with nothing running is answered by not asking at all. A run merely waiting for shards
  * is one of those. The job that prepared it has ended, and what is left is a watcher polling a
@@ -117,6 +117,8 @@ public class QuitPresenter {
         if (this.endsWithinTheBeat()) {
             return null;
         }
+        // Keeping leads, because quitting throws away a sheet already paid for and keeping costs
+        // nothing.
         return new QuitView(HEADING, this.whatIsRunning() + WHAT_IS_DONE_STAYS_DONE, STOP_AND_QUIT,
                 KEEP_RUNNING, false, WAITING_HEADING, this.waitingLine(), FORCE_QUIT);
     }
@@ -183,8 +185,7 @@ public class QuitPresenter {
      * on is a model answering, which no stop can shorten, and the answer it gives up on has already
      * been paid for.
      *
-     * <p>A job with no mode gets a third, saying only that it stops. None of those is a file this
-     * app would move again, or could give up on part-way.
+     * <p>A job with no mode gets a third, saying only that it stops.
      *
      * @return {@link String} the line the waiting dialog carries
      */
@@ -203,9 +204,7 @@ public class QuitPresenter {
      * there while it does. That is what closing looks like anyway. A reader who presses the close
      * button on a run about to end then sees it close, rather than a question about stopping it.
      *
-     * <p>Returns as soon as the run ends, so the wait is only as long as the run needs. A run with
-     * real work left uses the whole beat and is asked about, which is the case the question was
-     * written for.
+     * <p>Returns as soon as the run ends, so the wait is only as long as the run needs.
      *
      * @return boolean true where nothing is running by the end of the wait
      */

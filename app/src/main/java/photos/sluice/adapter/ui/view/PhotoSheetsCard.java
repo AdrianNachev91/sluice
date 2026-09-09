@@ -11,6 +11,13 @@ final class PhotoSheetsCard {
 
     private PhotoSheetsCard() {}
 
+    /**
+     * The built card, and the two fields a save has to read its numbers back off.
+     *
+     * @param card {@link VBox} the card itself, for the page to lay out
+     * @param tileSize {@link Spinner} of {@link Integer} how large each photo is drawn
+     * @param tilesPerRow {@link Spinner} of {@link Integer} how many share one sheet
+     */
     record Result(VBox card, Spinner<Integer> tileSize, Spinner<Integer> tilesPerRow) {
     }
 

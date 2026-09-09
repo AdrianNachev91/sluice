@@ -35,12 +35,8 @@ import java.util.function.Predicate;
 /**
  * Decides what the review screen shows and what a press on it does.
  *
- * <p>Holds the last reading of the three folders, and the words that reading comes to. The screen
- * keeps the controls, asks here after every change, and hands the presses it cannot carry out itself
- * straight back.
- *
- * <p>The reading is taken by calling {@link #refresh}, which walks all three roots and blocks while
- * it does. The caller runs it off whatever thread paints.
+ * <p>Holds the last reading of the three folders, and the words that reading comes to. The reading
+ * is taken by calling {@link #refresh}.
  */
 @Component
 @Profile("!cli")
@@ -119,7 +115,7 @@ public class ReviewPresenter {
 
     private static final Predicate<String> ANY_NAME = _ -> true;
 
-    // The order the sections are drawn in: the Review root's three, then the other two roots.
+    // The order the sections are drawn in: the Review root's, then the other roots.
     private static final List<Section> SECTIONS = List.of(
             new Section(Root.REVIEW, FiledBy.A_SIFT, JunkCategory::claims, "general-junk",
                     GENERAL_JUNK_HEADING, GENERAL_JUNK_EXPLAINED),
@@ -492,9 +488,8 @@ public class ReviewPresenter {
     /**
      * One of a card's control ids.
      *
-     * <p>Built from the folder's own name, so a test and a render can name the control that acts on
-     * a known folder. A name can hold anything a filesystem allows, so everything outside a plain
-     * word is flattened to one dash.
+     * <p>Built from the folder's own name. A name can hold anything a filesystem allows, so
+     * everything outside a plain word is flattened to one dash.
      *
      * @param folder {@link Folder} the folder the control belongs to
      * @param part {@link String} which control

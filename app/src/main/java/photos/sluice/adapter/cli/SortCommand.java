@@ -24,8 +24,7 @@ import java.util.concurrent.Callable;
  * folder is refused.
  *
  * <p>With nothing named it takes the oldest year present. Sorted files leave the Inbox, so the
- * oldest year remaining is always the one to do next. A caller running this month after month never
- * has to work out which that is.
+ * oldest year remaining is always the one to do next.
  */
 @Component
 @Profile("cli")
@@ -59,7 +58,6 @@ public class SortCommand implements Callable<Integer> {
     @SuppressWarnings("unused")
     private @Nullable String months;
 
-    // Not a shared mixin: this description is specific to what sort orders as oldest.
     @Option(names = ScopeArguments.OLDEST, paramLabel = "N",
             description = "The N oldest files by date instead of a year. Videos count too.")
     @SuppressWarnings("unused")
@@ -127,10 +125,9 @@ public class SortCommand implements Callable<Integer> {
     /**
      * What is worth reading beside the answer.
      *
-     * <p>Says what the dates mean rather than how they were worked out. The chain that resolves a
-     * date has five links, and what tripped this is one of them failing, not all of them. A
-     * sentence naming which link the dates fell back to can be false while the summary it was built
-     * from shows otherwise. What a reader can check either way is a date on a photo.
+     * <p>Says what the dates mean rather than how they were worked out. A note naming which link of
+     * the date chain the run fell back to can be false while the summary it was built from shows
+     * otherwise. What a reader can check either way is a date on a photo.
      *
      * @param sorted {@link SortSummary} what the sort did
      * @return a {@link List} of {@link String} the lines, empty where nothing tripped
@@ -153,10 +150,9 @@ public class SortCommand implements Callable<Integer> {
      * finished sort, and the reader is then corrected by a line they have already passed. What the
      * counts do not mention is everything left in the Inbox, which is why the line names it.
      *
-     * <p>A run that filed nothing says which of the three reasons it was. Only an unnarrowed run
-     * that finished is entitled to the sentence about the Inbox. Telling a caller their Inbox held
-     * nothing, when they stopped the run or asked for a year it does not hold, says their photos
-     * are gone.
+     * <p>Only an unnarrowed run that finished is entitled to the sentence about the Inbox. Telling
+     * a caller their Inbox held nothing, when they stopped the run or asked for a year it does not
+     * hold, says their photos are gone.
      *
      * @param sorted {@link SortSummary} what the sort did
      * @param stopped boolean whether the caller asked it to stop

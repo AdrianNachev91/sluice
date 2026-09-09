@@ -129,14 +129,15 @@ public class ApplyEngine {
     /**
      * Applies a prep directory's decisions, cancellable mid-run.
      *
-     * <p>The whole batch is validated in one pass before anything moves. Every decision is then
-     * classified against the disposition ledger. A decision whose file is still on disk is pending.
-     * One that's gone but hash-verifies at its recorded destination is already done, its secondary
-     * write (if any) reconciled rather than redone. index.json's own unreviewable list goes through
-     * the same classification - it has no shard-driven category, and its one secondary write is the
-     * note line its destination folder carries. Anything unresolved, decision or unreviewable file
-     * alike, aborts the whole run before a single file moves. Once everything is handled, the merged
-     * decisions.json is written and the montage and tile intermediates are deleted.
+     * <p>The whole batch is validated in one pass before anything moves, and anything unresolved,
+     * decision or unreviewable file alike, aborts the run before a single file moves.
+     *
+     * <p>Every decision is then classified against the disposition ledger. One whose file is still
+     * on disk is pending. One that is gone but hash-verifies at its recorded destination is already
+     * done, and its secondary write is reconciled rather than redone.
+     *
+     * <p>index.json's own unreviewable list goes through the same classification. Its one secondary
+     * write is the note line its destination folder carries.
      *
      * @param prepDirPath {@link Path} the prep directory to apply
      * @param options {@link ApplyOptions} apply behavior flags
@@ -261,10 +262,9 @@ public class ApplyEngine {
 
     /**
      * The persisted decisions.json embeds a fresh recount over the whole decisions array it sits
-     * next to. That covers this run's decisions and every prior run's alike, not just the
-     * this-run-only report returned to the caller. decisions.json is overwritten wholesale on every
-     * write, never appended to, so recomputing from the full list each time carries no
-     * double-counting risk.
+     * next to. That covers this run's decisions and every prior run's alike, rather than only the
+     * this-run report returned to the caller. Every write overwrites decisions.json wholesale and
+     * never appends, so recomputing from the full list each time carries no double-counting risk.
      *
      * @param decisions a {@link List} of {@link Decision} the full decisions array, all runs
      * @param prepDir {@link PrepDir} the prep directory's index
@@ -450,8 +450,7 @@ public class ApplyEngine {
      * <p>The line names the file by where it landed rather than where it came from. A name already
      * taken in the destination lands the file as a " (2)".
      *
-     * <p>The date is the month the photo sat under in Sorted, which is the finest this run can
-     * honestly claim.
+     * <p>The date is the month the photo sat under in Sorted, which is the finest this run knows.
      *
      * @param from {@link Path} where the file was, under Sorted
      * @param destDir {@link Path} the folder it landed in
@@ -639,8 +638,8 @@ public class ApplyEngine {
     }
 
     /**
-     * Drops the montage contact sheets and tile images once every decision has been carried out -
-     * always, even when zero decisions exist. index.json, the per-montage sidecars and shards, the
+     * Drops the montage contact sheets and tile images once every decision has been carried out.
+     * Always, even when zero decisions exist. index.json, the per-montage sidecars and shards, the
      * move ledger, and the merged decisions.json are all left in place. A montage's own sidecar JSON
      * shares the "montage-" filename prefix with its contact-sheet image, so the two are told apart
      * by extension. Keeping the sidecar is what lets validation still find it readable on a later

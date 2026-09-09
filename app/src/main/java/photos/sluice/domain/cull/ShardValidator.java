@@ -65,8 +65,7 @@ import java.util.regex.Pattern;
  *   <li>Each near-dup group has exactly one chosen keeper and at least one reject, and belongs to a
  *       single montage - a group id reused across shards is rejected.
  *   <li>A group id is a slug: lowercase {@code a-z0-9} runs joined by single hyphens, at most 24
- *       characters. It becomes part of a {@code Duplicates/YYYY-MM_<slug>/} folder name, so it
- *       must stay a short, portable path segment.
+ *       characters.
  *   <li>No file is acted on twice, across all shards and against the unreviewable list too.
  * </ul>
  */
@@ -74,18 +73,12 @@ public final class ShardValidator {
 
     private static final Pattern GROUP_SLUG = Pattern.compile("[a-z0-9]+(-[a-z0-9]+)*");
 
-    /**
-     * How long a near-duplicate group name may be. Shared with {@link LaunchPrompt}, which asks an
-     * agent for names this will accept. A prompt asking for more than the validator allows buys its
-     * refusal at apply time, once the agent has already been paid.
-     */
     static final int GROUP_SLUG_MAX_LENGTH = 24;
 
     /**
-     * How long a near-duplicate group name may be, for the prompts that ask for one.
-     *
-     * <p>Public so both prompts read it. A prompt naming a limit this class does not hold buys its
-     * own refusal, once the answer has already been paid for.
+     * How long a near-duplicate group name may be, for the prompts that ask an agent for one. A
+     * prompt naming a limit this class does not hold buys its own refusal, once the answer has
+     * already been paid for.
      *
      * @return int the longest group name this accepts
      */
@@ -95,9 +88,8 @@ public final class ShardValidator {
 
     /**
      * A parsed shard paired with the montage id its on-disk filename implies (e.g.
-     * {@code decisions-003.json} implies {@code montage-003}). The caller derives the id from the
-     * filename, the only place that linkage is known. That lets the validator check the shard's
-     * self-declared {@code montage} field against it.
+     * {@code decisions-003.json} implies {@code montage-003}). The id is passed in because the
+     * filename is the only place that linkage is known, and this class sees no filenames.
      *
      * <p>{@code sheetPhotos} is what that one sheet showed, from its own sidecar, and it is what
      * coverage is measured against. An empty list is not a shard covering nothing. It is a caller
@@ -145,9 +137,9 @@ public final class ShardValidator {
         final var heals = new ArrayList<String>();
         final var decisions = new ArrayList<Decision>();
         // Every verdict, keeps included, so the duplicate-reference check below can count a keep as
-        // a reference. The report carries decisions alone.
+        // a reference.
         final var healedVerdicts = new ArrayList<Verdict>();
-        // group id -> the montage ids that reference it, for the cross-shard uniqueness check below.
+        // group id -> the montage ids that reference it.
         final Map<String, Set<String>> montagesByGroup = new TreeMap<>();
 
         final List<ShardFile> ordered = shards.stream()
@@ -161,20 +153,11 @@ public final class ShardValidator {
 
         // A single file acted on twice would double-move at apply time. Checked across the merged
         // (heal-corrected) list, since a heal can collapse two differently-typed paths onto one src.
-        // The unreviewable list joins the same count. It has no shard of its own, but ApplyEngine
-        // moves it exactly like a decision - a file listed there AND in a decision would double-move
-        // just the same. A duplicate within the unreviewable list alone would too.
+        // The unreviewable list joins the same count, its files moving exactly like a decision's.
         //
         // Counted over verdicts, so a keep counts as a reference. One file named both as a keep
         // and as a decision is a shard contradicting itself. Counting only decisions would resolve
         // that silently toward the one that moves the photo.
-        //
-        // The exactly-one-verdict-plus-exactly-one-unreviewable shape gets its own finding,
-        // VerdictUnreviewableOverlap. It is common and specific enough that a troubleshooter can
-        // offer a real choice: trust the verdict, or treat the file as unreviewable. Every other
-        // shape has no such resolution and stays the general DuplicateFileReference. That covers
-        // two decisions, a keep beside a decision, two unreviewable entries, and three or more
-        // references.
         final Map<String, List<Verdict>> verdictsByFile = new TreeMap<>();
         final Map<String, Integer> verdictCountByFile = new TreeMap<>();
         for (final Verdict verdict : healedVerdicts) {
@@ -195,9 +178,8 @@ public final class ShardValidator {
                 verdictsByFile.getOrDefault(f, List.of()), verdictCountByFile.getOrDefault(f, 0),
                 unreviewableCountByFile.getOrDefault(f, 0), problems));
 
-        // A near-dup group belongs to exactly one montage (groups never span montages). The same
-        // slug reused across two shards would let two unrelated groups pass independently, then merge
-        // into one Duplicates folder at apply time - so reject any group seen in more than one shard.
+        // The same slug reused across two shards would let two unrelated groups pass independently,
+        // then merge into one Duplicates folder at apply time.
         montagesByGroup.forEach((group, montages) -> {
             if (montages.size() > 1) {
                 problems.add(new GroupSpansMultipleMontages(group, List.copyOf(montages)));
@@ -286,7 +268,6 @@ public final class ShardValidator {
         }
         checkCoverage(montageId, file.sheetPhotos(), judged, problems);
 
-        // Each near-dup group within a shard needs exactly one chosen keeper and at least one reject.
         // Groups never span montages, so a group is complete within the one shard that declares it.
         final Set<String> groups = new TreeSet<>();
         groups.addAll(chosenPerGroup.keySet());
@@ -450,10 +431,9 @@ public final class ShardValidator {
 
     /**
      * basename -> its single owning source file. A basename shared by two or more distinct in-scope
-     * files (the same filename living in different month folders - a camera resets its counter, two
-     * cameras both emit IMG_0001.jpg) is ambiguous and dropped: a drifted decision path whose basename
-     * isn't unique can't be resolved to one owner, so it never auto-heals. The count is over distinct
-     * source paths, which is why a Set collects them per basename.
+     * files is ambiguous and dropped. Say the same filename in two month folders, after a camera
+     * resets its counter. A drifted decision path whose basename isn't unique can't be resolved to
+     * one owner, so it never auto-heals.
      *
      * @param sidecarSrcs a {@link Collection} of {@link Path} every in-scope file the montages actually showed
      * @return a {@link Map} of {@link String} to {@link Path} in-scope files healable by unique basename

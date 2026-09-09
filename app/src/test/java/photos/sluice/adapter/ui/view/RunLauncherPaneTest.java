@@ -270,8 +270,8 @@ class RunLauncherPaneTest {
         assertThat(pane.lookup("#run-start").isDisabled()).isTrue();
     }
 
-    // The pane draws both from one constant, so what they cannot be is different characters. What
-    // is worth pinning is that each is drawn at all, and that the row's sits at the end.
+    // The pane draws both from one constant, so what is worth pinning is that each is drawn at
+    // all, and that the row's sits at the end.
     @Test
     void aRowWithAnUnfinishedSiftAndTheLegendBothDrawTheMark() throws Exception {
         final Parent pane = onFxThread(() -> built(presenterOverAnUnfinishedSiftOf2019()));
@@ -311,10 +311,9 @@ class RunLauncherPaneTest {
         assertThat(((ToggleButton) pane.lookup("#run-year-2018")).isSelected()).isTrue();
     }
 
-    // Identity, not behaviour. A rebuilt row answers a second press just as well, because the test
-    // looks it up again by id and finds the replacement. What a rebuild destroys is the control the
-    // reader is still pressing. Whether it is the same node afterwards is the only thing that
-    // separates the two.
+    // Identity rather than behaviour. A rebuilt row answers a second press just as well, since the
+    // test looks it up again by id. What a rebuild destroys is the control the reader is still
+    // pressing, and node identity is the only thing that separates the two.
     @Test
     void pressingAYearRowLeavesTheRowItselfInPlace() throws Exception {
         final Parent pane = onFxThread(() -> built(presenter()));

@@ -101,9 +101,7 @@ public class CullDispatcher {
     }
 
     /**
-     * Whether the configured provider works the given way. Three callers ask. One decides what a
-     * {@link CullException} means, one whether a run is worth watching, and one whether a scope
-     * costs anything to sift.
+     * Whether the configured provider works the given way.
      *
      * <p>Asked of the culler that would run, rather than worked out from the configured id. The id
      * is a string a user can type, and the provider it names is the only thing that knows how it

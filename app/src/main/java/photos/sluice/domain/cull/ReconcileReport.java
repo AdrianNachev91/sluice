@@ -4,14 +4,13 @@ import java.util.List;
 
 /**
  * {@code ReconcileEngine.reconcile()}'s outcome. A move-log rebuild sweeps every already-validated
- * decision and unreviewable file against actual disk state. It exists because move-records.log, the
- * record {@code classify()} would otherwise trust, may itself be missing or corrupt. reconstructed counts
- * a file reconcile() located at the exact destination the same decision would have produced,
- * recording its hash there. stillPending counts a file still sitting exactly where the culler found
- * it - untouched, nothing to reconstruct. skipped counts a file the user had already given up on,
- * which a rebuild leaves settled rather than re-raising. missingSource is every decision or
- * unreviewable file reconcile() could account for none of those ways; PrepDirDoctor's CHOICE
- * remedies pick up from there.
+ * decision and unreviewable file against actual disk state.
+ *
+ * <p>It exists because move-records.log, the record {@code classify()} would otherwise trust, may
+ * itself be missing or corrupt.
+ *
+ * <p>A reconstructed file is one found at the exact destination its own decision would have
+ * produced, and its hash is recorded there. A skipped one is left settled rather than raised again.
  *
  * <p>choicesLost says the run found the choices file undecodable and filed it away. Every answer it
  * held is gone, and each finding those answers had settled will be raised again. This is the one

@@ -41,7 +41,7 @@ public enum RunEnding {
 
     /**
      * The provider gave up on a montage and the run was abandoned. What it had already consumed by
-     * then was still billed, which is why this is a line rather than an absence of one.
+     * then was still billed.
      */
     FAILED,
 
@@ -53,13 +53,11 @@ public enum RunEnding {
     /**
      * Whether a run that ended this way left its scope free for a fresh one.
      *
-     * <p>Two endings do, and they are the two that take the prep directory away. Everything else
-     * leaves a run occupying its scope: resumable, or waiting for somebody to decide about it.
+     * <p>Both endings that free it take the prep directory away. Everything else leaves a run
+     * occupying its scope: resumable, or waiting for somebody to decide about it.
      *
-     * <p>What reads this is a sum over one scope's lines. A line older than the newest ending that
-     * freed the scope belongs to a run this one replaced, so the two must not be added together.
-     * Any ending added below has to answer the same question, which is why this sits here rather
-     * than at the one place that asks.
+     * <p>Any ending added below has to answer the same question, which is why the answer sits here
+     * rather than at the point of use.
      *
      * @return boolean true where a fresh run of that scope could start afterwards
      */

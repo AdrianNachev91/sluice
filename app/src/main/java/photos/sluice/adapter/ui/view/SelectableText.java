@@ -106,8 +106,7 @@ final class SelectableText {
      *
      * <p>A screen that reports a refusal, then a confirmation, then nothing, sets the classes for
      * each state. Doing that with {@code setAll} takes the disguise off with them, along with the
-     * toolkit's own {@code text-input}. The control draws as a field from that moment on. It cost
-     * nothing on a label, whose only class is one nobody styles.
+     * toolkit's own {@code text-input}. The control draws as a field from that moment on.
      *
      * @param control {@link TextInputControl} the line or block to dress
      * @param classes the style classes for the state it is now in

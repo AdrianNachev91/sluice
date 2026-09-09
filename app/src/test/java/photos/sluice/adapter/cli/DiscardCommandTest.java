@@ -89,8 +89,7 @@ class DiscardCommandTest {
     }
 
     // The run address resolved to a folder cullRuns() does not enumerate: an absolute path that
-    // does not match any listed prep dir. The cost here is genuinely unknown, not zero. The
-    // refusal has to say so rather than silently reading the same as a run with no shards yet.
+    // does not match any listed prep dir. The cost here is genuinely unknown, not zero.
     @Test
     void aRunNotAmongThoseListedSaysTheCostCouldNotBeConfirmed() {
         when(this.address.folderFor(eq("2019"))).thenReturn(PREP_DIR);

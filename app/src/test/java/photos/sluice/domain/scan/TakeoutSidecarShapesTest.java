@@ -16,15 +16,14 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 // Checks the orphan sweep against every Takeout sidecar naming shape a real export was observed to
-// contain. The shapes and their counts live in takeout-sidecar-shapes.md, which is the only
-// surviving record of that survey.
+// contain. The shapes and their counts live in takeout-sidecar-shapes.md, and the export itself is
+// gone, so that file is where the breakdown survives.
 //
-// The unit tests beside this one pick their fixtures to isolate a single rule. These do the
-// opposite. They are whatever Google actually emitted, so a rule change that looks harmless against
-// a hand-picked case still has to face the real distribution.
+// The unit tests beside this one pick a fixture to isolate one rule. These are whatever Google
+// actually emitted, so a rule change that looks harmless against a hand-picked case still has to
+// face the real distribution.
 //
-// The fixture is a Markdown table so it stays readable as a document. Only its table rows are
-// parsed, and everything around them is prose for a human.
+// The fixture is a Markdown table so it stays readable as a document.
 class TakeoutSidecarShapesTest {
 
     private static final String FIXTURE = "/takeout-sidecar-shapes.md";

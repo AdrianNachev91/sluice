@@ -32,8 +32,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 // What StartupFailurePresenterTest cannot reach: which button a built scene wires to which action,
 // and the trace disclosure and its Copy button. What each card says stays that presenter's own.
 //
-// Runs on the FX thread throughout. Building the scene reads the desktop's colour preferences,
-// same as SettingsPaneTest, and that call refuses any other thread.
+// Runs on the FX thread throughout. Building the scene reads the desktop's colour preferences, and
+// that call refuses any other thread.
 class StartupFailureWindowTest {
 
     private static final String TRACE = "java.lang.IllegalStateException: boom";

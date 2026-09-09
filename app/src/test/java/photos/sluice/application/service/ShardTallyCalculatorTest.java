@@ -35,11 +35,6 @@ import static photos.sluice.application.service.CullPrepTestSupport.writeSidecar
 
 class ShardTallyCalculatorTest {
 
-    // The tally is a display number. This is the one behaviour of it worth pinning: an answer the
-    // user has already given stops the montage reporting that problem back at them. A file listed
-    // as unreviewable AND named by a decision is the overlap TRUST_DECISION resolves. Resolving it
-    // means the decision wins, so the file stops counting as unreviewable at all.
-    //
     // The fixture puts the photo in the montage's own sidecar too. Without that it would be out of
     // scope on top of overlapping. That second finding would hold the montage invalid whatever the
     // user answered, making the assertion below pass for the wrong reason.
@@ -60,10 +55,8 @@ class ShardTallyCalculatorTest {
         assertThat(calculator.tally(readIndex(prepDir))).isEqualTo(new ShardTally(1, 1, 1));
     }
 
-    // The tally judges a shard against the prep dir's own recorded categories, the same source
-    // ApplyPlanner uses. Worth its own test rather than leaning on the planner's. This is a second,
-    // independent call into ShardValidator. The field it has to pass shares its type with entries,
-    // so handing over the wrong one would compile.
+    // The field the recorded categories are passed in shares its type with entries, so handing over
+    // the wrong one would compile.
     //
     // The index records a set the live settings do not have, and omits one they do. A montage whose
     // shard names the configured-but-unrecorded category reads invalid, which is the reverse of what
@@ -106,13 +99,11 @@ class ShardTallyCalculatorTest {
         assertThat(tally).isEqualTo(new ShardTally(2, 1, 2));
     }
 
-    // Readiness is what a watcher polls, so the same shard file appears in both halves and only its
-    // content differs. That is what makes parseability the thing under test rather than presence:
-    // a check that asked only whether the file exists would answer true to both.
+    // The same shard file appears in both halves, and only its content differs. A check asking
+    // only whether the file exists would answer true to both.
     //
-    // The truncated content is what a poll landing mid-write sees, since the file exists from the
-    // moment the agent opens it. Proving it here rather than through a running watcher keeps the
-    // claim off the clock. No poll interval, no window, nothing to starve on a loaded machine.
+    // Proved against the calculator rather than a running watcher, which keeps the claim off the
+    // clock. No poll interval, no window, nothing to starve on a loaded machine.
     @Test
     void aShardStillBeingWrittenIsNotReadyToResumeButTheFinishedOneIs(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -130,8 +121,6 @@ class ShardTallyCalculatorTest {
         assertThat(calculator.poll(prepDir).readyToResume()).isTrue();
     }
 
-    // The shard is absent entirely rather than unreadable. That is the ordinary "agent has not got
-    // to this montage yet" state a watch spends most of its life in.
     @Test
     void aMontageWithNoShardAtAllIsNotReadyToResume(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -140,8 +129,6 @@ class ShardTallyCalculatorTest {
         assertThat(shardTallyCalculator(root).poll(prepDir).readyToResume()).isFalse();
     }
 
-    // A non-I/O RuntimeException from hasShard(), read inside the same guard as the shard read and
-    // the validation. tally() degrades that montage to present-but-invalid rather than throwing.
     @Test
     void aNonIoFailureCheckingShardPresenceStillReportsRatherThanThrowing(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -154,9 +141,6 @@ class ShardTallyCalculatorTest {
         assertThat(calculator.tally(readIndex(prepDir))).isEqualTo(new ShardTally(1, 0, 1));
     }
 
-    // The same failure, reached through the poll a watcher makes. It answers not ready rather than
-    // propagating, matching the tolerance its own Javadoc already claims for a transiently
-    // unreadable index.
     @Test
     void aNonIoFailureCheckingShardPresenceAnswersNotReadyRatherThanThrowing(@TempDir final Path root)
             throws IOException {
@@ -167,9 +151,6 @@ class ShardTallyCalculatorTest {
         assertThat(calculator.poll(prepDir).readyToResume()).isFalse();
     }
 
-    // The ledger read tally() itself makes, sitting outside every other guard in this class until a
-    // whole-phase review caught it. Degrades to the raw unreviewable list rather than throwing, the
-    // same tolerance every other read here already has.
     @Test
     void aFailedLedgerReadStillReportsATallyRatherThanThrowing(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -202,9 +183,6 @@ class ShardTallyCalculatorTest {
         assertThat(reading.tally()).isEqualTo(new ShardTally(1, 1, 2));
     }
 
-    // A prep dir nobody could read has no tally rather than a tally of nothing. The two are the
-    // opposite answer to a caller watching for the number to move, and zeroes would read as sheets
-    // going away.
     @Test
     void aPrepDirThatCouldNotBeReadHasNoTallyAtAll(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
@@ -225,9 +203,8 @@ class ShardTallyCalculatorTest {
                 moveLedger(new NioMediaStore()));
     }
 
-    // Passes every read and write through to a real store. Only hasShard is overridden, the one
-    // call this exists to fail: a non-I/O RuntimeException. A port constrains nothing about what an
-    // adapter may actually raise.
+    // Only hasShard is overridden, the one call this exists to fail with a non-I/O
+    // RuntimeException. A port constrains nothing about what an adapter may actually raise.
     private static final class ThrowingHasShard implements CullPrepPort {
 
         private final CullPrepPort delegate = new JsonCullPrepStore();

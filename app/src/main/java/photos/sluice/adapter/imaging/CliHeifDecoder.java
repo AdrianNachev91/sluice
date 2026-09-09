@@ -12,9 +12,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * A {@link HeifDecoder} that shells out to a libheif-based CLI decoder ({@code heif-convert} from
- * the libheif project). This is the one native dependency permitted under this project's Global
- * Constraints, since no metadata or pixel library can decode real HEVC/AV1 pixel data in pure
- * Java.
+ * the libheif project). This is the one native dependency this project permits, since no metadata
+ * or pixel library can decode real HEVC/AV1 pixel data in pure Java.
  *
  * <p>{@code heif-convert} is used rather than its newer {@code heif-dec} rename. The older name is
  * what both Ubuntu's stock {@code libheif-examples} package and upstream's own compatibility alias
@@ -81,10 +80,9 @@ public class CliHeifDecoder implements HeifDecoder {
         try {
             output = this.tempFiles.create();
         } catch (IOException | RuntimeException _) {
-            // The same pair the main block below catches. Scratch-file creation can fail unchecked
-            // as well as checked, on a bad temp directory or a filesystem provider fault. Catching
-            // only the checked half would leave an escape route out of this method's "never
-            // throws" contract.
+            // Scratch-file creation can fail unchecked as well as checked, on a bad temp directory
+            // or a filesystem provider fault. Catching only the checked half would leave an escape
+            // route out of this method's "never throws" contract.
             return Optional.empty();
         }
         try (final Process process = new ProcessBuilder(this.command, "--quiet", file.toString(), output.toString())
@@ -112,12 +110,10 @@ public class CliHeifDecoder implements HeifDecoder {
             }
             return Optional.ofNullable(ImageIO.read(output.toFile()));
         } catch (IOException | RuntimeException _) {
-            // IOException covers both the binary not being found on PATH (ProcessBuilder.start()
-            // fails) and an I/O error reading the decoded output back. ImageIO.read is documented
-            // to throw undocumented unchecked exceptions on a malformed/truncated image too, the
-            // same reason every decode path in TileRenderer catches RuntimeException alongside
-            // IOException. A corrupt PNG from a crashed or disk-full decoder run must degrade the
-            // same way, not escape this method's "never throws" contract.
+            // IOException covers both the binary not being found on PATH and an I/O error reading
+            // the decoded output back. ImageIO.read throws unchecked exceptions on a malformed or
+            // truncated image as well. A corrupt PNG from a crashed or disk-full decoder run has to
+            // degrade the same way rather than escaping this method's "never throws" contract.
             return Optional.empty();
         } finally {
             try {

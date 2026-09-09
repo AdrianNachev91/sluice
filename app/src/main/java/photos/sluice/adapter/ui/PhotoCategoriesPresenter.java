@@ -186,9 +186,8 @@ public class PhotoCategoriesPresenter {
     /**
      * Whether the page already holds as many cards as an install may, so Add is not offered.
      *
-     * <p>The ceiling's other two halves stay where they are. {@link #save} still refuses a set past
-     * it, since a config file reaches that seam without passing a button. {@link Settings} refuses
-     * it again for anything that never passes the screen either.
+     * <p>The ceiling's other two halves stay where they are. A config file reaches {@link #save}
+     * without passing a button, and {@link Settings} refuses a set that never passes the screen.
      *
      * @param cardsOnScreen int how many cards the page is holding right now, edits included
      * @return boolean true when no further card may be added
@@ -298,8 +297,7 @@ public class PhotoCategoriesPresenter {
      *
      * <p>The box holds one ceiling over the whole of it, which is not the rule a card is judged by:
      * that one counts the entries and measures each. So a box a reader was allowed to fill can still
-     * carry twenty-one examples, or one that runs too long. Said here rather than left to
-     * {@link CullCategory}'s constructor, which throws out of a button press.
+     * carry twenty-one examples, or one that runs too long.
      *
      * @param edit {@link CategoryEdit} the card being saved
      * @return {@link String} what to say under the box, or null
@@ -347,9 +345,6 @@ public class PhotoCategoriesPresenter {
      *
      * <p>"A folder name" rather than the folder its photos are set aside in. The built-in card's
      * photos are not set aside at all, and its folder is not derived from its name.
-     *
-     * <p>Said once for the page rather than under each name field, so it names its own subject
-     * instead of leaning on a nearby label.
      *
      * @return {@link String} the help line the page carries above its cards
      */

@@ -72,8 +72,6 @@ class SettingsServiceLockTest {
                 .isInstanceOf(WorkingRootBusyException.class);
     }
 
-    // Proved against the real lock rather than a counter, because what matters is whether the next
-    // process can open the folder this one walked away from.
     @Test
     void clearingTheWorkingRootLeavesItOpenToTheNextProcess(@TempDir final Path root,
                                                             @TempDir final Path configDir) {
@@ -86,10 +84,6 @@ class SettingsServiceLockTest {
         assertThatCode(() -> this.otherProcess.acquire(root)).doesNotThrowAnyException();
     }
 
-    // The real lock, and another process genuinely holding the folder. What that buys is the
-    // end-to-end fact rather than a counter's word for it. A library move goes through on a machine
-    // whose working root is already claimed elsewhere. A seam that asked for that root would be
-    // refused by the real lock and would pass against a fake.
     @Test
     void aLibraryRootMovesWhileAnotherProcessHoldsTheWorkingRoot(
             @TempDir final Path root, @TempDir final Path library, @TempDir final Path configDir) {
@@ -102,9 +96,6 @@ class SettingsServiceLockTest {
         assertThat(service.settings().paths().libraryRoot()).isEqualTo(library.toString());
     }
 
-    // The fake in SettingsServiceTest proves the service asks for the right things in the right
-    // order. Only the real lock proves the folder is genuinely unavailable to anybody else for the
-    // whole of the write, which is the property the ordering exists to produce.
     @Test
     void anotherProcessIsRefusedTheOldRootThroughoutAFailingSave(
             @TempDir final Path before, @TempDir final Path after) {
@@ -119,7 +110,6 @@ class SettingsServiceLockTest {
 
         assertThatThrownBy(() -> service.save(settings(after))).isInstanceOf(IllegalStateException.class);
 
-        // Still ours afterwards, and the folder the save reached for is free again.
         assertThatThrownBy(() -> this.otherProcess.acquire(before)).isInstanceOf(WorkingRootBusyException.class);
         assertThatCode(() -> new FileChannelWorkingRootLock().acquire(after)).doesNotThrowAnyException();
     }

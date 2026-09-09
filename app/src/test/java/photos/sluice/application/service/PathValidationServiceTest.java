@@ -32,7 +32,6 @@ class PathValidationServiceTest {
         assertThat(validate(directories(root, "work", "library", "inbox"))).isEmpty();
     }
 
-    // The state a fresh install starts in, before anyone has chosen a folder.
     @Test
     void nothingConfiguredNamesAllThreeRoots() {
         assertThat(validate(new PathSettings(null, null, null)))
@@ -48,8 +47,8 @@ class PathValidationServiceTest {
                 .containsExactly(new NotConfigured(PathRole.WORKING_ROOT));
     }
 
-    // A user typing a folder by hand can produce text no filesystem could ever hold. It has to come
-    // back as a refusal rather than as the exception Path.of throws, since this runs at startup.
+    // A user can type a folder by hand, and this runs at startup, so the exception Path.of throws
+    // would take the launch down.
     @Test
     void textThatIsNotAPathAtAllIsRefusedRatherThanThrown(@TempDir final Path root) throws IOException {
         final PathSettings paths = directories(root, "work", "library", "inbox");
@@ -77,10 +76,9 @@ class PathValidationServiceTest {
                 .containsExactly(new NotADirectory(PathRole.INBOX, file));
     }
 
-    // A directory that is there and refuses to resolve. Injected at the port rather than staged on
-    // disk. What produces it is a share that goes away between the two calls, or a permission
-    // denial partway down. Neither is reproducible, nor even the same failure on every platform.
-    // The same fixture with nothing refusing is the one threeExistingSeparateFoldersAreUsable uses.
+    // Injected at the port rather than staged on disk. What produces this is a share that goes away
+    // between the two calls, or a permission denial partway down. Neither is reproducible, nor even
+    // the same failure on every platform.
     @Test
     void aFolderThatIsThereAndCannotBeResolvedIsRecordedRatherThanThrown(@TempDir final Path root)
             throws IOException {
@@ -105,8 +103,8 @@ class PathValidationServiceTest {
                 .violations(paths)).containsExactly(new Unreadable(PathRole.INBOX, inbox));
     }
 
-    // The fixture does overlap, proved on the first line, and no Overlap is reported once a root
-    // stops resolving.
+    // The first assertion proves the fixture really does overlap, so the absence in the second is
+    // the guard's doing.
     @Test
     void noOverlapIsClaimedWhileARootCouldNotBeResolved(@TempDir final Path root) throws IOException {
         final Path inbox = Files.createDirectories(root.resolve("inbox"));
@@ -135,8 +133,8 @@ class PathValidationServiceTest {
                 .containsExactly(new Overlap(PathRole.LIBRARY_ROOT, PathRole.INBOX));
     }
 
-    // Two names reaching one folder is exactly the case a string comparison would miss, and it is
-    // what makes resolving through the filesystem load-bearing rather than tidy.
+    // The case a string comparison misses, which is what makes resolving through the filesystem
+    // load-bearing rather than tidy.
     @Test
     void twoNamesForOneFolderStillOverlap(@TempDir final Path root) throws IOException {
         final Path library = Files.createDirectories(root.resolve("library"));
@@ -152,8 +150,6 @@ class PathValidationServiceTest {
                 .containsExactly(new Overlap(PathRole.LIBRARY_ROOT, PathRole.INBOX));
     }
 
-    // Two folders cannot be compared while one of them is a folder nobody has chosen. Reporting an
-    // overlap here would mean comparing against a path that resolved to nothing.
     @Test
     void noOverlapIsClaimedWhileARootIsStillMissing(@TempDir final Path root) throws IOException {
         final Path shared = Files.createDirectories(root.resolve("shared"));
@@ -181,8 +177,7 @@ class PathValidationServiceTest {
                 Files.createDirectories(root.resolve(inbox)).toString());
     }
 
-    // Checking candidates never reads the settings in force, so the holder here names nothing. The
-    // one test that does read them builds its own.
+    // Checking candidates never reads the settings in force, so the holder here names nothing.
     private static List<PathViolation> validate(final PathSettings paths) {
         return new PathValidationService(new NioMediaStore(), unconfiguredHolder()).violations(paths);
     }
@@ -191,8 +186,8 @@ class PathValidationServiceTest {
         return new SettingsHolder(SettingsFixture.settings(new PathSettings(null, null, null)));
     }
 
-    // The real store everywhere except the one call the failure is about. Every other root in the
-    // fixture still gets the verdict a real filesystem gives it.
+    // The real store everywhere except the one call the failure is about. Every other root still
+    // gets the verdict a real filesystem gives it.
     private static MediaReader refusingToSayWhatIsThere(final Path refused) {
         return new NioMediaStore() {
             @Override

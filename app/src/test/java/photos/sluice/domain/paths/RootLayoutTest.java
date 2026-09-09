@@ -16,8 +16,6 @@ class RootLayoutTest {
                 .isEmpty();
     }
 
-    // The documented layout. Inbox, Sorted, Review and Duplicates all sit under the working root, so
-    // a rule banning every overlap would reject the arrangement the app ships with.
     @Test
     void theInboxMayLiveInsideTheWorkingRoot(@TempDir final Path root) {
         final Path workingRoot = root.resolve("work");
@@ -50,8 +48,7 @@ class RootLayoutTest {
                 .containsExactly(new Overlap(PathRole.LIBRARY_ROOT, PathRole.INBOX));
     }
 
-    // Equal paths contain each other in both directions, so the pair still has to come back once,
-    // and in the same order as the nested cases above.
+    // Equal paths contain each other in both directions, so the pair still has to come back once.
     @Test
     void oneFolderNamedAsBothLibraryAndInboxIsAnOverlap(@TempDir final Path root) {
         final Path shared = root.resolve("shared");
@@ -76,7 +73,6 @@ class RootLayoutTest {
                 .containsExactly(new Overlap(PathRole.WORKING_ROOT, PathRole.INBOX));
     }
 
-    // A layout can break both rules at once, and a surface marking fields needs to hear about both.
     @Test
     void aLayoutBreakingBothRulesReportsBoth(@TempDir final Path root) {
         final Path inbox = root.resolve("inbox");

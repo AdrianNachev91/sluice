@@ -23,9 +23,9 @@ import java.util.stream.Collectors;
  * culling, the same recorded set the response is then validated against. Rendering from live config
  * would let the prompt describe one rule set while validation judged another.
  *
- * <p>The user turn is built per montage from its sidecar entries. Grid dimensions come from the
- * cull settings because the sidecar records no grid info. Prompt assembly assumes a cull runs with
- * the same montage config that rendered its prep directory.
+ * <p>Grid dimensions come from the cull settings because the sidecar records no grid info. Prompt
+ * assembly therefore assumes a cull runs with the same montage config that rendered its prep
+ * directory.
  */
 @Component
 class CullerPrompt {
@@ -98,10 +98,9 @@ class CullerPrompt {
             }
             text.append('\n');
         }
-        // The system prompt asks for a verdict per numbered photo. Every other rule it states
-        // exactly governs a single verdict. This one quantifies over a set the model has to
-        // count for itself. Restating it beside the list it governs, with the count already in
-        // hand, is what the corrective retry turn does and the first request does not.
+        // The system prompt already asks for a verdict per numbered photo. That is its one rule
+        // quantifying over a set the model would have to count for itself. So it is restated here
+        // beside the list it governs, with the count already in hand.
         text.append("Return exactly ").append(entries.size())
                 .append(" verdicts, one for each numbered photo above. Use indexes 1 to ")
                 .append(entries.size())

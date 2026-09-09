@@ -14,9 +14,9 @@ contract.
 flowchart TD
     A["cull(prep, opts)"] --> B["require sluice.cull.provider-settings.<br/>anthropic.model"]
     B --> C["render the system prompt<br/>(CullerPrompt + the cards<br/>index.json recorded)"]
-    C --> D["build the API client<br/>(API key via SecretStore, optional endpoint,<br/>transport max-retries)"]
-    D --> W["read every sidecar up front<br/>(the whole scope's src list;<br/>an unreadable one contributes<br/>nothing and drops its montage)"]
-    W --> E["for each montage, in sidecar order"]
+    C --> W["read every sidecar up front<br/>(the whole scope's src list;<br/>an unreadable one contributes<br/>nothing and drops its montage)"]
+    W --> D["build the API client<br/>(API key via SecretStore, optional endpoint,<br/>transport max-retries)"]
+    D --> E["for each montage, in sidecar order"]
     E --> Q{"sidecar<br/>readable?"}
     Q -- no --> S2["skip: count as skipped,<br/>any existing shard<br/>left untouched"]
     S2 --> E
@@ -62,10 +62,19 @@ flowchart TD
 ```
 
 The image block precedes the text block, per Anthropic's vision guidance. The structured-output
-schema is a flat verdict object (`index`, `name`, `action`, optional `reason`/`group`/
-`chosen_reason`, `additionalProperties: false`), deliberately not a discriminated union on
-`action`. `ShardValidator` reports per-action gaps with better messages than a schema violation
-would. No sampling parameters are sent - current Anthropic models reject them.
+schema is a discriminated union on `action`. One branch per action kind, each pinning `action` and
+naming the fields that action needs beyond `index`, `name` and `action`. Every branch declares every
+field a verdict may carry, so a keep that volunteers a reason is not refused. Naming the required
+fields in the contract stops the model discovering them by being refused, and each gap discovered
+that way costs a paid corrective retry. `ShardValidator` stays the single authority. Its
+cross-verdict and cross-shard rules have no expression in a schema describing one verdict. No
+sampling parameters are sent - current Anthropic models reject them.
+
+A string constraint in the schema shapes the answer rather than refusing it, so its direction
+decides whether it is safe. A floor steers an empty value away, which is what `minLength` does for a
+reason. A ceiling truncates, so the slug's 24-character cap stays with the validator. Two
+truncated-alike group ids would share a `Duplicates` folder whenever their keepers fall in the same
+year-month, and a merge where one side brought only rejects lands silently.
 
 No thinking parameter and no effort parameter either, so each model reasons at whatever depth it
 reasons by default. Omitting both is the only shape every current model accepts. A parameter
@@ -91,10 +100,8 @@ flowchart TD
     C -- unparseable --> X
     C --> D["per verdict:<br/>index in range? unseen?<br/>name matches sidecar entry?"]
     D -- any check fails --> P["record problem"]
-    D -- keep --> E["strip"]
-    D -- other action --> F["map index -> sidecar src,<br/>build Decision"]
+    D -- checks pass --> F["map index -> sidecar src,<br/>build the Verdict<br/>(a keep included)"]
     F --> G["every tile index covered?"]
-    E --> G
     G -- gaps --> P
     P --> X
     G --> H["ShardValidator over the<br/>accumulated accepted set"]
@@ -108,8 +115,8 @@ Two validation layers, split by where the information lives:
 - **Response-level, checked here:** tile indices exist only in the API response, so index
   coverage, duplicates, range, and the name-at-index match are this class's job. A name mismatch
   fails rather than healing - it signals a mis-keyed tile, and guessing which field to trust could
-  set aside the wrong photo. (The basename auto-heal exists only in the external-agent path, where
-  hand-written shards may retype paths.)
+  set aside the wrong photo. (`ShardValidator`'s unique-basename heal is for a hand-written shard
+  that retyped a path. It never rescues a mismatch here, refused before the validator is reached.)
 - **Shard-level, delegated:** everything shard-shaped goes to `ShardValidator`, the contract's
   single source of truth. It runs over the whole accepted-so-far set, not the current shard alone,
   because its cross-shard rules can only fire on the full set. A near-dup group id reused by two
@@ -193,8 +200,8 @@ cheapest rather than the dearest model. A successful check replaces it with the 
 
 | Input                                                         | Outcome                                                                                                           |
 |---------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
-| Valid verdicts for every tile                                 | Shard written; keeps omitted; tokens counted                                                                      |
-| Every verdict is `keep`                                       | Empty-decisions shard written - marks the montage reviewed                                                        |
+| Valid verdicts for every tile                                 | Shard written, keeps included; tokens counted                                                                     |
+| Every verdict is `keep`                                       | Shard written with one keep per tile - the montage is reviewed                                                    |
 | First response invalid, retry valid                           | Shard written; both attempts' tokens counted                                                                      |
 | A verdict names the wrong photo for its index, twice          | `CullException`; no shard written for that montage                                                                |
 | A tile has no verdict, or two, twice                          | `CullException` listing the gap or the duplicate                                                                  |

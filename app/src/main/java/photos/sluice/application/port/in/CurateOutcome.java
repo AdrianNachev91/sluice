@@ -8,10 +8,8 @@ import photos.sluice.domain.model.SortSummary;
  * populated.
  *
  * <p>{@code cullOutcome} is the same {@link CullJobOutcome} a standalone {@code cull()} call
- * would produce, so every variant is reachable here: Applied, Waiting, Blocked, or Cancelled. A
- * caller handles it identically regardless of which use case produced it. In particular a curate
- * whose cull stage ends on a refused apply reports Blocked with its findings, alongside the sort
- * summary describing what the sort stage already did.
+ * would produce, so every variant is reachable here and a caller handles it identically regardless
+ * of which use case produced it.
  *
  * <p>It is null in exactly two cases where the cull stage never ran at all. Cancellation was
  * requested between the sort and cull stages. Or scope was {@code OldestYear}, and its sort found

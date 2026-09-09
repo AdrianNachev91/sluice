@@ -54,8 +54,6 @@ class TakeoutSidecarPairerTest {
 
     @Test
     void pairsReversedDupNumbering() {
-        // Google numbers the sidecar outside the extension: media "IMG_1234(1).jpg" pairs with
-        // sidecar "IMG_1234.jpg(1).json".
         final Path media = Path.of("dir/IMG_1234(1).jpg");
         final Path json = Path.of("dir/IMG_1234.jpg(1).json");
 
@@ -76,9 +74,6 @@ class TakeoutSidecarPairerTest {
 
     @Test
     void fallsBackToPrefixMatchWhenNoExactOwnerKeyMatches() {
-        // When the sidecar's derived owner key doesn't exactly equal the media filename, a
-        // sidecar whose base name starts with the media filename still pairs (a non-standard
-        // sidecar suffix the owner-key derivation doesn't recognize).
         final Path media = Path.of("dir/IMG_1234.jpg");
         final Path json = Path.of("dir/IMG_1234.jpg.someextra.json");
 
@@ -89,10 +84,6 @@ class TakeoutSidecarPairerTest {
 
     @Test
     void fallsBackToDupNumberReversedPrefixWhenPlainPrefixDoesNotMatch() {
-        // The media's plain filename ("IMG_1234(1).jpg") isn't a prefix of the sidecar's base
-        // name; only the dup-number-reversed form ("IMG_1234.jpg(1)") is, so this exercises the
-        // fallback's dup-numbering branch specifically (not the exact owner-key match, which
-        // fails here because the sidecar's own suffix keeps its derived owner key unchanged).
         final Path media = Path.of("dir/IMG_1234(1).jpg");
         final Path json = Path.of("dir/IMG_1234.jpg(1).extra.json");
 
@@ -112,18 +103,10 @@ class TakeoutSidecarPairerTest {
         assertThat(result.sidecarsByMedia()).containsEntry(media, shorterMatch);
     }
 
-    // Two genuinely distinct media files in one directory, differing only in case - possible only
-    // on a case-sensitive filesystem. Each has its own correctly-cased sidecar. Without the
-    // exact-case preference in bestOwnerMatch, both would silently pair to whichever sidecar
-    // happened to claim the shared lowercased key first.
-    //
-    // Each media file is paired in its own pair() call against the same two sidecars, rather than
-    // both together. The result is read back by filename string, not by Path equality. Path folds
-    // case on Windows even for values that never touch disk. A single call with both case-variant
-    // media as keys, or an equals()-based assertion on the sidecar value, would silently pass
-    // regardless of whether the fix works. Pairing scoping only depends on the sidecar list,
-    // which is identical across both calls, so this still reproduces the same ambiguity
-    // bestOwnerMatch has to resolve.
+    // Each media file gets its own pair() call, and the sidecar is read back by filename string.
+    // Path folds case on Windows even for values that never touch disk. A single call keyed by
+    // both case variants, or an equals() assertion on the sidecar, would pass whether or not the
+    // pairing told them apart.
     @Test
     void twoMediaFilesDifferingOnlyInCaseEachPairToTheirOwnSidecar() {
         final Path lower = Path.of("dir/photo.jpg");
@@ -139,9 +122,6 @@ class TakeoutSidecarPairerTest {
         assertThat(fileNameOf(upperResult.sidecarsByMedia().get(upper))).isEqualTo("PHOTO.jpg.json");
     }
 
-    // A single sidecar whose own casing genuinely differs from its media's - Google's own export
-    // casing is not always consistent. This is the tolerance bestOwnerMatch's lone-candidate
-    // shortcut exists to preserve, distinct from the ambiguous multi-candidate case above.
     @Test
     void aSingleSidecarWhoseCasingDiffersFromItsMediaStillPairs() {
         final Path media = Path.of("dir/IMG_1234.JPG");
@@ -152,10 +132,7 @@ class TakeoutSidecarPairerTest {
         assertThat(result.sidecarsByMedia()).containsEntry(media, json);
     }
 
-    // Two sidecars naming the exact same media file, differing only in their own suffix. Both
-    // candidates' raw owner keys equal the media filename exactly, so bestOwnerMatch's
-    // exact-match loop finds a hit either way. Which one is arbitrary, and that is fine, since
-    // both name the identical photo.
+    // Which of the two the pairer picks is arbitrary, and fine: both name the identical photo.
     @Test
     void twoDifferentlySuffixedSidecarsForOnePhotoStillPairSomeSidecar() {
         final Path media = Path.of("dir/IMG_1234.jpg");
@@ -168,11 +145,7 @@ class TakeoutSidecarPairerTest {
         assertThat(result.sidecarsByMedia().get(media)).isIn(firstVariant, secondVariant);
     }
 
-    // Same case-variant scenario as above, but routed through the prefix fallback rather than an
-    // exact owner-key match. A non-standard suffix on both sidecars means ownerKeyOf doesn't
-    // recognize either exactly, so this exercises shortestStartingWith's own exact-case
-    // preference instead of bestOwnerMatch's. Two separate pair() calls and a filename-string
-    // read-back, for the same Windows Path-equality reason as the test above.
+    // Two pair() calls and a filename read-back, since Path folds case on Windows.
     @Test
     void prefixFallbackPrefersTheExactCaseMatchOverACaseFoldedOne() {
         final Path lower = Path.of("dir/photo.jpg");
@@ -221,8 +194,6 @@ class TakeoutSidecarPairerTest {
 
     @Test
     void aDupNumberedSupplementalSidecarNamesTheNumberedMediaFile() {
-        // Google puts the duplicate counter at the very end of the sidecar's name, after the
-        // supplemental suffix. The media file it describes carries it before its extension.
         final Path media = Path.of("dir/IMG_1234(1).jpg");
         final Path json = Path.of("dir/IMG_1234.jpg.supplemental-metadata(1).json");
 
@@ -235,9 +206,7 @@ class TakeoutSidecarPairerTest {
 
     @Test
     void aDupNumberedSidecarBesideItsUnnumberedOriginalIsClaimedByBoth() {
-        // The numbered copy matches on the owner key. The original still reaches the same sidecar
-        // through the prefix fallback, since the sidecar's base name starts with its filename.
-        // Both owning it is the safe outcome: the sweep keeps a sidecar until every owner has left.
+        // Both owning it is deliberate: a sidecar is spent only once every owner has left.
         final Path original = Path.of("dir/IMG_1234.jpg");
         final Path numberedCopy = Path.of("dir/IMG_1234(1).jpg");
         final Path json = Path.of("dir/IMG_1234.jpg.supplemental-metadata(1).json");
@@ -250,7 +219,7 @@ class TakeoutSidecarPairerTest {
 
     @Test
     void eachSupportedSidecarNamingShapeIsRecognizedAsDescribingAMediaFile() {
-        // One per row of the naming table in this class's design doc, plus a video extension.
+        // The sidecar naming shapes from this class's design doc, plus a video extension.
         assertThat(TakeoutSidecarPairer.looksLikeMediaSidecar(Path.of("dir/IMG_1234.jpg.json"))).isTrue();
         assertThat(TakeoutSidecarPairer.looksLikeMediaSidecar(
                 Path.of("dir/IMG_1234.jpg.supplemental-metadata.json"))).isTrue();
@@ -273,8 +242,6 @@ class TakeoutSidecarPairerTest {
 
     @Test
     void aTruncatedSidecarNameThatLostItsMediaExtensionDescribesNoMediaFile() {
-        // Google truncates a long sidecar name. Once the cut eats past the media extension, the
-        // owner key stops naming a media file and the sweep has to leave the JSON alone.
         assertThat(TakeoutSidecarPairer.looksLikeMediaSidecar(
                 Path.of("dir/VeryLongOriginalPhotoFilenameFromGoogleExpo.json"))).isFalse();
     }

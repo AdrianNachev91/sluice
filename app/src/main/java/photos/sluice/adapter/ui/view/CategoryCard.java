@@ -25,9 +25,9 @@ import java.util.List;
  */
 final class CategoryCard {
 
-    // Enough of a long description to read as prose rather than a slot, and short enough that four
-    // cards still fit a screen. The box scrolls past it, which is what the bundled cards need. The
-    // longest is a paragraph, and no row count that also fits the page would show it whole.
+    // Enough of a long description to read as prose rather than a slot, and short enough that
+    // several cards still fit a screen. The box scrolls past it, since no row count that also fits
+    // the page shows a paragraph whole.
     private static final int DESCRIPTION_ROWS = 4;
     private static final int EXAMPLES_ROWS = 2;
 
@@ -192,13 +192,11 @@ final class CategoryCard {
     }
 
     /**
-     * A waste bin, drawn from shapes rather than a font character, the same way every other glyph on
-     * these screens is. A font that happens to carry a symbol on one platform carries a blank box on
-     * another, and this app ships to three.
+     * A waste bin, drawn from shapes. A font that happens to carry a symbol on one platform carries
+     * a blank box on another, and this app ships to three.
      *
-     * <p>Four pieces: the lid, the handle above it, the body tapering to its base, and two lines
-     * down the body. The body is a polygon rather than a rectangle because a bin that does not
-     * narrow reads as a cup.
+     * <p>The body is a polygon rather than a rectangle, because a bin that does not narrow reads as
+     * a cup.
      *
      * @return {@link Group} the glyph, 14 wide and 15 tall
      */
@@ -218,7 +216,7 @@ final class CategoryCard {
      *
      * @param text {@link String} what it opens holding
      * @param rows int how many lines of it are visible
-     * @param id {@link String} the node id a test and the gallery find it by
+     * @param id {@link String} the node id the box carries
      * @return {@link TextArea} the box
      */
     private static TextArea box(final String text, final int rows, final String id) {

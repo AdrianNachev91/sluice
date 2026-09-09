@@ -28,24 +28,23 @@ import java.util.List;
 /**
  * Reads and writes a {@code decisions-NNN.json} shard, the file an external vision agent drops
  * into the prep directory to record its verdict on every photo of one montage. The pure domain
- * {@link Verdict} types carry no framework annotations. The whole JSON contract lives in the
- * private {@code RawDecision} DTO below. It maps the action string to a subtype: {@code keep}
- * gives a {@link Keep}, and {@code near-dup-chosen} and {@code near-dup-reject} the two near-dup
- * shapes. Any other action value is a {@link Classification} whose category is that action string.
+ * {@link Verdict} types carry no framework annotations, so the whole JSON contract lives in the
+ * private {@code RawDecision} DTO below, which maps an action string to a subtype.
  *
  * <p>The read path splits two kinds of bad input. Anything that isn't a representable shard throws
  * {@link MalformedPrepJsonException}: an unknown field, malformed JSON, a null document, a null
  * decision entry, or a file name this platform cannot make a path out of. None can be turned into a
- * {@link Verdict}, and an unknown field can't even be seen once parsed. So the codec is the only
- * place to catch it. A read that merely failed, leaving
- * the content itself intact, throws a plain {@link UncheckedIOException} instead. That distinction
- * is what lets a caller report damaged content as a finding while letting a lock or a permission
- * denial propagate. Everything representable-but-wrong is left for
+ * {@link Verdict}, and an unknown field can't even be seen once parsed, so the codec is the only
+ * place to catch it. A read that merely failed, leaving the content itself intact, throws a plain
+ * {@link UncheckedIOException} instead. That distinction is what lets a caller report damaged
+ * content as a finding while letting a lock or a permission denial propagate.
+ *
+ * <p>Everything representable-but-wrong is left for
  * {@link photos.sluice.domain.cull.ShardValidator}, the single source of truth for the shard
- * contract. An absent required field deserializes to null and becomes empty here. The validator
- * reports it ("missing reason", say), aggregated with the rest of the run's problems, not as a
- * first-error parse crash. Null DTO fields are omitted on write, so a classification shard
- * carries only file, action, and reason, and never emits an empty group key.
+ * contract. An absent required field deserializes to null and becomes empty here, and the validator
+ * reports it aggregated with the rest of the run's problems rather than as a first-error parse
+ * crash. Null DTO fields are omitted on write, so a classification shard carries only file, action
+ * and reason, and never emits an empty group key.
  */
 @Component
 class ShardCodec {

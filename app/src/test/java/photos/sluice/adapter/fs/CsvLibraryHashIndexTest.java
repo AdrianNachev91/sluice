@@ -157,8 +157,7 @@ class CsvLibraryHashIndexTest {
             throws IOException {
         final Path csv = repoRoot.resolve("logs").resolve("library-hashes.csv");
         Files.createDirectories(csv.getParent());
-        // Deliberately no trailing newline after the last row - see the WHY in append()'s
-        // needsLeadingNewline comment.
+        // Deliberately no trailing newline after the last row.
         Files.writeString(csv, """
                 "sha256","path"
                 "HASH1","D:\\lib\\one.jpg\"""", StandardCharsets.UTF_8);
@@ -213,10 +212,8 @@ class CsvLibraryHashIndexTest {
         try (final HashIndexPort.Session session = index.openSession()) {
             session.append(new IndexEntry("HASH1", Path.of("D:\\lib\\one.jpg")));
 
-            // Read back through a separate file handle before the session closes - proves the row
-            // reached disk via flush(), not only once the writer is closed. This is the actual
-            // crash-safety guarantee this session API exists for: a crash before close() must not
-            // lose an already-appended row.
+            // Read back through a separate file handle before the session closes, which is what
+            // proves the row reached disk rather than sitting in the open writer's buffer.
             final List<String> lines = Files.readAllLines(csv, StandardCharsets.UTF_8);
             assertThat(lines).containsExactly(
                     "\"sha256\",\"path\"",

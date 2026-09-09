@@ -6,11 +6,8 @@ import java.io.UncheckedIOException;
 import java.nio.file.Path;
 
 /**
- * Media storage as a whole: the inspect-only surface of {@link MediaReader}, plus everything that
- * changes what is on disk. Every move, copy, write, and delete the app performs goes through here.
- *
- * <p>A collaborator that never mutates should take {@link MediaReader} instead, so the mutators
- * below are simply not reachable from it.
+ * Media storage as a whole: the inspect-only surface of {@link MediaReader}, plus the half that
+ * changes what is on disk. Every move, copy, write and delete of the user's media goes through here.
  *
  * <p>Every transfer below takes a {@link CancellationSignal}, asked wherever bytes actually move.
  * So a caller can give up on one large file instead of waiting it out. A move that turns out to be

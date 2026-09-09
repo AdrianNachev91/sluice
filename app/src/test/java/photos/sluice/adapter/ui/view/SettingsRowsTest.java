@@ -115,8 +115,8 @@ class SettingsRowsTest {
         assertThat(field.getText()).isEmpty();
     }
 
-    // Read inside the same block that starts the movement, so no frame can have run yet. The
-    // version of this that set the value outright would already be at the top by this line.
+    // Read inside the same block that starts the movement, so no frame can have run yet. A jump
+    // that set the value outright would already be at the top by this line.
     @Test
     void travellingToTheTopDoesNotArriveAtOnce() throws Exception {
         final ScrollPane scroll = onFxThread(SettingsRowsTest::aPageTallerThanItsWindow);

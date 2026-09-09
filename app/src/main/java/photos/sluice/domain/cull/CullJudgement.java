@@ -3,9 +3,8 @@ package photos.sluice.domain.cull;
 /**
  * How to judge a photo, in the words both prompts hand to whoever is judging.
  *
- * <p>Says nothing about how an answer is delivered. That differs completely between the two: one
- * replies against a schema in a single call, the other writes files into a folder. Each prompt owns
- * its own half of that.
+ * <p>Says nothing about how an answer is delivered, which each prompt owns for itself. One replies
+ * against a schema in a single call, the other writes files into a folder.
  *
  * <p>A domain constant rather than a shared resource file. {@code LaunchPrompt} is a domain class,
  * and {@code ArchitectureTest.domainDoesNoFileIo} forbids the domain from opening a stream.

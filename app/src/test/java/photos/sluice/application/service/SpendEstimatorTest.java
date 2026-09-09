@@ -145,9 +145,8 @@ class SpendEstimatorTest {
         assertThat(estimator.ceilingFor(montages, montages, estimate)).isNull();
     }
 
-    // The ledger fails loud at its own boundary and the estimator degrades, but the ceiling is built
-    // one call later. A value that parses and is still impossible would otherwise reach that
-    // arithmetic and make the ceiling refuse, which surfaces as a sift that will not start.
+    // The ceiling is built one call after the ledger read. A value that parses and is still
+    // impossible would reach that arithmetic, and a refused ceiling is a sift that will not start.
     @Test
     void aLedgerLineNothingCanBelieveStillLeavesTheRunWithACeiling(@TempDir final Path workingRoot)
             throws IOException {

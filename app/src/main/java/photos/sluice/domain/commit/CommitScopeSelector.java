@@ -64,8 +64,7 @@ public final class CommitScopeSelector {
     private static boolean matchesYear(final String relativePath, final int year, final @Nullable MonthRange months) {
         final Matcher matcher = YEAR_MONTH.matcher(relativePath);
         if (!matcher.find()) {
-            // No YYYY/MM segment at all (e.g. Funny) - only in scope via the All branch above,
-            // never via a specific-year scope.
+            // A path with no YYYY/MM segment at all, such as Funny, is never in a year's scope.
             return false;
         }
         final int foundYear = Integer.parseInt(matcher.group(1));

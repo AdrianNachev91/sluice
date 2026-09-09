@@ -3,7 +3,7 @@ package photos.sluice.domain.job;
 import photos.sluice.domain.cull.ShardValidator;
 
 /**
- * A waiting cull's shard progress, matching the waiting card's own present/valid/total wording.
+ * A waiting cull's shard progress.
  *
  * <p>{@code present} counts every {@code decisions-NNN.json} file found in the prep dir, whether
  * or not it parses.

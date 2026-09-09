@@ -73,8 +73,8 @@ class SettingsServiceTest {
         assertThat(claimsWhenWritten).containsExactly(1);
     }
 
-    // Only a save that moves the working root asks for it. A process holding no root at all - a
-    // command-line one, run while the desktop app has the folder open - can still change a category.
+    // A process holding no root at all still has to be able to change a category. A command line
+    // run while the desktop app has the folder open is one.
     @Test
     void aSaveThatLeavesTheFolderRootsAloneClaimsNothing(@TempDir final Path root) {
         final var live = new RecordingLive(settings(root));
@@ -148,8 +148,8 @@ class SettingsServiceTest {
         assertThat(lock.claimed).containsExactly(root.toAbsolutePath().normalize());
     }
 
-    // There is no earlier root to move the claim back to, so the claim is given up instead. Left
-    // held, it would lock a folder this process never went on to use, for as long as it runs.
+    // Left held, the claim would lock a folder this process never went on to use, for as long as
+    // it runs.
     @Test
     void aFailedFirstSaveGivesUpTheRootItJustClaimed(@TempDir final Path root) {
         final var live = new RecordingLive(unconfigured());
@@ -213,8 +213,6 @@ class SettingsServiceTest {
         final var store = new RecordingStore();
         final var service = settingsService(live, store, new RecordingLock(), new JobRunner());
 
-        // The root is carried rather than only named in the message. That message is for a log, and
-        // a surface asking the user about this folder has to read it from somewhere.
         final var refused = catchThrowableOfType(LibraryRootMoveNeedsAResolutionException.class,
                 () -> service.save(settingsWithLibrary(root, library)));
         assertThat(refused).isNotNull();
@@ -298,10 +296,8 @@ class SettingsServiceTest {
         assertThat(lock.holdersOfTheFolder()).isEqualTo(1);
     }
 
-    // The boundary of the counting, and the reason the claim cannot be left to this save alone. One
-    // acquire and one release over one claim net out, so a process that starts holding nothing ends
-    // holding nothing. What keeps that from mattering is upstream. A command line holds no root by
-    // design, and a desktop claims its working root at startup whenever that root is usable.
+    // One acquire and one release over one claim net out, so a process that starts holding nothing
+    // ends holding nothing. What keeps that from mattering is upstream of this save.
     @Test
     void aSaveBetweenTwoSpellingsLeavesAnUnclaimedProcessAsItFoundIt(
             @TempDir final Path before, @TempDir final Path after) {
@@ -495,7 +491,6 @@ class SettingsServiceTest {
     }
 
     // The working root is the one value save reads for itself, to work out whether the claim moves.
-    // Unparseable, it threw from there with no violation to show for it.
     @Test
     void aWorkingRootThatNamesNoPathThisSystemCouldHaveIsRefused(@TempDir final Path root) {
         final var live = new RecordingLive(settings(root));
@@ -511,8 +506,6 @@ class SettingsServiceTest {
         assertThat(lock.claimed).isEmpty();
     }
 
-    // aSavedSettingIsWrittenAndInForce is the control: the same fixture shape, with nothing refusing
-    // to resolve, saves.
     @Test
     void aFolderRootThatIsThereAndCannotBeResolvedIsRefusedWithTheRest(@TempDir final Path root,
                                                                        @TempDir final Path after) {
@@ -610,9 +603,8 @@ class SettingsServiceTest {
         assertThat(live.current()).isEqualTo(settings(before));
     }
 
-    // Only a folder root is gated. A run does read some of the rest as it goes, so a mid-run change
-    // can reach it. That is the accepted trade. Gating everything would make Settings read-only for
-    // the length of a cull.
+    // A run does read some of the rest as it goes, so a mid-run change can reach it. That is the
+    // accepted trade. Gating everything would make Settings read-only for the length of a sift.
     @Test
     void everySettingBesideTheFolderRootsIsStillSavedWhileAJobRuns(@TempDir final Path root)
             throws InterruptedException {
@@ -667,9 +659,8 @@ class SettingsServiceTest {
         assertThat(live.current().provider()).isEqualTo("anthropic");
     }
 
-    // The gate has to hold the job slot shut, not read it and then act. A watcher polling a prep
-    // dir starts jobs from its own thread. A save that only asked whether one was running could be
-    // overtaken between the question and the answer landing.
+    // A watcher polling a prep dir starts jobs from its own thread. A save that only asked whether
+    // one was running could be overtaken between the question and the answer landing.
     @Test
     void noJobCanStartWhileASaveThatMovesAFolderRootIsStillRunning(
             @TempDir final Path before, @TempDir final Path after) throws InterruptedException {
@@ -737,8 +728,6 @@ class SettingsServiceTest {
         }
     }
 
-    // Whether another process is genuinely locked out is SettingsServiceLockTest's question, against
-    // the real lock. This one is only about what the service asks of it.
     @Test
     void aFailedSaveNeverAsksForTheOldRootBack(
             @TempDir final Path before, @TempDir final Path after) {
@@ -758,13 +747,9 @@ class SettingsServiceTest {
                 after.toAbsolutePath().normalize());
     }
 
-    // A save reads the settings in force to work out what it is changing, then acts on that answer.
-    // A second one running in between would decide from a state the first is halfway through
-    // replacing.
-    //
-    // The first save here leaves the folder roots alone, so it never enters the job runner and never
-    // holds the job slot. That slot would otherwise serialize these two on its own, and this would
-    // pass with the save monitor deleted.
+    // The first save here leaves the folder roots alone, so it never enters the job runner and
+    // never holds the job slot. That slot would otherwise serialize these two on its own, and this
+    // would pass with the save monitor deleted.
     @Test
     void aSecondSaveWaitsForTheFirstToFinish(@TempDir final Path before, @TempDir final Path after)
             throws InterruptedException {
@@ -793,11 +778,11 @@ class SettingsServiceTest {
         reachedSecondSave.await();
 
         try {
-            // The window is margin, not a guess at how long anything takes. A save that waits cannot
-            // reach the store at all until the line below releases the first one, so no load can
-            // make this fail. A save that does not wait gets there in microseconds. The wait also
-            // gives the second thread time to read the settings while the first still has them,
-            // which is the state a stale read would be read from.
+            // The window is margin rather than a guess at how long anything takes. A save that
+            // waits cannot reach the store until the line below releases the first one, and one
+            // that does not wait gets there in microseconds. The wait also lets the second thread
+            // read the settings while the first still has them. That is the state a stale read
+            // would come from.
             assertThat(secondWrote.await(200, TimeUnit.MILLISECONDS)).isFalse();
         } finally {
             finishFirst.countDown();
@@ -811,8 +796,6 @@ class SettingsServiceTest {
         assertThat(lock.claimed).containsExactly(after.toAbsolutePath().normalize());
     }
 
-    // Both failures have to reach the caller. A release that fails on the way out of a failed save
-    // must not replace the failure that caused the save to fail in the first place.
     @Test
     void aFailedReleaseIsReportedAgainstTheSaveFailureRatherThanInsteadOfIt(
             @TempDir final Path before, @TempDir final Path after) {
@@ -858,12 +841,11 @@ class SettingsServiceTest {
                 _ -> Optional.empty(), listeners);
     }
 
-    // The real store everywhere except the one call the failure is about. Every other root in the
-    // candidate still gets the verdict a real filesystem gives it.
-    // A spelling tidying cannot settle, which is what an 8.3 short name or a junction is. The reader
-    // is what tells the two apart, so it is injected: creating a junction needs a privilege the
-    // runners do not all have. Both spellings go through it, because a double answering for only one
-    // of them leaves the other resolving differently on a machine whose temp path has a short form.
+    // A spelling tidying cannot settle, which is what an 8.3 short name or a junction is. The
+    // reader is what tells the two apart, so it is injected. Creating a real junction needs a
+    // privilege the runners do not all have. Both spellings go through the double. One answering
+    // for only one of them leaves the other resolving differently on a machine whose temp path has
+    // a short form.
     @Test
     void twoSpellingsOfOneLibraryFolderAreNotAMove(@TempDir final Path root) {
         final Path alias = sharedLibrary.resolveSibling("LIBRAR~1");
@@ -878,8 +860,8 @@ class SettingsServiceTest {
         assertThat(store.saved).hasSize(1);
     }
 
-    // The claim is made in the terms the user configured, not the followed form. The lock follows
-    // its own argument, and a claim it reports back has to be readable against the settings file.
+    // The lock follows its own argument, and a claim it reports back has to be readable against
+    // the settings file.
     @Test
     void respellingTheWorkingRootMovesNoClaimAndKeepsTheConfiguredForm(@TempDir final Path root) {
         final Path alias = root.resolveSibling("ROOTAL~1");
@@ -928,8 +910,8 @@ class SettingsServiceTest {
                 settings.montage(), settings.theme());
     }
 
-    // A running process holds the root its settings name, claimed when it started. A save that moves
-    // that root begins from there, so a fixture about what happens to the old claim has to as well.
+    // A running process holds the root its settings name, claimed when it started. A fixture about
+    // what happens to the old claim has to begin from there too.
     private static RecordingLock lockHolding(final Path root) {
         final var lock = new RecordingLock();
         lock.acquire(root.toAbsolutePath().normalize());
@@ -947,20 +929,19 @@ class SettingsServiceTest {
                 new PathSettings(null, settings.paths().libraryRoot(), settings.paths().inbox()));
     }
 
-    // The library moves to a folder of its own, the working root and inbox stay put. Builds its own
-    // inbox rather than relying on a settings() call earlier in the test having made one.
+    // Builds its own inbox rather than relying on a settings() call earlier in the test having
+    // made one.
     private static Settings settingsWithLibrary(final Path root, final Path library) {
         return SettingsFixture.settings(new PathSettings(root.toString(), library.toString(),
                 createDirectory(root.resolve("Inbox")).toString()));
     }
 
-    // The two folders are made real, the way a real install's are. A fixture naming folders nobody
-    // created is refused before it reaches the claim, the write or the listeners.
+    // The two folders are made real. A fixture naming folders nobody created is refused before it
+    // reaches the claim, the write or the listeners.
     //
     // The library root is one folder shared by every value this builds, rather than one under each
-    // working root. A save that moves a configured library root is refused here, and goes through
-    // the library-root move seam instead. A fixture moving all three at once could only ever reach
-    // that refusal.
+    // working root. A fixture moving all three roots at once could only ever reach the
+    // library-root refusal.
     private static Settings settings(final Path root) {
         return SettingsFixture.settings(new PathSettings(root.toString(),
                 createDirectory(sharedLibrary).toString(),
@@ -1063,8 +1044,8 @@ class SettingsServiceTest {
     // Stands in for the real lock's canonicalisation, which resolves symlinks and junctions where
     // this service only normalises. Two configured paths reaching one folder therefore collapse to
     // one claim here, counted by holders exactly as the adapter counts them. A fake rather than a
-    // real symlink, because creating one needs a privilege the Windows leg does not always have.
-    // This composition has to be checked on every platform.
+    // real symlink. Creating one needs a privilege the Windows leg does not always have, and this
+    // composition has to be checked on every platform.
     private static final class AliasingLock implements WorkingRootLock {
 
         private final Map<Path, Integer> holders = new HashMap<>();

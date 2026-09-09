@@ -28,8 +28,6 @@ final class CullWatchers {
 
     private final Predicate<ProviderType> configuredProviderIs;
     private final ShardTallyCalculator shardTallyCalculator;
-    // How often a watcher re-checks its prep dir's shard tally. Short enough that a human dropping
-    // files never perceives the delay; long enough not to hammer disk or spam re-validation.
     private final Duration watchPollInterval;
     private final Function<Path, JobHandle<CullJobOutcome>> resume;
     private final RunChanges runChanges;
@@ -199,10 +197,9 @@ final class CullWatchers {
      * whether this watcher has anything left to do. False means keep polling. True means stop, and
      * three different things produce it.
      *
-     * <p>A submitted resume is the ordinary one - the watcher's job is then done, win or lose (see
-     * CullEngine's own dispatchAndApply() re-arm-on-Waiting note). The submitted job runs and
-     * completes fully asynchronously; nothing here waits on it. A failure there would otherwise
-     * vanish silently, so it is logged here.
+     * <p>A submitted resume is the ordinary one - the watcher's job is then done, win or lose. The
+     * submitted job runs and completes fully asynchronously; nothing here waits on it. A failure
+     * there would otherwise vanish silently, so it is logged here.
      *
      * <p>A refused resume is the other. Unusable folder roots are not a condition that clears by
      * waiting, so polling on would spend a tally read every interval to be refused again. The

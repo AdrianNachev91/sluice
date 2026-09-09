@@ -50,8 +50,8 @@ import static photos.sluice.application.service.CullPrepTestSupport.writeSidecar
 import static photos.sluice.application.service.CullPrepTestSupport.writeUndecodable;
 
 // Carrying decisions out against a real filesystem. It covers the moves, copies and secondary
-// writes each decision type produces, resuming a crashed run, cancellation, and the finalizers that
-// close a completed run. Deciding WHAT to carry out belongs to the planner, in ApplyPlannerTest.
+// writes each decision type produces, plus resuming a crashed run, cancellation and the
+// finalizers. Deciding WHAT to carry out belongs to the planner.
 class ApplyEngineTest {
 
     @Test
@@ -73,10 +73,9 @@ class ApplyEngineTest {
                 .contains("IMG_1.jpg (2019-06) - phone photo of a monitor");
     }
 
-    // Exercises recordThenMove()'s own resolveDestination-then-moveTo pair, not just the media
-    // store directly. On a case-insensitive volume the second decision's destination check folds
-    // onto the first's, so it lands on the collision suffix instead of overwriting it. A
-    // case-sensitive volume makes them two names that never meet, which is why this skips there.
+    // On a case-insensitive volume the second decision's destination check folds onto the first's,
+    // so it lands on the collision suffix rather than overwriting it. A case-sensitive volume
+    // makes them two names that never meet, which is why this skips there.
     @Test
     void twoJunkDecisionsWhoseSourceNamesDifferOnlyInCaseBothSurviveTheMoveIntoOneReviewFolder(@TempDir final Path root)
             throws IOException, ApplyException {
@@ -84,9 +83,8 @@ class ApplyEngineTest {
         final Path prepDir = prepDir(root);
         Assumptions.assumeTrue(isCaseInsensitive(root),
                 "Filesystem is case-sensitive; the collision this test targets cannot occur here.");
-        // Two different source months. The case fold this test targets should happen only once
-        // the files land in the shared Review/junk destination, not a moment earlier between the
-        // sources.
+        // Two different source months, so the case fold can only happen once the files land in the
+        // shared Review/junk destination.
         final Path first = root.resolve("Sorted/Photos/2019/06/photo.jpg");
         final Path second = root.resolve("Sorted/Photos/2019/07/PHOTO.jpg");
         writeFile(first, "first");
@@ -104,9 +102,6 @@ class ApplyEngineTest {
         assertThat(Files.readString(reviewDir.resolve("PHOTO (2).jpg"))).isEqualTo("second");
     }
 
-    // The safety property behind the ledger's tolerance of a damaged file. Reading a ruined
-    // move-record log as no records must cost proof, never permission. The decision it could have
-    // proven becomes unresolvable, so the run refuses rather than moving anything.
     @Test
     void anUndecodableMoveRecordLogBlocksTheNextApplyInsteadOfLettingItActAgain(@TempDir final Path root)
             throws IOException, ApplyException {
@@ -114,8 +109,8 @@ class ApplyEngineTest {
         final Path prepDir = prepDir(root);
         final Path first = root.resolve("Sorted/Photos/2019/06/IMG_1.jpg");
         final Path second = root.resolve("Sorted/Photos/2019/06/IMG_2.jpg");
-        // Culled in the same batch, then put back in Sorted afterwards. It is the one source still
-        // on disk for the second run, so it is the only thing a wrongly-permissive run could move.
+        // Culled in the same batch, then put back in Sorted afterwards. The one source still on
+        // disk for the second run, so the only thing a wrongly-permissive run could move.
         final Path still = root.resolve("Sorted/Photos/2019/06/IMG_3.jpg");
         writeFile(first, "junk");
         writeFile(second, "also junk");
@@ -135,9 +130,8 @@ class ApplyEngineTest {
                 .hasMessageContaining("IMG_1.jpg");
 
         // still is what makes "nothing applied" falsifiable. A run that shrugged off the
-        // unresolvable pair and carried on would have moved it out of Sorted. Its own first-run
-        // copy already holds the plain destination name. So such a run would land on the collision
-        // suffix, which is the thing that must not exist.
+        // unresolvable pair would have moved it out of Sorted. Its first-run copy already holds
+        // the plain destination name, so it would land on the collision suffix.
         assertThat(Files.exists(still)).isTrue();
         assertThat(Files.exists(root.resolve("Review/junk/IMG_3 (2).jpg"))).isFalse();
     }
@@ -190,10 +184,6 @@ class ApplyEngineTest {
                 .contains("a.jpg (2019-06) - kept, sharpest" + System.lineSeparator() + "b.jpg (2019-06) - blurred");
     }
 
-    // The group's own folder is derived from the CHOSEN file's month, not the reject's. Otherwise a
-    // reject sitting in a different Sorted month than its keeper would land in its own, separate
-    // Duplicates folder. It would then never see the chosen-filename note, which is only ever
-    // written once, in the chosen file's own folder.
     @Test
     void aNearDupGroupSpanningTwoSortedMonthsLandsInOneDuplicatesFolderWithTheNote(@TempDir final Path root)
             throws IOException, ApplyException {
@@ -216,7 +206,6 @@ class ApplyEngineTest {
         assertThat(Files.exists(dupDir.resolve("b.jpg"))).isTrue();
         assertThat(Files.readString(dupDir.resolve("a.jpg.txt")))
                 .contains("a.jpg (2019-06) - kept, sharpest" + System.lineSeparator() + "b.jpg (2019-07) - blurred");
-        // No second, July-derived folder was ever created for this group.
         assertThat(Files.exists(root.resolve("Duplicates/2019-07_lake-jun19"))).isFalse();
     }
 
@@ -362,9 +351,8 @@ class ApplyEngineTest {
     void resumingAfterASimulatedCrashSkipsAlreadyAppliedFilesAndAppliesTheRest(@TempDir final Path root) throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        // alreadyMoved is never written to disk under Sorted at all - standing in for a decision a
-        // prior, crashed run already carried out before dying. Its destination, reasons line, and
-        // move record are all pre-placed exactly as a completed run would have left them.
+        // alreadyMoved is never written under Sorted at all. Its destination, reasons line and
+        // move record are pre-placed exactly as a prior run would have left them before crashing.
         final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/a.jpg");
         final Path pending = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(pending, "y");
@@ -382,8 +370,6 @@ class ApplyEngineTest {
 
         assertThat(report.byCategory()).containsEntry("scenery", 1).doesNotContainKey("junk");
         assertThat(Files.exists(root.resolve("Review/scenery/b.jpg"))).isTrue();
-        // The already-done decision was recognized, not reprocessed - its reasons line still
-        // appears exactly once.
         assertThat(Files.readAllLines(root.resolve("Review/junk/_reasons.txt")))
                 .containsExactly("a.jpg - blurry");
     }
@@ -392,8 +378,7 @@ class ApplyEngineTest {
     void resumingPreservesAnAlreadyAppliedFunnyDecisionsIndexEntryAndIndexesThePendingOne(@TempDir final Path root) throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        // alreadyMoved's file was already relocated (and, per this fix, already indexed) by a prior
-        // run before it crashed - simulated directly, rather than by actually crashing mid-run.
+        // alreadyMoved was already relocated and indexed by a prior run before it crashed.
         final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/old-meme.jpg");
         final Path pending = root.resolve("Sorted/Photos/2019/06/new-meme.jpg");
         writeFile(pending, "haha");
@@ -420,8 +405,7 @@ class ApplyEngineTest {
     void aCrashBetweenAFunnyMoveAndItsIndexRowIsReconciledOnResumeWithoutRecountingIt(@TempDir final Path root) throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        // photo was already moved to its destination by a prior, crashed run. The crash landed
-        // between the move and the index row that would normally follow it.
+        // The crash landed between the move and the index row that would normally follow it.
         final Path photo = root.resolve("Sorted/Photos/2019/06/meme.jpg");
         final Path dest = libraryRoot.resolve("Funny/meme.jpg");
         writeFile(dest, "haha");
@@ -433,14 +417,12 @@ class ApplyEngineTest {
 
         final ApplyReport report = applyEngine(root, libraryRoot, hashIndex).apply(prepDir, new ApplyOptions(false));
 
-        // The move was already done, so this run only backfills the missing row - it isn't counted
-        // as this run's own work.
+        // A backfilled row is not counted as this run's own work.
         assertThat(report.byCategory()).isEmpty();
         assertThat(hashIndex.load()).containsOnlyKeys(new Sha256Hasher().hash(dest));
     }
 
-    // Its control is the test above, which proves this same fixture shape does backfill a row. The
-    // hash matches the file at the recorded path, so classification reads the move as done and
+    // The hash matches the file at the recorded path, so classification reads the move as done and
     // reaches the backfill with a destination nothing else has vetted.
     @Test
     void aMoveRecordPointingOutsideTheLibraryIsRefusedRatherThanIndexedAsLibraryContent(@TempDir final Path root)
@@ -467,9 +449,9 @@ class ApplyEngineTest {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
         // Two byte-identical funny photos share one hash but live at different paths. The first is
-        // already fully indexed; the second's move already happened too, but a crash left its own
-        // index row missing. Checking "is this hash indexed at all" would wrongly see the first
-        // entry and skip writing the second. The path has to match too, not just the hash.
+        // fully indexed. The second's move happened too, but a crash left its index row missing.
+        // Checking "is this hash indexed at all" would see the first entry and skip writing the
+        // second. The path has to match as well as the hash.
         final Path photo = root.resolve("Sorted/Photos/2019/06/meme2.jpg");
         final Path existingDest = libraryRoot.resolve("Funny/meme1.jpg");
         final Path dest = libraryRoot.resolve("Funny/meme2.jpg");
@@ -492,8 +474,7 @@ class ApplyEngineTest {
     void aCrashBetweenAReviewMoveAndItsReasonsLineIsReconciledOnResumeWithoutRecountingIt(@TempDir final Path root) throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        // photo was already moved to its destination by a prior, crashed run. The crash landed
-        // between the move and the _reasons.txt line that would normally follow it.
+        // The crash landed between the move and the _reasons.txt line that would normally follow.
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         final Path dest = root.resolve("Review/junk/a.jpg");
         writeFile(dest, "x");
@@ -523,8 +504,8 @@ class ApplyEngineTest {
         writeShard(prepDir, "montage-001",
                 classificationJson(first, "funny", "first meme"),
                 classificationJson(second, "funny", "second meme"));
-        // Allows exactly one move to succeed, then throws - simulating a process crash right after
-        // the first decision's move but before the loop reaches the second.
+        // A process crash right after the first decision's move, before the loop reaches the
+        // second.
         final ApplyEngine crashingEngine = applyEngine(root, libraryRoot, hashIndex, new FailingAfterMoves(1));
 
         assertThatThrownBy(() -> crashingEngine.apply(prepDir, new ApplyOptions(false)))
@@ -547,11 +528,8 @@ class ApplyEngineTest {
                 new Sha256Hasher().hash(firstDest), new Sha256Hasher().hash(secondDest));
     }
 
-    // The move record is written BEFORE the move it describes, never after. This is the one crash
-    // timing that tells the two orderings apart. A crash landing between a completed move and the
-    // next statement leaves the source gone either way. Only a record already on disk can prove
-    // afterwards that the move genuinely happened. Recording after the move would leave that file
-    // permanently unresolvable instead.
+    // The one crash timing that tells recording-before from recording-after apart. Both leave the
+    // source gone, so only a record already on disk can prove afterwards that the move happened.
     @Test
     void aCrashLandingImmediatelyAfterAMoveIsStillProvableAsDoneOnResume(@TempDir final Path root)
             throws IOException, ApplyException {
@@ -562,8 +540,7 @@ class ApplyEngineTest {
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-        // Carries the move out for real, then throws before apply() can run the reasons-note write
-        // that normally follows it.
+        // Carries the move out for real, then throws before the reasons-note write that follows.
         final ApplyEngine crashingEngine = applyEngine(root, libraryRoot, hashIndex(root),
                 new FailingAfterMoves(0, CrashPoint.AFTER_THE_MOVE));
 
@@ -577,7 +554,7 @@ class ApplyEngineTest {
 
         final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
-        // The resumed run proves the move from the record alone, since the source is long gone. It
+        // The source is long gone, so the resumed run proves the move from the record alone. It
         // backfills only the reasons line the crash cost, and counts no work of its own.
         assertThat(report.byCategory()).isEmpty();
         assertThat(Files.readAllLines(root.resolve("Review/junk/_reasons.txt"))).containsExactly("a.jpg (2019-06) - blurry");
@@ -620,9 +597,9 @@ class ApplyEngineTest {
         writeShard(prepDir, "montage-001",
                 nearDupChosenJson(chosen, "lake-jun19", "sharpest"),
                 nearDupRejectJson(reject, "lake-jun19", "blurred"));
-        // Simulates a prior run that copied the chosen file and wrote its note, then crashed before
-        // this decision's next step. chosen's source is never removed by a copy, so the engine
-        // always reprocesses it - it must converge on the same end state rather than compounding.
+        // A prior run that copied the chosen file and wrote its note, then crashed before this
+        // decision's next step. A copy never removes its source, so the engine always reprocesses
+        // this one. It has to converge on the same end state rather than compounding.
         final Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
         writeFile(dupDir.resolve("a.jpg"), "already-copied");
         Files.writeString(dupDir.resolve("a.jpg.txt"), "a.jpg (2019-06) - kept, sharpest" + System.lineSeparator()
@@ -675,7 +652,6 @@ class ApplyEngineTest {
                 .containsExactly("corrupt.heic (2019-06) - could not be seen clearly enough to judge");
     }
 
-    // Its control: the same fixture shape moves the file when the entry is inside Sorted.
     @Test
     void anUnreviewableEntryOutsideSortedIsRefusedAndTheFileIsLeftWhereItIs(@TempDir final Path root) throws IOException {
         final Path libraryRoot = root.resolve("Library");
@@ -695,8 +671,7 @@ class ApplyEngineTest {
     void resumingRecognizesAnAlreadyMovedUnreviewableFileWithoutReprocessingIt(@TempDir final Path root) throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        // alreadyMoved is never written to disk under Sorted at all. It stands in for a prior,
-        // crashed run that already moved it before this run reads the prep dir.
+        // alreadyMoved is never written under Sorted, a prior crashed run having moved it already.
         final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
         final Path dest = root.resolve("Unreviewable/2019/06/corrupt.heic");
         writeFile(dest, "already-moved");
@@ -711,7 +686,6 @@ class ApplyEngineTest {
                 .containsExactly("corrupt.heic (2019-06) - could not be seen clearly enough to judge");
     }
 
-    // A half-finished apply is what an abort here would leave, which is worth more than the line.
     @Test
     void aNoteWhoseBytesAreNotTextLosesTheLineRatherThanTheRun(@TempDir final Path root)
             throws IOException, ApplyException {
@@ -816,8 +790,8 @@ class ApplyEngineTest {
             throws IOException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        final Path missingUnreviewable = root.resolve("Sorted/Photos/2019/06/gone.heic"); // never written, no move
-        // record
+        // Never written, and no move record for it.
+        final Path missingUnreviewable = root.resolve("Sorted/Photos/2019/06/gone.heic");
         final Path pending = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(pending, "x");
         writeIndex(prepDir, 1, List.of(missingUnreviewable), List.of("montage-001"));
@@ -828,7 +802,7 @@ class ApplyEngineTest {
                 .isInstanceOf(ApplyException.class)
                 .hasMessageContaining("file not found, and its move could not be verified")
                 .hasMessageContaining(missingUnreviewable.toString());
-        // The whole run aborted before anything moved - the unrelated pending decision is untouched too.
+        // The unrelated pending decision is untouched too, so nothing moved at all.
         assertThat(Files.exists(pending)).isTrue();
     }
 
@@ -854,16 +828,14 @@ class ApplyEngineTest {
         assertThat(Files.exists(prepDir.resolve("montage-001.jpg"))).isFalse();
         assertThat(Files.exists(prepDir.resolve("tile-001-01.jpg"))).isFalse();
         // The sidecar shares montage-001's own filename prefix with its contact-sheet image. It is
-        // JSON ground truth, not a deletable intermediate, so it survives cleanup for the prep dir's
-        // whole life. The idempotency test below shows why that matters.
+        // JSON ground truth rather than a deletable intermediate, so it survives cleanup for the
+        // prep dir's whole life.
         assertThat(Files.exists(prepDir.resolve("montage-001.json"))).isTrue();
     }
 
-    // Proves apply() is idempotent by actually calling it twice on the same prep dir. Every other
-    // "resuming after a crash" test in this file simulates that state by hand-writing a move record
-    // instead. A real second call needs montage-001's own sidecar to still be readable, which is
-    // exactly what cleanupIntermediates() preserves. Idempotency itself needs no special-case code
-    // here. It falls out of the same classification machinery those hand-simulated tests exercise.
+    // Calls apply() twice for real, rather than hand-writing a move record the way the crash tests
+    // do. A real second call needs montage-001's own sidecar to still be readable, which is
+    // exactly what the cleanup step preserves.
     @Test
     void aSecondApplyOnAnAlreadyCompleteRunIsANoOpThatMovesNothingAndDoesNotDuplicateSecondaryWrites(
             @TempDir final Path root) throws IOException, ApplyException {
@@ -908,12 +880,10 @@ class ApplyEngineTest {
         writeShard(prepDir, "montage-001",
                 classificationJson(first, "junk", "blurry"),
                 classificationJson(second, "junk", "also blurry"));
-        // Present so cleanupIntermediates() has something to (not) delete - proves it really never
-        // runs on a cancelled pass, not just that decisions.json happens to be absent.
+        // Present so the cleanup step has something to not delete. Without them the assertion
+        // would hold on a run where cleanup ran and found nothing.
         Files.writeString(prepDir.resolve("montage-001.jpg"), "fake-image");
         Files.writeString(prepDir.resolve("tile-001-01.jpg"), "fake-tile");
-        // Cancels once the first decision has ticked, so the loop stops before the second one is
-        // even looked at.
         final AtomicInteger ticks = new AtomicInteger();
         final CancellationSignal cancelAfterFirstTick = () -> ticks.get() == 1;
 
@@ -924,10 +894,8 @@ class ApplyEngineTest {
         assertThat(ending.report().byCategory()).containsExactly(entry("junk", 1));
         assertThat(Files.exists(first)).isFalse();
         assertThat(Files.exists(root.resolve("Review/junk/first.jpg"))).isTrue();
-        // The second decision was never reached.
         assertThat(Files.exists(second)).isTrue();
         assertThat(Files.exists(root.resolve("Review/junk/second.jpg"))).isFalse();
-        // Both finalizers skipped: no merged decisions.json, and the intermediates survive.
         assertThat(Files.exists(prepDir.resolve("decisions.json"))).isFalse();
         assertThat(Files.exists(prepDir.resolve("montage-001.jpg"))).isTrue();
         assertThat(Files.exists(prepDir.resolve("tile-001-01.jpg"))).isTrue();
@@ -972,8 +940,6 @@ class ApplyEngineTest {
         writeIndex(prepDir, 1, List.of(undecodable), List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-        // Cancels right after the one decision ticks, so the unreviewable-file loop right after it
-        // never even starts.
         final AtomicInteger ticks = new AtomicInteger();
         final CancellationSignal cancelAfterFirstTick = () -> ticks.get() == 1;
 
@@ -985,7 +951,6 @@ class ApplyEngineTest {
         assertThat(ending.report().unreviewable()).isZero();
         assertThat(Files.exists(photo)).isFalse();
         assertThat(Files.exists(root.resolve("Review/junk/a.jpg"))).isTrue();
-        // The unreviewable file was never reached.
         assertThat(Files.exists(undecodable)).isTrue();
         assertThat(Files.exists(prepDir.resolve("decisions.json"))).isFalse();
     }
@@ -1007,9 +972,8 @@ class ApplyEngineTest {
         applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false),
                 (current, total) -> ticks.add(current + "/" + total));
 
-        // One decision plus one unreviewable file, both real moves. The total must cover both
-        // loops, not just the decisions loop, or progress would reach 100% before the unreviewable
-        // file is actually moved.
+        // One decision plus one unreviewable file, both real moves. A total covering the decisions
+        // loop alone would reach 100% before the unreviewable file had moved.
         assertThat(ticks).containsExactly("1/2", "2/2");
         assertThat(Files.exists(root.resolve("Unreviewable/2019/06/corrupt.heic"))).isTrue();
     }
@@ -1053,11 +1017,9 @@ class ApplyEngineTest {
         BEFORE_THE_MOVE, AFTER_THE_MOVE
     }
 
-    // Wraps the real NioMediaStore but throws around a chosen moveTo() call - recordThenMove()'s own
-    // move step. That's where a real process crash would land partway through a single apply()
-    // invocation. Deterministically simulates that crash timing. No amount of pre-seeded state can
-    // reproduce it: pre-seeding only proves the engine tolerates ALREADY-crashed state, not that a
-    // crash mid-run leaves the right things durable.
+    // Throws around a chosen moveTo() call, which is where a real process crash would land partway
+    // through one apply(). No pre-seeded state can reproduce that. Pre-seeding proves the engine
+    // tolerates already-crashed state, never that a crash mid-run leaves the right things durable.
     private static MediaStore abandoningEveryMove() {
         return new NioMediaStore() {
             @Override

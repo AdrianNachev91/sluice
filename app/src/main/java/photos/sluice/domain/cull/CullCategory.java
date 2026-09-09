@@ -20,9 +20,8 @@ import java.util.List;
  * <p>The name also becomes the folder a culled file is moved into, which is what constrains its
  * shape. {@link CategoryName} owns that rule and states why.
  *
- * <p>A card is a domain value rather than a port type because {@link PrepDir} carries the set a run
- * was prepped under. The cull settings port hands back the configured cards the same way it hands
- * back a {@link MontageConfig}.
+ * <p>A card is a domain value rather than a port type, because {@link PrepDir} carries the set a
+ * run was prepped under.
  */
 public record CullCategory(String name, String description, List<String> examples, Boolean enabled) {
 
@@ -83,7 +82,7 @@ public record CullCategory(String name, String description, List<String> example
     }
 
     /**
-     * A card offering no examples and switched on. For the many callers that set neither.
+     * A card offering no examples and switched on.
      *
      * @param name {@link String} the action id this category carries
      * @param description {@link String} the "what belongs here" prompt prose
@@ -94,8 +93,7 @@ public record CullCategory(String name, String description, List<String> example
     }
 
     /**
-     * The longest a description may be. For a control that has to stop a reader typing past it, and
-     * a sentence that has to say so.
+     * The longest a description may be, for a surface that has to stop a reader typing past it.
      *
      * @return int the character ceiling
      */

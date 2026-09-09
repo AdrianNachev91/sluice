@@ -15,8 +15,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 // The whole app on a machine where nobody has chosen a folder yet. Every other context test sets
-// the three roots, which is exactly why an install that cannot start was invisible for so long.
-// Nothing here sets them.
+// the three roots. Nothing here sets them.
 @SpringBootTest
 class UnconfiguredStartupTest {
 
@@ -37,8 +36,7 @@ class UnconfiguredStartupTest {
     }
 
     // There is no folder to claim and nothing to house-keep inside one, so the sequence stops before
-    // asking where the working root is. Asking would be the failure this whole chunk moves off
-    // startup.
+    // asking where the working root is.
     @Test
     void theStartupSequenceDoesNothing() {
         assertThatCode(this.startup::run).doesNotThrowAnyException();

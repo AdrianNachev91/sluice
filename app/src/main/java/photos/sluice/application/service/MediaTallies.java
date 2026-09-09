@@ -152,10 +152,6 @@ final class MediaTallies {
      * year alone. Nothing this app writes lands there. So that is a folder somebody arranged
      * themselves, rather than a state to fold into month one or month twelve.
      *
-     * <p>Padded to two digits, which is how a scope names a month folder when it resolves one. A
-     * run narrowed to June reads {@code 06} and nothing else. Counting a hand-made {@code 6} toward
-     * June would promise a photo that run could never reach.
-     *
      * @param within {@link Path} the file's path below its Photos or Videos root
      * @return {@link OptionalInt} the month, empty where the file is in no month folder
      */
@@ -168,9 +164,6 @@ final class MediaTallies {
 
     /**
      * Which year a staged file sits under, where the folder is one a scope could name.
-     *
-     * <p>A scope resolves a year folder by its plain digits, so {@code 02019} is a folder no run
-     * would ever read. Counted here it would put photos under a year nothing can be scoped to.
      *
      * @param within {@link Path} the file's path below its Photos or Videos root
      * @return {@link OptionalInt} the year, empty where the folder is not one

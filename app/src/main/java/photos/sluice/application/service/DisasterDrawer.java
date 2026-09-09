@@ -92,8 +92,9 @@ public class DisasterDrawer {
 
     /**
      * Deletes every disaster-drawer entry under cullPrepRoot whose filename-embedded filing time is
-     * older than the 30-day retention window. A file whose name doesn't parse as a filed entry is
-     * left alone, never deleted. This drawer only ever removes what it is certain it filed itself.
+     * older than the 30-day retention window. Recognized by two things together: sitting directly
+     * inside a {@code disasters/} folder, and carrying the leading timestamp this drawer writes. A
+     * file failing either is left alone, never deleted.
      *
      * @param cullPrepRoot {@link Path} the root directory holding every prep dir
      * @return int the number of entries deleted
@@ -114,10 +115,8 @@ public class DisasterDrawer {
     /**
      * Deletes every {@code PrepDirRemedies.discard()} graveyard folder under graveyardRoot
      * ({@code logs/archives/}) whose own {@code <scope>-<timestamp>} name is older than the 30-day
-     * retention window. This is the directory-level counterpart to {@link #sweepExpired}. That
-     * method only ever recognizes a per-prep-dir drawer entry sitting directly inside a literal
-     * {@code disasters/} folder, not a whole graveyard folder discovered by name. A folder whose
-     * name doesn't parse is left alone, never deleted. An expired folder has every file under it
+     * retention window. This is the directory-level counterpart to {@link #sweepExpired}. A folder
+     * whose name doesn't parse is left alone, never deleted. An expired folder has every file under it
      * deleted, then the folder itself (and any now-empty subfolder, e.g. a graveyarded
      * {@code disasters/} drawer) pruned via {@link MediaStore#removeIfEmptyOfFiles}.
      *

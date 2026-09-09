@@ -11,12 +11,11 @@ import java.util.regex.Pattern;
  *
  * <p>This is Microsoft's documented set, minus the superscript forms. Their guidance also reserves
  * {@code com¹}, {@code com²}, {@code com³} and the {@code lpt} equivalents, because Windows reads
- * ISO/IEC 8859-1 superscript digits as digits. Nothing can reach this method with one: every caller
- * gates on an ASCII-only allowlist first, so a superscript is refused a step earlier.
+ * ISO/IEC 8859-1 superscript digits as digits. They are left out because this app only ever asks
+ * about names already restricted to ASCII.
  *
  * <p>{@code com0} and {@code lpt0} are deliberately absent, because that guidance does not list
- * them. Probes on two Windows machines created both as ordinary files, which is what
- * {@code ReservedDeviceNamesTest} pins.
+ * them. Probes on two Windows machines created both as ordinary files.
  *
  * <p>Which of the listed names a machine actually reserves is not fixed. That is the real argument
  * for refusing them everywhere. {@code com1} is a symbolic link to a serial device, not a name the

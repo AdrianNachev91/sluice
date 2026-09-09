@@ -96,8 +96,7 @@ public class SluiceCli implements Callable<Integer> {
      * Whether the running command was asked for a machine-readable document.
      *
      * <p>The flag is inherited, so a verb may be given it and the value still lands on this one
-     * object. A verb reading its own field would find it unset whenever the flag was typed before
-     * the verb.
+     * object rather than on the verb's own field.
      *
      * @param spec {@link CommandSpec} the running command
      * @return boolean true when a document was asked for

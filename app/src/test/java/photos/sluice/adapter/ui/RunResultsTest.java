@@ -1,6 +1,7 @@
 package photos.sluice.adapter.ui;
 
 import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import photos.sluice.adapter.ui.RunResultView.CardAction;
 import photos.sluice.adapter.ui.RunResultView.Count;
@@ -40,218 +41,6 @@ class RunResultsTest {
     private static final Path PREP_DIR = Path.of("logs", "sift-prep", "2019");
 
     @Test
-    void aSiftBlockedByItsOwnValidationSaysWhereThePhotosStillAre() {
-        final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
-                waitingJob(new ShardTally(28, 28, 28)), List.of(new Finding.MissingMontageField("montage-003")),
-                CullReport.nothingSpent("anthropic", 0), null));
-
-        assertThat(card.heading()).isEqualTo("Sifting stopped and needs a look.");
-        assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
-        assertThat(requireNonNull(card.detail())).contains("Your photos are still in Sorted");
-        assertThat(card.action()).isNull();
-    }
-
-    @Test
-    void aBlockedSiftStillAccountsForTheSheetsItJudged() {
-        final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
-                waitingJob(new ShardTally(28, 28, 28)), List.of(),
-                CullReport.nothingSpent("anthropic", 0), null));
-
-        assertThat(labelled(card, "Sheets judged")).isEqualTo("28 of 28");
-    }
-
-    // The 31,400 is deliberately larger than the 9,000 + 1,500 in the report beside it, so a card
-    // reading the report's own figure fails here.
-    @Test
-    void aFinishedSiftCountsEveryTokenTheRunSpentRatherThanTheLastCallsOwn() {
-        final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Applied(
-                new CullReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false),
-                new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), null, 31_400L));
-
-        assertThat(labelled(card, "Tokens used")).isEqualTo("31,400");
-    }
-
-    @Test
-    void aSiftThatReachedNoModelCountsNoTokensRatherThanZero() {
-        final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Applied(
-                CullReport.nothingSpent("external-agent", 0),
-                new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), null, 0L));
-
-        assertThat(card.counts()).extracting(Count::label).doesNotContain("Tokens used");
-    }
-
-    @Test
-    void aSiftWhoseSpendCouldNotBeReadBackCountsNoTokensAtAll() {
-        final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Applied(
-                new CullReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false),
-                new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), null, null));
-
-        assertThat(card.counts()).extracting(Count::label).doesNotContain("Tokens used");
-    }
-
-    @Test
-    void aSiftCancelledBeforeItsSheetsWereBuiltCountsNoneOfThem() {
-        final RunResultView card = card(RunMode.SIFT,
-                new CullJobOutcome.Cancelled(CullReport.nothingSpent("anthropic", 0), null));
-
-        assertThat(card.heading()).isEqualTo("Sifting stopped.");
-        assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
-        assertThat(card.counts()).isEmpty();
-    }
-
-    // The card below offers to continue and this one cannot, so the two must not share a sentence.
-    // They did: both said "You can continue at any time", and this one has no button to press.
-    @Test
-    void aSiftCancelledBeforeItsSheetsWereBuiltPromisesNoWayToContinue() {
-        final RunResultView card = card(RunMode.SIFT,
-                new CullJobOutcome.Cancelled(CullReport.nothingSpent("anthropic", 0), null));
-
-        assertThat(card.action()).isNull();
-        assertThat(card.detail())
-                .isEqualTo("No sheets were built yet, and nothing was sent to your provider.");
-    }
-
-    // Its sheets are built and some are judged, so the door back in stays open. What it must not do
-    // is start again on its own.
-    @Test
-    void aSiftTheUserStoppedOffersToContinueRatherThanLeavingThemToFindTheWayBack() {
-        final RunResultView card = card(RunMode.SIFT, waiting(WaitingReason.CANCELLED));
-
-        assertThat(card.heading()).isEqualTo("Sifting stopped.");
-        assertThat(card.action()).isEqualTo(new CardAction.ContinueRun(
-                "You can continue at any time.", "Continue sifting", PREP_DIR));
-    }
-
-    @Test
-    void aFinishedSortOffersToSiftTheOneTimeframeItFilled() {
-        final RunResultView card = card(RunMode.SORT, sortSummary(List.of()));
-
-        assertThat(card.action()).isEqualTo(new CardAction.SiftNow("Sift 2019", 2019, 2));
-    }
-
-    @Test
-    void aSortWithSomethingToSiftSaysNothingUnderItsHeading() {
-        final RunResultView card = card(RunMode.SORT, sortSummary(List.of()));
-
-        assertThat(card.detail()).isNull();
-    }
-
-    @Test
-    void aSortThatFiledNothingOffersNoSift() {
-        final RunResultView card = card(RunMode.SORT, sortedInto(Set.of()));
-
-        assertThat(card.action()).isNull();
-    }
-
-    @Test
-    void aSortStoppedBeforeAnythingMovedSaysSoRatherThanBlamingTheInbox() {
-        final RunResultView card = card(RunMode.SORT, allOf(0, "none", true));
-
-        assertThat(card.detail()).isEqualTo("Your Inbox is unchanged.");
-    }
-
-    @Test
-    void aSortStoppedAfterFilingSomeCountsWhatIsStillInTheInbox() {
-        final RunResultView card = card(RunMode.SORT, sortedInto(Set.of(2019), true));
-
-        assertThat(card.detail()).isEqualTo("205 of them are still in your Inbox.");
-    }
-
-    @Test
-    void aSortStoppedWithOneFileLeftSaysOneRatherThanCountingIt() {
-        final RunResultView card = card(RunMode.SORT, stoppedSortLeaving(1));
-
-        assertThat(card.detail()).isEqualTo("One of them is still in your Inbox.");
-    }
-
-    @Test
-    void aSortStoppedAfterTheLastFileSaysNothingIsLeft() {
-        final RunResultView card = card(RunMode.SORT, stoppedSortLeaving(0));
-
-        assertThat(card.detail()).isEqualTo("None of them are still in your Inbox.");
-    }
-
-    @Test
-    void aStoppedSortIsNotHeadedAsFinished() {
-        final RunResultView card = card(RunMode.SORT, sortedInto(Set.of(2019), true));
-
-        assertThat(card.heading()).isEqualTo("Sorting stopped.");
-        assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
-    }
-
-    @Test
-    void aSortThatFinishedDespiteTheButtonBeingPressedIsHeadedAsFinished() {
-        final RunResultView card = card(RunMode.SORT, sortedInto(Set.of(2019), false));
-
-        assertThat(card.heading()).isEqualTo("Sorting finished.");
-        assertThat(card.tone()).isEqualTo(Tone.FINISHED);
-    }
-
-    @Test
-    void aStoppedMoveIsNotHeadedAsFinishedAndCountsWhatIsStillInSorted() {
-        final RunResultView card = card(RunMode.MOVE_TO_LIBRARY,
-                new CommitSummary(4, 300, Map.of(LibraryBucket.PHOTOS, 4), true));
-
-        assertThat(card.heading()).isEqualTo("Moving to library stopped.");
-        assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
-        assertThat(card.detail()).isEqualTo("300 of them are still in Sorted.");
-    }
-
-    @Test
-    void aMoveStoppedWithOneFileLeftSaysOneRatherThanCountingIt() {
-        final RunResultView card = card(RunMode.MOVE_TO_LIBRARY,
-                new CommitSummary(4, 1, Map.of(LibraryBucket.PHOTOS, 4), true));
-
-        assertThat(card.detail()).isEqualTo("One of them is still in Sorted.");
-    }
-
-    @Test
-    void aMoveStoppedAfterTheLastFileSaysNothingIsLeft() {
-        final RunResultView card = card(RunMode.MOVE_TO_LIBRARY,
-                new CommitSummary(4, 0, Map.of(LibraryBucket.PHOTOS, 4), true));
-
-        assertThat(card.detail()).isEqualTo("None of them are still in Sorted.");
-    }
-
-    @Test
-    void aStoppedRescueIsNotHeadedAsFinishedAndCountsWhatIsStillInTheFolder() {
-        final RunResultView card = card(RunMode.RESCUE, new RescueSummary(7, 0, 0, 1200, false, true));
-
-        assertThat(card.heading()).isEqualTo("Rescuing stopped.");
-        assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
-        assertThat(card.detail())
-                .isEqualTo("1,200 photos and videos are still in the folder you started from.");
-    }
-
-    @Test
-    void aStoppedRescueThatLeftOnePhotoSaysSoInTheSingular() {
-        final RunResultView card = card(RunMode.RESCUE, new RescueSummary(7, 0, 0, 1, false, true));
-
-        assertThat(card.detail())
-                .isEqualTo("One photo or video is still in the folder you started from.");
-    }
-
-    // Reachable: a stop taken after the last photo moved, with only notes left in the tail.
-    @Test
-    void aStoppedRescueThatLeftNoMediaSaysThatRatherThanCountingZero() {
-        final RunResultView card = card(RunMode.RESCUE, new RescueSummary(7, 0, 0, 0, false, true));
-
-        assertThat(card.detail())
-                .isEqualTo("No photos or videos are left in the folder you started from.");
-    }
-
-    @Test
-    void aStoppedRescueStillNamesWhereTheUndatedOnesLanded() {
-        final RunResultView card = card(RunMode.RESCUE, new RescueSummary(7, 3, 0, 4, false, true));
-
-        assertThat(card.detail())
-                .isEqualTo("4 photos and videos are still in the folder you started from.");
-        assertThat(labelled(card, "Moved to Unsorted")).isEqualTo("3");
-    }
-
-    // A run that threw is not a run the reader stopped, and only the colour would have told them
-    // apart while both headings read the same.
-    @Test
     void aRunThatThrewIsNotHeadedTheWayAStoppedRunIs() {
         final RunResultView failure = RunResults.failedResult(RunMode.SORT, new RunRefusals.Refusal("Something broke.", null));
 
@@ -260,107 +49,7 @@ class RunResultsTest {
         assertThat(failure.tone()).isEqualTo(Tone.FAILED);
     }
 
-    @Test
-    void aNarrowedSortThatFiledNothingBlamesTheYearRatherThanTheWholeInbox() {
-        final RunResultView card = RunResults.of(RunMode.SORT, allOf(0, "none"), "2024");
-
-        assertThat(card.detail()).isEqualTo("Nothing in 2024 was ready to sort.");
-    }
-
-    @Test
-    void anUnnarrowedSortThatFiledNothingSaysTheInboxHeldNothing() {
-        final RunResultView card = card(RunMode.SORT, allOf(0, "none"));
-
-        assertThat(card.detail()).isEqualTo("Nothing in your Inbox was ready to sort.");
-    }
-
-    @Test
-    void aSortThatSetEveryFileAsideSaysWhyAndWhereTheyWent() {
-        final RunResultView card = card(RunMode.SORT, allOf(39, "lowRes"));
-
-        assertThat(card.detail())
-                .isEqualTo("Nothing ended up in Sorted, so there is nothing to sift yet. Their "
-                        + "file size or their resolution is under what a sift looks at, so they "
-                        + "are in Review instead.");
-    }
-
-    @Test
-    void aSortThatCouldDateNothingSaysThereIsNoYearToFileThemUnder() {
-        final RunResultView card = card(RunMode.SORT, allOf(12, "unsorted"));
-
-        assertThat(requireNonNull(card.detail()))
-                .contains("Not one of them carries a date that can be trusted");
-    }
-
-    @Test
-    void aSortThatFoundEverythingAlreadyInTheLibrarySaysSo() {
-        final RunResultView card = card(RunMode.SORT, allOf(7, "reimports"));
-
-        assertThat(requireNonNull(card.detail())).contains("in your Library already");
-    }
-
-    // Naming one bucket where several took a share would describe part of the run as the whole.
-    @Test
-    void aSortWhoseFilesWentSeveralWaysLeavesTheReasonToTheRows() {
-        final RunResultView card = card(RunMode.SORT,
-                new SortSummary(20, 0, 0, 0, 0, 12, 8, 0, List.of(), Guessed.NONE, List.of(), Set.of(), List.of(), false, 0));
-
-        assertThat(requireNonNull(card.detail()))
-                .endsWith("The rows below say what became of each one.");
-    }
-
-    @Test
-    void aSortWithNothingInScopeSaysSoRatherThanNamingRowsItHasNone() {
-        final RunResultView card = card(RunMode.SORT,
-                new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(), List.of(), false, 0));
-
-        assertThat(card.detail()).isEqualTo("Nothing in your Inbox was ready to sort.");
-    }
-
-    @Test
-    void aSortSpanningSeveralTimeframesOffersNoSiftRatherThanPickingOne() {
-        final RunResultView card = card(RunMode.SORT, sortedInto(Set.of(2019, 2020)));
-
-        assertThat(card.action()).isNull();
-    }
-
-    @Test
-    void aRescueCountsBothOfTheDestinationsItMovedTo() {
-        final RunResultView card = card(RunMode.RESCUE, new RescueSummary(12, 2, 0, 0, true, false));
-
-        assertThat(card.heading()).isEqualTo("Rescuing finished.");
-        assertThat(labelled(card, "Moved to Sorted")).isEqualTo("12");
-        assertThat(labelled(card, "Moved to Unsorted")).isEqualTo("2");
-        assertThat(card.detail()).isNull();
-    }
-
-    @Test
-    void aRescueThatDatedEverythingDrawsNoRowSayingSo() {
-        final RunResultView card = card(RunMode.RESCUE, new RescueSummary(12, 0, 0, 0, true, false));
-
-        assertThat(card.counts()).extracting(Count::label).containsExactly("Moved to Sorted");
-        assertThat(card.detail()).isNull();
-    }
-
-    @Test
-    void aMoveThatReachedNoPartOfTheLibraryStillSaysSoRatherThanShowingNothing() {
-        final RunResultView card = card(RunMode.MOVE_TO_LIBRARY,
-                new CommitSummary(0, 0, Map.of(), false));
-
-        assertThat(card.counts()).extracting(Count::label, Count::value)
-                .containsExactly(tuple("Moved to your Library", "0"));
-    }
-
-    @Test
-    void aFileUnderNoPartOfTheLibraryThisAppFilesIntoIsStillCounted() {
-        final RunResultView card = card(RunMode.MOVE_TO_LIBRARY,
-                new CommitSummary(4, 0, Map.of(LibraryBucket.OTHER, 4), false));
-
-        assertThat(labelled(card, "Elsewhere in your Library")).isEqualTo("4");
-    }
-
-    // Nothing produces this today. What it proves is that meeting one leaves the reader a heading
-    // and a way off the card, rather than a screen with no way off it.
+    // Nothing produces an unreadable outcome today, so the fixture is built rather than observed.
     @Test
     void anOutcomeThisCardCannotReadStillSaysTheWorkFinishedAndOffersDone() {
         final RunResultView card = card(RunMode.SORT, new Object());
@@ -378,134 +67,457 @@ class RunResultsTest {
         assertThat(card.counts()).isEmpty();
     }
 
-    @Test
-    void everyWayAnImportedPhotoEndsUpGetsItsOwnRow() {
-        final RunResultView card = card(RunMode.IMPORT,
-                new ImportSummary(1204, 1190, 4, 2, 3, 5, false));
+    @Nested
+    class Sifting {
 
-        assertThat(card.counts()).extracting(Count::label, Count::value).containsExactly(
-                tuple("Imported", "1,190"),
-                tuple("Skipped: already in your Inbox", "4"),
-                tuple("Could not be read", "3"),
-                tuple("Arrived broken", "2"),
-                tuple("Folders could not be opened", "5"));
+        @Test
+        void aRunBlockedByItsOwnValidationSaysWhereThePhotosStillAre() {
+            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
+                    waitingJob(new ShardTally(28, 28, 28)), List.of(new Finding.MissingMontageField("montage-003")),
+                    CullReport.nothingSpent("anthropic", 0), null));
+
+            assertThat(card.heading()).isEqualTo("Sifting stopped and needs a look.");
+            assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
+            assertThat(requireNonNull(card.detail())).contains("Nothing was moved");
+            assertThat(card.action()).isNull();
+        }
+
+        @Test
+        void aBlockedRunStillAccountsForTheSheetsItJudged() {
+            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
+                    waitingJob(new ShardTally(28, 28, 28)), List.of(),
+                    CullReport.nothingSpent("anthropic", 0), null));
+
+            assertThat(labelled(card, "Sheets judged")).isEqualTo("28 of 28");
+        }
+
+        // The 31,400 is deliberately larger than the 9,000 + 1,500 in the report beside it, so a card
+        // reading the report's own figure fails here.
+        @Test
+        void aFinishedRunCountsEveryTokenItSpentRatherThanTheLastCallsOwn() {
+            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Applied(
+                    new CullReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false),
+                    new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), null, 31_400L));
+
+            assertThat(labelled(card, "Tokens used")).isEqualTo("31,400");
+        }
+
+        @Test
+        void aRunThatReachedNoModelCountsNoTokensRatherThanZero() {
+            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Applied(
+                    CullReport.nothingSpent("external-agent", 0),
+                    new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), null, 0L));
+
+            assertThat(card.counts()).extracting(Count::label).doesNotContain("Tokens used");
+        }
+
+        @Test
+        void aRunWhoseSpendCouldNotBeReadBackCountsNoTokensAtAll() {
+            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Applied(
+                    new CullReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false),
+                    new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), null, null));
+
+            assertThat(card.counts()).extracting(Count::label).doesNotContain("Tokens used");
+        }
+
+        @Test
+        void aRunCancelledBeforeItsSheetsWereBuiltCountsNoneOfThem() {
+            final RunResultView card = card(RunMode.SIFT,
+                    new CullJobOutcome.Cancelled(CullReport.nothingSpent("anthropic", 0), null));
+
+            assertThat(card.heading()).isEqualTo("Sifting stopped.");
+            assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
+            assertThat(card.counts()).isEmpty();
+        }
+
+        @Test
+        void aRunCancelledBeforeItsSheetsWereBuiltPromisesNoWayToContinue() {
+            final RunResultView card = card(RunMode.SIFT,
+                    new CullJobOutcome.Cancelled(CullReport.nothingSpent("anthropic", 0), null));
+
+            assertThat(card.action()).isNull();
+            assertThat(card.detail())
+                    .isEqualTo("No sheets were built yet, and nothing was sent to your provider.");
+        }
+
+        @Test
+        void aRunTheUserStoppedOffersToContinueRatherThanLeavingThemToFindTheWayBack() {
+            final RunResultView card = card(RunMode.SIFT, waiting(WaitingReason.CANCELLED));
+
+            assertThat(card.heading()).isEqualTo("Sifting stopped.");
+            assertThat(card.action()).isEqualTo(new CardAction.ContinueRun(
+                    "You can continue at any time.", "Continue sifting", PREP_DIR));
+        }
+
+        // The archive happens before the sheets are built, so every ending is reachable with it already
+        // done. Hence one per arm.
+        @Test
+        void aRunThatMovedAPreviousOneOutOfTheWaySaysNothingAboutIt() {
+            final Path graveyard = Path.of("logs", "sift-prep", "graveyard", "2019");
+
+            assertThat(List.of(
+                    card(RunMode.SIFT, new CullJobOutcome.Applied(
+                            CullReport.nothingSpent("anthropic", 0),
+                            new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), graveyard, null)),
+                    card(RunMode.SIFT, new CullJobOutcome.Waiting(waitingJob(new ShardTally(0, 0, 28)),
+                            WaitingReason.SHARDS_OUTSTANDING, CullReport.nothingSpent("anthropic", 28),
+                            graveyard)),
+                    card(RunMode.SIFT, new CullJobOutcome.Blocked(waitingJob(new ShardTally(28, 28, 28)),
+                            List.of(), CullReport.nothingSpent("anthropic", 0), graveyard)),
+                    card(RunMode.SIFT, new CullJobOutcome.Cancelled(
+                            CullReport.nothingSpent("anthropic", 0), graveyard))))
+                    .allSatisfy(card -> assertThat(String.valueOf(card.detail()))
+                            .doesNotContain(graveyard.toString()));
+        }
+
+        // Reached by going on without the sheets still owed, and by an apply refused on those same
+        // missing sheets.
+        @Test
+        void aRunBlockedWithSheetsStillOwedDoesNotClaimTheyAllCameBack() {
+            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
+                    waitingJob(new ShardTally(26, 26, 28)), List.of(),
+                    CullReport.nothingSpent("anthropic", 0), null));
+
+            assertThat(requireNonNull(card.detail()))
+                    .startsWith("2 sheets never came back")
+                    .doesNotContain("Every sheet came back");
+        }
+
+        // The tally is deliberately three different numbers: 1 sheet never arrived, 3 came back wrong,
+        // and 24 of 28 passed. Any two of them being equal would let a wrong reading look right.
+        @Test
+        void aBlockedRunSeparatesTheSheetsThatNeverCameFromTheOnesThatCameBackWrong() {
+            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
+                    waitingJob(new ShardTally(27, 24, 28)), List.of(),
+                    CullReport.nothingSpent("anthropic", 0), null));
+
+            assertThat(requireNonNull(card.detail())).startsWith("1 sheet never came back");
+            assertThat(labelled(card, "Sheets judged")).isEqualTo("24 of 28");
+        }
+
+        @Test
+        void aRunBlockedWithEverySheetInSaysSo() {
+            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
+                    waitingJob(new ShardTally(28, 28, 28)), List.of(),
+                    CullReport.nothingSpent("anthropic", 0), null));
+
+            assertThat(requireNonNull(card.detail())).startsWith("Every sheet came back");
+        }
+
+        // A failed card counts nothing, so what the run did reach would appear on no screen at all.
+        @Test
+        void aRunTheProviderGaveUpOnStillCountsWhatItSpent() {
+            final RunResultView card = RunResults.incompleteResult(RunMode.SIFT, new CullException(
+                    "sheet 3 came back wrong twice",
+                    new CullReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false)));
+
+            assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
+            assertThat(card.location()).isEqualTo(Location.RUNS);
+            assertThat(labelled(card, "Sheets judged")).isEqualTo("4");
+            assertThat(labelled(card, "Calls to your provider")).isEqualTo("6");
+            assertThat(labelled(card, "Tokens used")).isEqualTo("10,500");
+        }
+
+        @Test
+        void aRunTheProviderGaveUpOnDoesNotQuoteTheReportItRaised() {
+            final RunResultView card = RunResults.incompleteResult(RunMode.SIFT,
+                    new CullException("montage-003: 26 verdicts for 25 tiles", (CullReport) null));
+
+            assertThat(requireNonNull(card.detail()))
+                    .doesNotContain("montage-003")
+                    .contains("nothing was moved");
+            assertThat(card.counts()).isEmpty();
+        }
     }
 
-    // The four counts a row is drawn for only when it is non-zero, against a clean import that has
-    // none of them.
-    @Test
-    void anImportThatWentPerfectlyDrawsOnlyTheRowSayingSo() {
-        final RunResultView card = card(RunMode.IMPORT,
-                new ImportSummary(1204, 1204, 0, 0, 0, 0, false));
+    @Nested
+    class Sorting {
 
-        assertThat(card.counts()).extracting(Count::label).containsExactly("Imported");
+        @Test
+        void aFinishedRunOffersToSiftTheOneTimeframeItFilled() {
+            final RunResultView card = card(RunMode.SORT, sortSummary(List.of()));
+
+            assertThat(card.action()).isEqualTo(new CardAction.SiftNow("Sift 2019", 2019, 2));
+        }
+
+        @Test
+        void aRunWithSomethingToSiftSaysNothingUnderItsHeading() {
+            final RunResultView card = card(RunMode.SORT, sortSummary(List.of()));
+
+            assertThat(card.detail()).isNull();
+        }
+
+        @Test
+        void aRunThatFiledNothingOffersNoSift() {
+            final RunResultView card = card(RunMode.SORT, sortedInto(Set.of()));
+
+            assertThat(card.action()).isNull();
+        }
+
+        @Test
+        void aRunStoppedBeforeAnythingMovedSaysSoRatherThanBlamingTheInbox() {
+            final RunResultView card = card(RunMode.SORT, allOf(0, "none", true));
+
+            assertThat(card.detail()).isEqualTo("Your Inbox is unchanged.");
+        }
+
+        @Test
+        void aRunStoppedAfterFilingSomeCountsWhatIsStillInTheInbox() {
+            final RunResultView card = card(RunMode.SORT, sortedInto(Set.of(2019), true));
+
+            assertThat(card.detail()).isEqualTo("205 of them are still in your Inbox.");
+        }
+
+        @Test
+        void aRunStoppedWithOneFileLeftSaysOneRatherThanCountingIt() {
+            final RunResultView card = card(RunMode.SORT, stoppedSortLeaving(1));
+
+            assertThat(card.detail()).isEqualTo("One of them is still in your Inbox.");
+        }
+
+        @Test
+        void aRunStoppedAfterTheLastFileSaysNothingIsLeft() {
+            final RunResultView card = card(RunMode.SORT, stoppedSortLeaving(0));
+
+            assertThat(card.detail()).isEqualTo("None of them are still in your Inbox.");
+        }
+
+        @Test
+        void aStoppedRunIsNotHeadedAsFinished() {
+            final RunResultView card = card(RunMode.SORT, sortedInto(Set.of(2019), true));
+
+            assertThat(card.heading()).isEqualTo("Sorting stopped.");
+            assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
+        }
+
+        @Test
+        void aRunThatFinishedDespiteTheButtonBeingPressedIsHeadedAsFinished() {
+            final RunResultView card = card(RunMode.SORT, sortedInto(Set.of(2019), false));
+
+            assertThat(card.heading()).isEqualTo("Sorting finished.");
+            assertThat(card.tone()).isEqualTo(Tone.FINISHED);
+        }
+
+        @Test
+        void aNarrowedRunThatFiledNothingBlamesTheYearRatherThanTheWholeInbox() {
+            final RunResultView card = RunResults.of(RunMode.SORT, allOf(0, "none"), "2024");
+
+            assertThat(card.detail()).isEqualTo("Nothing in 2024 was ready to sort.");
+        }
+
+        @Test
+        void anUnnarrowedRunThatFiledNothingSaysTheInboxHeldNothing() {
+            final RunResultView card = card(RunMode.SORT, allOf(0, "none"));
+
+            assertThat(card.detail()).isEqualTo("Nothing in your Inbox was ready to sort.");
+        }
+
+        @Test
+        void aRunThatSetEveryFileAsideSaysWhyAndWhereTheyWent() {
+            final RunResultView card = card(RunMode.SORT, allOf(39, "lowRes"));
+
+            assertThat(card.detail())
+                    .isEqualTo("Nothing ended up in Sorted, so there is nothing to sift yet. Their "
+                            + "file size or their resolution is under what a sift looks at, so they "
+                            + "are in Review instead.");
+        }
+
+        @Test
+        void aRunThatCouldDateNothingSaysThereIsNoYearToFileThemUnder() {
+            final RunResultView card = card(RunMode.SORT, allOf(12, "unsorted"));
+
+            assertThat(requireNonNull(card.detail()))
+                    .contains("Not one of them carries a date that can be trusted");
+        }
+
+        @Test
+        void aRunThatFoundEverythingAlreadyInTheLibrarySaysSo() {
+            final RunResultView card = card(RunMode.SORT, allOf(7, "reimports"));
+
+            assertThat(requireNonNull(card.detail())).contains("in your Library already");
+        }
+
+        @Test
+        void aRunWhoseFilesWentSeveralWaysLeavesTheReasonToTheRows() {
+            final RunResultView card = card(RunMode.SORT,
+                    new SortSummary(20, 0, 0, 0, 0, 12, 8, 0, List.of(), Guessed.NONE, List.of(), Set.of(), List.of(), false, 0));
+
+            assertThat(requireNonNull(card.detail()))
+                    .endsWith("The rows below say what became of each one.");
+        }
+
+        @Test
+        void aRunWithNothingInScopeSaysSoRatherThanNamingRowsItHasNone() {
+            final RunResultView card = card(RunMode.SORT,
+                    new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(), List.of(), false, 0));
+
+            assertThat(card.detail()).isEqualTo("Nothing in your Inbox was ready to sort.");
+        }
+
+        @Test
+        void aRunSpanningSeveralTimeframesOffersNoSiftRatherThanPickingOne() {
+            final RunResultView card = card(RunMode.SORT, sortedInto(Set.of(2019, 2020)));
+
+            assertThat(card.action()).isNull();
+        }
     }
 
-    @Test
-    void anImportThatLeftPhotosBehindSaysSoInItsHeading() {
-        final RunResultView card = card(RunMode.IMPORT,
-                new ImportSummary(1204, 1195, 0, 2, 7, 0, false));
+    @Nested
+    class MovingToTheLibrary {
 
-        assertThat(card.heading()).isEqualTo("Importing finished, with 9 left behind.");
+        @Test
+        void aStoppedRunIsNotHeadedAsFinishedAndCountsWhatIsStillInSorted() {
+            final RunResultView card = card(RunMode.MOVE_TO_LIBRARY,
+                    new CommitSummary(4, 300, Map.of(LibraryBucket.PHOTOS, 4), true));
+
+            assertThat(card.heading()).isEqualTo("Moving to library stopped.");
+            assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
+            assertThat(card.detail()).isEqualTo("300 of them are still in Sorted.");
+        }
+
+        @Test
+        void aRunStoppedWithOneFileLeftSaysOneRatherThanCountingIt() {
+            final RunResultView card = card(RunMode.MOVE_TO_LIBRARY,
+                    new CommitSummary(4, 1, Map.of(LibraryBucket.PHOTOS, 4), true));
+
+            assertThat(card.detail()).isEqualTo("One of them is still in Sorted.");
+        }
+
+        @Test
+        void aRunStoppedAfterTheLastFileSaysNothingIsLeft() {
+            final RunResultView card = card(RunMode.MOVE_TO_LIBRARY,
+                    new CommitSummary(4, 0, Map.of(LibraryBucket.PHOTOS, 4), true));
+
+            assertThat(card.detail()).isEqualTo("None of them are still in Sorted.");
+        }
+
+        @Test
+        void aRunThatReachedNoPartOfTheLibraryStillSaysSoRatherThanShowingNothing() {
+            final RunResultView card = card(RunMode.MOVE_TO_LIBRARY,
+                    new CommitSummary(0, 0, Map.of(), false));
+
+            assertThat(card.counts()).extracting(Count::label, Count::value)
+                    .containsExactly(tuple("Moved to your Library", "0"));
+        }
+
+        @Test
+        void aFileUnderNoPartOfTheLibraryThisAppFilesIntoIsStillCounted() {
+            final RunResultView card = card(RunMode.MOVE_TO_LIBRARY,
+                    new CommitSummary(4, 0, Map.of(LibraryBucket.OTHER, 4), false));
+
+            assertThat(labelled(card, "Elsewhere in your Library")).isEqualTo("4");
+        }
     }
 
-    // A folder it could not open is not a photo left behind. Counting one would head almost every
-    // card import as gone wrong, since a Windows-formatted card always carries one.
-    @Test
-    void aFolderItCouldNotOpenLeavesTheHeadingAlone() {
-        final RunResultView card = card(RunMode.IMPORT,
-                new ImportSummary(1204, 1204, 0, 0, 0, 3, false));
+    @Nested
+    class Rescuing {
 
-        assertThat(card.heading()).isEqualTo("Importing finished.");
+        @Test
+        void aStoppedRunIsNotHeadedAsFinishedAndCountsWhatIsStillInTheFolder() {
+            final RunResultView card = card(RunMode.RESCUE, new RescueSummary(7, 0, 0, 1200, false, true));
+
+            assertThat(card.heading()).isEqualTo("Rescuing stopped.");
+            assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
+            assertThat(card.detail())
+                    .isEqualTo("1,200 photos and videos are still in the folder you started from.");
+        }
+
+        @Test
+        void aStoppedRunThatLeftOnePhotoSaysSoInTheSingular() {
+            final RunResultView card = card(RunMode.RESCUE, new RescueSummary(7, 0, 0, 1, false, true));
+
+            assertThat(card.detail())
+                    .isEqualTo("One photo or video is still in the folder you started from.");
+        }
+
+        // Reachable: a stop taken after the last photo moved, with only notes left in the tail.
+        @Test
+        void aStoppedRunThatLeftNoMediaSaysThatRatherThanCountingZero() {
+            final RunResultView card = card(RunMode.RESCUE, new RescueSummary(7, 0, 0, 0, false, true));
+
+            assertThat(card.detail())
+                    .isEqualTo("No photos or videos are left in the folder you started from.");
+        }
+
+        @Test
+        void aStoppedRunStillNamesWhereTheUndatedOnesLanded() {
+            final RunResultView card = card(RunMode.RESCUE, new RescueSummary(7, 3, 0, 4, false, true));
+
+            assertThat(card.detail())
+                    .isEqualTo("4 photos and videos are still in the folder you started from.");
+            assertThat(labelled(card, "Moved to Unsorted")).isEqualTo("3");
+        }
+
+        @Test
+        void aRunCountsBothOfTheDestinationsItMovedTo() {
+            final RunResultView card = card(RunMode.RESCUE, new RescueSummary(12, 2, 0, 0, true, false));
+
+            assertThat(card.heading()).isEqualTo("Rescuing finished.");
+            assertThat(labelled(card, "Moved to Sorted")).isEqualTo("12");
+            assertThat(labelled(card, "Moved to Unsorted")).isEqualTo("2");
+            assertThat(card.detail()).isNull();
+        }
+
+        @Test
+        void aRunThatDatedEverythingDrawsNoRowSayingSo() {
+            final RunResultView card = card(RunMode.RESCUE, new RescueSummary(12, 0, 0, 0, true, false));
+
+            assertThat(card.counts()).extracting(Count::label).containsExactly("Moved to Sorted");
+            assertThat(card.detail()).isNull();
+        }
     }
 
-    @Test
-    void aTroubledImportStillCarriesNoWarningStripe() {
-        final RunResultView card = card(RunMode.IMPORT,
-                new ImportSummary(1204, 1190, 4, 2, 3, 5, false));
+    @Nested
+    class Importing {
 
-        assertThat(card.warning()).isNull();
-    }
+        @Test
+        void everyWayAPhotoEndsUpGetsItsOwnRow() {
+            final RunResultView card = card(RunMode.IMPORT,
+                    new ImportSummary(1204, 1190, 4, 2, 3, 5, false));
 
-    // The graveyard is a folder the reader never chose, and nothing was lost, so the card says
-    // nothing about it. Every arm gets one, because the archive happens before the sheets are built
-    // and all four endings are reachable with it already done.
-    @Test
-    void aSiftThatMovedAPreviousRunOutOfTheWaySaysNothingAboutIt() {
-        final Path graveyard = Path.of("logs", "sift-prep", "graveyard", "2019");
+            assertThat(card.counts()).extracting(Count::label, Count::value).containsExactly(
+                    tuple("Imported", "1,190"),
+                    tuple("Skipped: already in your Inbox", "4"),
+                    tuple("Could not be read", "3"),
+                    tuple("Arrived broken", "2"),
+                    tuple("Folders could not be opened", "5"));
+        }
 
-        assertThat(List.of(
-                card(RunMode.SIFT, new CullJobOutcome.Applied(
-                        CullReport.nothingSpent("anthropic", 0),
-                        new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), graveyard, null)),
-                card(RunMode.SIFT, new CullJobOutcome.Waiting(waitingJob(new ShardTally(0, 0, 28)),
-                        WaitingReason.SHARDS_OUTSTANDING, CullReport.nothingSpent("anthropic", 28),
-                        graveyard)),
-                card(RunMode.SIFT, new CullJobOutcome.Blocked(waitingJob(new ShardTally(28, 28, 28)),
-                        List.of(), CullReport.nothingSpent("anthropic", 0), graveyard)),
-                card(RunMode.SIFT, new CullJobOutcome.Cancelled(
-                        CullReport.nothingSpent("anthropic", 0), graveyard))))
-                .allSatisfy(card -> assertThat(String.valueOf(card.detail()))
-                        .doesNotContain(graveyard.toString()));
-    }
+        // Every count a row is drawn for only when it is non-zero, against a clean import that has none
+        // of them.
+        @Test
+        void aRunThatWentPerfectlyDrawsOnlyTheRowSayingSo() {
+            final RunResultView card = card(RunMode.IMPORT,
+                    new ImportSummary(1204, 1204, 0, 0, 0, 0, false));
 
-    // Reached by going on without the sheets still owed, and by an apply refused on those same
-    // missing sheets. Opening on every sheet having come back is false on both.
-    @Test
-    void aSiftBlockedWithSheetsStillOwedDoesNotClaimTheyAllCameBack() {
-        final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
-                waitingJob(new ShardTally(26, 26, 28)), List.of(),
-                CullReport.nothingSpent("anthropic", 0), null));
+            assertThat(card.counts()).extracting(Count::label).containsExactly("Imported");
+        }
 
-        assertThat(requireNonNull(card.detail()))
-                .startsWith("2 sheets never came back")
-                .doesNotContain("Every sheet came back");
-    }
+        @Test
+        void aRunThatLeftPhotosBehindSaysSoInItsHeading() {
+            final RunResultView card = card(RunMode.IMPORT,
+                    new ImportSummary(1204, 1195, 0, 2, 7, 0, false));
 
-    // The tally is deliberately three different numbers: 1 sheet never arrived, 3 came back wrong,
-    // and 24 of 28 passed. Any two of them being equal would let a wrong reading look right.
-    @Test
-    void aBlockedSiftSeparatesTheSheetsThatNeverCameFromTheOnesThatCameBackWrong() {
-        final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
-                waitingJob(new ShardTally(27, 24, 28)), List.of(),
-                CullReport.nothingSpent("anthropic", 0), null));
+            assertThat(card.heading()).isEqualTo("Importing finished, with 9 left behind.");
+        }
 
-        assertThat(requireNonNull(card.detail())).startsWith("1 sheet never came back");
-        assertThat(labelled(card, "Sheets judged")).isEqualTo("24 of 28");
-    }
+        // A folder it could not open is not a photo left behind. Counting one would head almost every
+        // card import as gone wrong, since a Windows-formatted card always carries one.
+        @Test
+        void aFolderItCouldNotOpenLeavesTheHeadingAlone() {
+            final RunResultView card = card(RunMode.IMPORT,
+                    new ImportSummary(1204, 1204, 0, 0, 0, 3, false));
 
-    @Test
-    void aSiftBlockedWithEverySheetInSaysSo() {
-        final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
-                waitingJob(new ShardTally(28, 28, 28)), List.of(),
-                CullReport.nothingSpent("anthropic", 0), null));
+            assertThat(card.heading()).isEqualTo("Importing finished.");
+        }
 
-        assertThat(requireNonNull(card.detail())).startsWith("Every sheet came back");
-    }
+        @Test
+        void aTroubledRunStillCarriesNoWarningStripe() {
+            final RunResultView card = card(RunMode.IMPORT,
+                    new ImportSummary(1204, 1190, 4, 2, 3, 5, false));
 
-    // A failed card counts nothing, so what the run did reach would appear on no screen at all.
-    @Test
-    void aSiftTheProviderGaveUpOnStillCountsWhatItSpent() {
-        final RunResultView card = RunResults.incompleteResult(RunMode.SIFT, new CullException(
-                "sheet 3 came back wrong twice",
-                new CullReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false)));
-
-        assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
-        assertThat(card.location()).isEqualTo(Location.RUNS);
-        assertThat(labelled(card, "Sheets judged")).isEqualTo("4");
-        assertThat(labelled(card, "Calls to your provider")).isEqualTo("6");
-        assertThat(labelled(card, "Tokens used")).isEqualTo("10,500");
-    }
-
-    @Test
-    void aSiftTheProviderGaveUpOnDoesNotQuoteTheReportItRaised() {
-        final RunResultView card = RunResults.incompleteResult(RunMode.SIFT,
-                new CullException("montage-003: 26 verdicts for 25 tiles", (CullReport) null));
-
-        assertThat(requireNonNull(card.detail()))
-                .doesNotContain("montage-003")
-                .contains("Your photos are still in Sorted");
-        assertThat(card.counts()).isEmpty();
+            assertThat(card.warning()).isNull();
+        }
     }
 
     private static String labelled(final RunResultView card, final String label) {

@@ -1,6 +1,7 @@
 package photos.sluice.adapter.ui.view;
 
 import javafx.css.PseudoClass;
+import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
@@ -200,7 +201,11 @@ class RunResultPaneTest {
         final Parent pane = onFxThread(() -> shown(new RunResultView("Sorting stopped.", Tone.FAILED,
                 "Sluice could not do that.", List.of(), null, null, "Done")));
 
+        // The second assertion is what makes the first mean anything. The rule keyed on the mark is
+        // `.run-result:failed .run-result-detail`. A mark with nothing under it to reach draws no
+        // differently, so an assertion on the mark alone cannot fail.
         assertThat(pane.getPseudoClassStates()).contains(FAILED);
+        assertThat(pane.lookup(".run-result-detail")).isNotNull();
     }
 
     @Test
@@ -209,7 +214,11 @@ class RunResultPaneTest {
                 Tone.FAILED, "That file holds something other than the text Sluice wrote there.",
                 List.of(), null, null, "Done")));
 
-        assertThat(pane.lookup("#run-result-detail-box").getStyleClass()).contains("warning-box");
+        // Same pairing as the failed-mark test above. `.warning-box .selectable-text` is what
+        // changes colour and weight, so the box's own class is only half the claim.
+        final Node box = pane.lookup("#run-result-detail-box");
+        assertThat(box.getStyleClass()).contains("warning-box");
+        assertThat(box.lookup(".selectable-text")).isNotNull();
     }
 
     @Test

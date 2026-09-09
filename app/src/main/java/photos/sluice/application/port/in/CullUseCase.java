@@ -30,15 +30,15 @@ public interface CullUseCase {
      * @return {@link CullRuns} every run found, diagnosed and ordered by scope, or that the root
      *     could not be read
      */
-    // No UI consumes this port yet, so no caller currently invokes this method through it.
+    // Nothing invokes this method through the port yet.
     @SuppressWarnings("unused")
     CullRuns cullRuns();
 
     /**
      * Picks a paused run back up. A montage still missing its shard sends the run back to the
      * configured provider, unless allowPartial waives it. A full shard set goes straight to apply.
-     * The outcome then says which of the three things happened: applied, waiting on shards still
-     * to come, or blocked on problems apply refused to carry out.
+     * The outcome then says what happened: applied, waiting on shards still to come, or blocked on
+     * problems apply refused to carry out.
      *
      * @param prepDir {@link Path} the prep directory to re-validate
      * @param allowPartial boolean whether missing shards may be waived
