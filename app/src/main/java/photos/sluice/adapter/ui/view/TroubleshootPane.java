@@ -10,7 +10,6 @@ import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.TroubleshootPresenter;
@@ -24,6 +23,8 @@ import photos.sluice.adapter.ui.TroubleshootView.ProblemStack;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The troubleshoot screen: what one damaged sift's records still have wrong with them, and what a
@@ -75,7 +76,7 @@ final class TroubleshootPane {
         detailCopy.setId("troubleshoot-detail-copy");
         detailCopy.getStyleClass().add("button-quiet");
         final TextArea trace = CopyableTrace.area("troubleshoot-detail-text", "");
-        final var detailHead = new HBox(detailToggle, spacer(), detailCopy);
+        final var detailHead = new HBox(detailToggle, SettingsRows.spacer(), detailCopy);
         detailHead.setAlignment(Pos.CENTER_LEFT);
         final var detail = new VBox(detailHead, trace);
         detail.setId("troubleshoot-detail");
@@ -99,7 +100,7 @@ final class TroubleshootPane {
 
         final var controls = new Controls(back, heading, page, checking, summary, problems,
                 nothingLeft, detail, detailToggle, detailCopy, trace, actions, fold, navigation,
-                new ArrayList<>(), new ArrayList<>());
+                new AtomicBoolean(), new AtomicReference<>());
         final Runnable redraw = new Runnable() {
             @Override
             public void run() {
@@ -110,17 +111,6 @@ final class TroubleshootPane {
         presenter.setRepaint(() -> Platform.runLater(redraw));
         redraw.run();
         return page;
-    }
-
-    /**
-     * Something that pushes what follows it to the far side of a row.
-     *
-     * @return {@link Region} the gap
-     */
-    private static Region spacer() {
-        final var gap = new Region();
-        HBox.setHgrow(gap, Priority.ALWAYS);
-        return gap;
     }
 
     /**
@@ -140,17 +130,17 @@ final class TroubleshootPane {
      * @param actions {@link HBox} the buttons acting on the whole run
      * @param fold {@link SectionFold} opens and shuts the report
      * @param navigation {@link ScreenNavigation} how this screen opens another
-     * @param unfolded a {@link List} of {@link VBox} holding the report while it is open, empty
-     *     while it is shut
-     * @param reported a {@link List} of {@link Integer} the report number the banner now up came
-     *     from, empty before the first draw. Held so a redraw leaves the banner it already put up
-     *     alone rather than restarting its four seconds
+     * @param unfolded {@link AtomicBoolean} whether the report is open
+     * @param reported an {@link AtomicReference} to a nullable {@link Integer} the report number the banner
+     *     now up came from, null before the first draw. Held so a redraw leaves the banner it
+     *     already put up alone rather than restarting the clock on it
      */
     private record Controls(Button back, TextField heading, VBox page, TextArea checking,
                             TextArea summary,
                             VBox problems, TextArea nothingLeft, VBox detail, Button detailToggle,
                             Button detailCopy, TextArea trace, HBox actions, SectionFold fold,
-                            ScreenNavigation navigation, List<VBox> unfolded, List<Integer> reported) {
+                            ScreenNavigation navigation, AtomicBoolean unfolded,
+                            AtomicReference<@Nullable Integer> reported) {
 
         /**
          * Wires the fold, which is the one control whose press changes nothing on disk.
@@ -159,11 +149,7 @@ final class TroubleshootPane {
          */
         private void wireTheFold(final Runnable redraw) {
             this.detailToggle.setOnAction(_ -> {
-                if (this.unfolded.contains(this.detail)) {
-                    this.unfolded.clear();
-                } else {
-                    this.unfolded.add(this.detail);
-                }
+                this.unfolded.set(!this.unfolded.get());
                 redraw.run();
             });
         }
@@ -197,25 +183,24 @@ final class TroubleshootPane {
          * problem where it was, which is the one case where nothing else on the screen changed.
          *
          * <p>Only a report the screen has not drawn yet puts up a new banner. Every press redraws
-         * the whole screen, and a fresh banner each time would restart the four seconds for as long
-         * as the reader kept pressing.
+         * the whole screen, and a fresh banner each time would restart its clock for as long as the
+         * reader kept pressing.
          *
          * @param said {@link Message} what to report, or null where there is nothing
          * @param number int which report this is, counted by the presenter
          */
         private void report(final @Nullable Message said, final int number) {
-            if (this.reported.equals(List.of(number))) {
+            if (Integer.valueOf(number).equals(this.reported.get())) {
                 return;
             }
-            this.reported.clear();
-            this.reported.add(number);
+            this.reported.set(number);
             this.page.getChildren().removeIf(node -> BANNER.equals(node.getId()));
             if (said == null) {
                 return;
             }
             // A report with nothing to press is one short sentence about the press just made, so it
-            // leaves on its own. One offering a screen stays: four seconds is not long enough to
-            // read a sentence and reach for what it offers.
+            // leaves on its own. One offering a screen stays: the wait a banner earns is not long
+            // enough to read a sentence and reach for what it offers.
             final Hyperlink locationLink;
             if (said.location() == null) {
                 locationLink = null;
@@ -303,13 +288,12 @@ final class TroubleshootPane {
          */
         private void drawDetail(final @Nullable Detail detail,
                                 final TroubleshootPresenter presenter) {
-            this.detail.setVisible(detail != null);
-            this.detail.setManaged(detail != null);
+            SettingsRows.showIf(this.detail, detail != null);
             if (detail == null) {
                 return;
             }
             this.detailToggle.setText(detail.label());
-            SettingsRows.pointing(this.detailToggle, this.unfolded.contains(this.detail));
+            SettingsRows.pointing(this.detailToggle, this.unfolded.get());
             this.detailCopy.setText(presenter.detailCopied() ? detail.copied() : detail.copy());
             this.detailCopy.setOnAction(_ -> {
                 final String text = presenter.detail();
@@ -319,7 +303,7 @@ final class TroubleshootPane {
                 }
             });
             this.trace.setText(detail.text());
-            this.fold.to(this.unfolded.contains(this.detail));
+            this.fold.to(this.unfolded.get());
         }
 
         /**
@@ -331,15 +315,14 @@ final class TroubleshootPane {
          */
         private void drawActions(final List<Action> actions,
                                  final TroubleshootPresenter presenter, final Runnable redraw) {
-            final List<Node> buttons = new ArrayList<>();
-            actions.forEach(action -> buttons.add(SettingsRows.actionButton(action.id(),
-                    action.label(), action.leading(), action.confirm(), () -> {
-                        presenter.press(action);
-                        redraw.run();
-                    })));
-            this.actions.getChildren().setAll(buttons);
-            this.actions.setVisible(!actions.isEmpty());
-            this.actions.setManaged(!actions.isEmpty());
+            this.actions.getChildren().setAll(actions.stream()
+                    .map(action -> SettingsRows.actionButton(action.id(), action.label(),
+                            action.leading(), action.confirm(), () -> {
+                                presenter.press(action);
+                                redraw.run();
+                            }))
+                    .toList());
+            SettingsRows.showIf(this.actions, !actions.isEmpty());
         }
 
         /**
@@ -354,8 +337,8 @@ final class TroubleshootPane {
                                 final Runnable redraw) {
             final var lines = new VBox();
             lines.getStyleClass().add("runs-card-lines");
-            addIfPresent(lines, problem.problem(), "runs-card-headline");
-            addIfPresent(lines, problem.about(), "runs-card-detail");
+            SettingsRows.addIfPresent(lines, problem.problem(), "runs-card-headline");
+            SettingsRows.addIfPresent(lines, problem.about(), "runs-card-detail");
 
             final var row = new VBox(lines);
             row.setId(problem.id());
@@ -364,7 +347,7 @@ final class TroubleshootPane {
                 return row;
             }
             final List<Node> buttons = new ArrayList<>();
-            buttons.add(spacer());
+            buttons.add(SettingsRows.spacer());
             problem.options().forEach(option ->
                     buttons.add(optionButton(problem, option, presenter, redraw)));
             final var offers = new HBox(buttons.toArray(new Node[0]));
@@ -392,23 +375,6 @@ final class TroubleshootPane {
                         presenter.press(problem, option);
                         Platform.runLater(redraw);
                     }));
-        }
-
-        /**
-         * Adds a line to a row, where there is one to add.
-         *
-         * @param into {@link VBox} the row's lines
-         * @param value what the line reads, or null where the row has no such line
-         * @param styleClass {@link String} the line's own style class
-         */
-        private static void addIfPresent(final VBox into, final @Nullable String value,
-                                         final String styleClass) {
-            if (value == null) {
-                return;
-            }
-            final TextArea line = SelectableText.prose(value);
-            line.getStyleClass().add(styleClass);
-            into.getChildren().add(line);
         }
     }
 }

@@ -702,7 +702,7 @@ public class RunSetupPresenter {
                                   final List<Integer> narrowed) {
         final Set<Integer> sifted = this.siftedMonthsOf(row.year());
         return new YearChoice(row.year(), "run-year-" + row.year(), String.valueOf(row.year()),
-                heldLine(row), row.year() == selected,
+                RunWords.held(row.photos(), row.videos()), row.year() == selected,
                 row.year() == selected && !this.monthsCollapsed, !sifted.isEmpty(),
                 monthChoices(row, row.year() == selected ? narrowed : List.of(), sifted));
     }
@@ -734,16 +734,6 @@ public class RunSetupPresenter {
                         narrowed.contains(month.month()),
                         sifted.contains(month.month())))
                 .toList();
-    }
-
-    /**
-     * What one year's row says it holds.
-     *
-     * @param row {@link YearRow} the year's counts
-     * @return {@link String} the counts written out
-     */
-    private static String heldLine(final YearRow row) {
-        return RunWords.held(row.photos(), row.videos());
     }
 
     /**

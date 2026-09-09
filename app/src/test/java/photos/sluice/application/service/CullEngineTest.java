@@ -1697,12 +1697,17 @@ class CullEngineTest {
     }
 
     // A plain unchecked exception, so the guard is proven over the whole unchecked space rather
-    // than a list of expected types.
+    // than a list of expected types. Only a folder, which is what the run's own mtime is read
+    // from. A cull reads every photo's mtime too, and failing those would stop the run before it
+    // reached the read under test.
     private static final class FailingLastModified extends NioMediaStore {
 
         @Override
         public Instant lastModifiedTime(final Path path) {
-            throw new IllegalStateException("simulated stat failure");
+            if (Files.isDirectory(path)) {
+                throw new IllegalStateException("simulated stat failure");
+            }
+            return super.lastModifiedTime(path);
         }
     }
 

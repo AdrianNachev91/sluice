@@ -106,7 +106,7 @@ public class DisasterDrawer {
         final Instant cutoff = Instant.now().minus(RETENTION);
         final List<Path> expired = this.mediaStore.listFiles(cullPrepRoot).stream()
                 .filter(DisasterDrawer::isDrawerEntry)
-                .filter(file -> isExpired(file, cutoff))
+                .filter(file -> isExpired(file, cutoff, TIMESTAMP_PREFIX))
                 .toList();
         expired.forEach(this.mediaStore::delete);
         return expired.size();
@@ -138,7 +138,8 @@ public class DisasterDrawer {
                 .distinct()
                 .toList();
         final Instant cutoff = Instant.now().minus(RETENTION);
-        final List<Path> expired = graveyards.stream().filter(dir -> isExpiredGraveyard(dir, cutoff)).toList();
+        final List<Path> expired = graveyards.stream()
+                .filter(dir -> isExpired(dir, cutoff, TIMESTAMP_SUFFIX)).toList();
         expired.forEach(dir -> this.deleteGraveyard(dir, allFiles));
         return expired.size();
     }
@@ -156,25 +157,30 @@ public class DisasterDrawer {
     }
 
     /**
-     * Whether a graveyard folder's own filename-embedded timestamp is older than cutoff. A name
-     * that doesn't parse is never expired - it is left alone rather than guessed at.
+     * Whether a name's own embedded timestamp is older than cutoff. A name that doesn't parse is
+     * never expired - it is left alone rather than guessed at.
      *
-     * @param dir {@link Path} the candidate graveyard folder
+     * @param path {@link Path} the candidate file or folder
      * @param cutoff {@link Instant} the retention cutoff
-     * @return boolean true if dir was created before cutoff
+     * @param timestampPattern {@link Pattern} where in the name the timestamp sits, capturing it in
+     *         group 1
+     * @return boolean true if the name carries a time before cutoff
      */
-    private static boolean isExpiredGraveyard(final Path dir, final Instant cutoff) {
-        return parseGraveyardTimestamp(dir.getFileName().toString()).filter(t -> t.isBefore(cutoff)).isPresent();
+    private static boolean isExpired(final Path path, final Instant cutoff, final Pattern timestampPattern) {
+        return timestampIn(path.getFileName().toString(), timestampPattern)
+                .filter(at -> at.isBefore(cutoff)).isPresent();
     }
 
     /**
-     * Parses the trailing timestamp off a graveyard folder's own name, if it has one.
+     * Parses the timestamp out of a name, if it has one.
      *
-     * @param name {@link String} the graveyard folder's own name
-     * @return an {@link Optional} {@link Instant} the embedded creation time, if the name parses
+     * @param name {@link String} the file or folder's own name
+     * @param timestampPattern {@link Pattern} where in the name the timestamp sits, capturing it in
+     *         group 1
+     * @return an {@link Optional} {@link Instant} the embedded time, if the name parses
      */
-    private static Optional<Instant> parseGraveyardTimestamp(final String name) {
-        final Matcher matcher = TIMESTAMP_SUFFIX.matcher(name);
+    private static Optional<Instant> timestampIn(final String name, final Pattern timestampPattern) {
+        final Matcher matcher = timestampPattern.matcher(name);
         if (!matcher.matches()) {
             return Optional.empty();
         }
@@ -194,18 +200,6 @@ public class DisasterDrawer {
     private static boolean isDrawerEntry(final Path file) {
         final Path parent = file.getParent();
         return parent != null && DRAWER_DIR.equals(parent.getFileName().toString());
-    }
-
-    /**
-     * Whether file's filename-embedded filing time is older than cutoff. A name that doesn't parse
-     * is never expired - it is left alone rather than guessed at.
-     *
-     * @param file {@link Path} the candidate file
-     * @param cutoff {@link Instant} the retention cutoff
-     * @return boolean true if file was filed before cutoff
-     */
-    private static boolean isExpired(final Path file, final Instant cutoff) {
-        return parseFiledAt(file.getFileName().toString()).filter(filedAt -> filedAt.isBefore(cutoff)).isPresent();
     }
 
     /**
@@ -231,24 +225,6 @@ public class DisasterDrawer {
             n++;
         } while (this.mediaStore.exists(numbered));
         return numbered;
-    }
-
-    /**
-     * Parses the leading timestamp off a filed entry's name, if it has one.
-     *
-     * @param filename {@link String} the file name to parse
-     * @return an {@link Optional} {@link Instant} the embedded filing time, if the name parses
-     */
-    private static Optional<Instant> parseFiledAt(final String filename) {
-        final Matcher matcher = TIMESTAMP_PREFIX.matcher(filename);
-        if (!matcher.matches()) {
-            return Optional.empty();
-        }
-        try {
-            return Optional.of(LocalDateTime.parse(matcher.group(1), DisasterTimestamp.FORMAT).toInstant(ZoneOffset.UTC));
-        } catch (final DateTimeParseException e) {
-            return Optional.empty();
-        }
     }
 
     /**

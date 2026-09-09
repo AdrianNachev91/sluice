@@ -47,4 +47,12 @@ class ShardTallyTest {
         assertThatThrownBy(() -> new ShardTally(-1, 0, 3))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // The one the guard has no term of its own for. A negative total is refused because present
+    // cannot then be at or below it without going negative itself.
+    @Test
+    void negativeTotalThrows() {
+        assertThatThrownBy(() -> new ShardTally(0, 0, -1))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

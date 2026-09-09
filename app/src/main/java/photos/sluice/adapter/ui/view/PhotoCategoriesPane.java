@@ -50,7 +50,7 @@ final class PhotoCategoriesPane {
         // Replaced on every draw, since a save rebuilds every card. Whatever asks about unsaved work
         // has to read the cards standing now rather than the ones this page opened with.
         final var onScreen = new AtomicReference<List<CategoryCard.Result>>(List.of());
-        refresh(container, header, presenter, onBack, onScreen);
+        refresh(container, header, presenter, onScreen);
         return new Mounted(PageHeader.pinnedOver(header, container),
                 () -> presenter.hasUnsavedEdits(editsOf(onScreen.get())));
     }
@@ -74,12 +74,10 @@ final class PhotoCategoriesPane {
      * @param container {@link VBox} the pane's own body
      * @param header {@link PageHeader.Result} the pinned bar, which outlives every redraw
      * @param presenter {@link PhotoCategoriesPresenter} supplies the state and takes the actions
-     * @param onBack {@link Runnable} returns to the screen this was opened from
      * @param onScreen an {@link AtomicReference} to the cards now drawn, replaced by this draw
      */
     private static void refresh(final VBox container, final PageHeader.Result header,
                                 final PhotoCategoriesPresenter presenter,
-                                final Runnable onBack,
                                 final AtomicReference<List<CategoryCard.Result>> onScreen) {
         final PhotoCategoriesView view = presenter.view();
         header.clearStatus();
@@ -105,9 +103,7 @@ final class PhotoCategoriesPane {
             add(presenter, cards, built, presenter.blankCard(), view.limits(), add);
             SettingsRows.bringIntoView(built.getLast().card());
         });
-        // The summary lives in the pinned header beside Save, where the Settings screen puts its own.
-        // A refused save reads the same way on both, and it is next to the button that produced it.
-        header.save().setOnAction(_ -> onSave(presenter, container, header, onBack, built, summary, onScreen));
+        header.save().setOnAction(_ -> onSave(presenter, container, header, built, summary, onScreen));
         container.getChildren().addAll(cards, actions(add));
         onScreen.set(built);
     }
@@ -175,21 +171,20 @@ final class PhotoCategoriesPane {
      *
      * @param presenter {@link PhotoCategoriesPresenter} carries out the save
      * @param container {@link VBox} the pane's own body, redrawn once a save takes
-     * @param onBack {@link Runnable} returns to the screen this was opened from
      * @param built a {@link List} of {@link CategoryCard.Result} the controls behind each card
-     * @param summary {@link TextArea} the bar's own line, where a refusal lands
+     * @param summary {@link TextArea} the bar's own line, cleared before each save
      * @param onScreen an {@link AtomicReference} to the cards now drawn, replaced by a save that took
      */
     private static void onSave(final PhotoCategoriesPresenter presenter, final VBox container,
                                final PageHeader.Result header,
-                               final Runnable onBack, final List<CategoryCard.Result> built,
+                               final List<CategoryCard.Result> built,
                                final TextArea summary,
                                final AtomicReference<List<CategoryCard.Result>> onScreen) {
         final List<CategoryEdit> edits = editsOf(built);
         clearRefusal(built, summary);
         switch (presenter.save(edits)) {
             case SaveOutcome.Saved _ -> {
-                refresh(container, header, presenter, onBack, onScreen);
+                refresh(container, header, presenter, onScreen);
                 SettingsRows.report(container, null, SAVED, true);
                 // Save is this page's default button, so Enter fires it with the caret still in a
                 // card. The rebuild takes that field out of the scene, focus goes to whatever the
@@ -199,7 +194,7 @@ final class PhotoCategoriesPane {
                 header.save().requestFocus();
                 SettingsRows.travelToTop(container);
             }
-            case final SaveOutcome.Refused refused -> showRefusal(container, built, summary, refused);
+            case final SaveOutcome.Refused refused -> showRefusal(container, built, refused);
         }
     }
 
@@ -216,13 +211,10 @@ final class PhotoCategoriesPane {
      *
      * @param container {@link VBox} the page, which carries the banner
      * @param built a {@link List} of {@link CategoryCard.Result} the controls behind each card
-     * @param summary {@link TextArea} the page-level message
      * @param refused {@link SaveOutcome.Refused} what came back
      */
     private static void showRefusal(final VBox container, final List<CategoryCard.Result> built,
-                                    final TextArea summary, final SaveOutcome.Refused refused) {
-        summary.setText("");
-        SelectableText.dressAs(summary, "settings-save-status");
+                                    final SaveOutcome.Refused refused) {
         SettingsRows.report(container, "settings-banner-violation", refused.summary(), false);
         CategoryCard.Result firstAtFault = null;
         for (int i = 0; i < built.size() && i < refused.cards().size(); i++) {

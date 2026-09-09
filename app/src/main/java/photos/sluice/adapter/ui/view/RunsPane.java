@@ -10,7 +10,6 @@ import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.RunsPresenter;
@@ -64,8 +63,7 @@ final class RunsPane {
         final TextArea unreadable = SettingsRows.emptyHelpLine("runs-unreadable");
         final var unreadableBox = new VBox(unreadable);
         unreadableBox.getStyleClass().add("warning-box");
-        unreadableBox.managedProperty().bind(unreadableBox.visibleProperty());
-        unreadableBox.visibleProperty().bind(unreadable.visibleProperty());
+        SettingsRows.showWhileTheLineDoes(unreadableBox, unreadable);
         final TextArea nothingYet = SettingsRows.emptyHelpLine("runs-nothing-yet");
         final TextArea message = SettingsRows.emptyHelpLine("runs-message");
         final Hyperlink locationLink = SettingsRows.locationLink("runs-message-link");
@@ -86,7 +84,7 @@ final class RunsPane {
         // holds, so it belongs where they are, and it travels down with them as they open. In the
         // header it sat in the page's most prominent spot for the one press this screen steers a
         // reader away from once its confirm is up.
-        final var completedRow = new HBox(completedToggle, spacer(), clear);
+        final var completedRow = new HBox(completedToggle, SettingsRows.spacer(), clear);
         completedRow.setAlignment(Pos.CENTER_LEFT);
         completedRow.getStyleClass().add("runs-completed-row");
 
@@ -151,17 +149,6 @@ final class RunsPane {
     }
 
     /**
-     * Something that pushes what follows it to the far side of a row.
-     *
-     * @return {@link Region} the gap
-     */
-    private static Region spacer() {
-        final var gap = new Region();
-        HBox.setHgrow(gap, Priority.ALWAYS);
-        return gap;
-    }
-
-    /**
      * Every control the screen fills in.
      *
      * @param heading {@link TextField} the screen's own name
@@ -219,8 +206,7 @@ final class RunsPane {
             this.draw(this.cards, view.unfinished(), presenter, redraw);
             this.completedToggle.setText(view.completedHeading());
             SettingsRows.pointing(this.completedToggle, view.completedShown());
-            this.completed.setVisible(!view.completed().isEmpty());
-            this.completed.setManaged(!view.completed().isEmpty());
+            SettingsRows.showIf(this.completed, !view.completed().isEmpty());
             this.draw(this.completedCards, view.completed(), presenter, redraw);
             // Shut where the section itself is gone. A sweep leaves nothing to fold. A travel over
             // a subtree the screen is no longer laying out reads its own geometry off bounds
@@ -238,9 +224,9 @@ final class RunsPane {
          */
         private void draw(final VBox into, final List<RunCard> runs, final RunsPresenter presenter,
                           final Runnable redraw) {
-            final List<Node> drawn = new ArrayList<>();
-            runs.forEach(run -> drawn.add(card(run, presenter, redraw)));
-            into.getChildren().setAll(drawn);
+            into.getChildren().setAll(runs.stream()
+                    .map(run -> card(run, presenter, redraw))
+                    .toList());
         }
 
         /**
@@ -260,13 +246,13 @@ final class RunsPane {
 
             final var lines = new VBox(scope, headline);
             lines.getStyleClass().add("runs-card-lines");
-            addIfPresent(lines, run.detail(), "runs-card-detail");
-            addIfPresent(lines, run.sheets(), "runs-card-sheets");
+            SettingsRows.addIfPresent(lines, run.detail(), "runs-card-detail");
+            SettingsRows.addIfPresent(lines, run.sheets(), "runs-card-sheets");
 
             final var card = new VBox(lines);
             card.setId(run.id());
             card.getStyleClass().add("card");
-            addIfPresent(lines, run.age(), "runs-card-age");
+            SettingsRows.addIfPresent(lines, run.age(), "runs-card-age");
             final RunsView.Waiting waiting = run.waiting();
             if (waiting != null) {
                 card.getChildren().add(waitingBlock(waiting, presenter, redraw));
@@ -275,7 +261,7 @@ final class RunsPane {
             // carrying a waiting block would otherwise put that whole block between the two.
             final RunsView.Redo redo = run.redo();
             if (redo != null) {
-                addIfPresent(card, redo.note(), "runs-card-detail");
+                SettingsRows.addIfPresent(card, redo.note(), "runs-card-detail");
             }
             if (redo != null && redo.drawnAt() == null) {
                 final var offer = new HBox(redoButton(redo, presenter, redraw));
@@ -397,7 +383,7 @@ final class RunsPane {
         private static Node actionRow(final RunCard run, final RunsPresenter presenter,
                                       final Runnable redraw) {
             final List<Node> buttons = new ArrayList<>();
-            buttons.add(spacer());
+            buttons.add(SettingsRows.spacer());
             final RunsView.Redo redo = run.redo();
             // Clamped rather than trusted. A position past the end would otherwise drop the control
             // silently, and a card missing its only way forward looks like a card that has none.
@@ -436,23 +422,6 @@ final class RunsPane {
                         presenter.press(action);
                         redraw.run();
                     });
-        }
-
-        /**
-         * Adds a line to a card, where there is one to add.
-         *
-         * @param into {@link VBox} the card's lines
-         * @param value what the line reads, or null where the card has no such line
-         * @param styleClass {@link String} the line's own style class
-         */
-        private static void addIfPresent(final VBox into, final @Nullable String value,
-                                         final String styleClass) {
-            if (value == null) {
-                return;
-            }
-            final TextArea line = SelectableText.prose(value);
-            line.getStyleClass().add(styleClass);
-            into.getChildren().add(line);
         }
     }
 }

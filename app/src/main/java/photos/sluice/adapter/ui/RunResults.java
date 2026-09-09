@@ -19,7 +19,6 @@ import photos.sluice.domain.rescue.RescueSummary;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -448,7 +447,7 @@ final class RunResults {
         final List<Count> rows = new ArrayList<>();
         moved.byBucket().entrySet().stream()
                 .filter(bucket -> bucket.getValue() > 0)
-                .sorted(Comparator.comparing(bucket -> bucket.getKey().ordinal()))
+                .sorted(Map.Entry.comparingByKey())
                 .forEach(bucket -> rows.add(new Count(
                         "result-moved-" + bucket.getKey().name().toLowerCase(Locale.UK),
                         bucketLabel(bucket.getKey()), RunWords.grouped(bucket.getValue()))));
@@ -840,20 +839,5 @@ final class RunResults {
                 : new RunResultView.Warning("The dates on these photos may be wrong.",
                         "They came with date files alongside them, and almost none of those matched "
                                 + "a photo, so the date each file was last written was used instead.");
-    }
-
-    /**
-     * Adds a row only where it counts something.
-     *
-     * @param rows a {@link List} of {@link Count} the rows so far
-     * @param id {@link String} the row's control id
-     * @param label {@link String} what it says
-     * @param count int what it counted
-     */
-    private static void addWhenAny(final List<Count> rows, final String id, final String label,
-                                   final int count) {
-        if (count > 0) {
-            rows.add(new Count(id, label, RunWords.grouped(count)));
-        }
     }
 }

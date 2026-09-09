@@ -935,14 +935,14 @@ class AnthropicCuller implements VisionCuller {
                     + "' but photo " + index + " is '" + entry.name() + "'");
             return;
         }
-        final String action = orEmpty(verdict.action());
+        final String action = ShardCodec.orEmpty(verdict.action());
         collected.add(switch (action) {
             case VerdictAction.KEEP -> new Keep(entry.src());
-            case VerdictAction.NEAR_DUP_CHOSEN -> new NearDupChosen(entry.src(), orEmpty(verdict.group()),
-                    orEmpty(verdict.chosenReason()));
-            case VerdictAction.NEAR_DUP_REJECT -> new NearDupReject(entry.src(), orEmpty(verdict.group()),
-                    orEmpty(verdict.reason()));
-            default -> new Classification(entry.src(), action, orEmpty(verdict.reason()));
+            case VerdictAction.NEAR_DUP_CHOSEN -> new NearDupChosen(entry.src(), ShardCodec.orEmpty(verdict.group()),
+                    ShardCodec.orEmpty(verdict.chosenReason()));
+            case VerdictAction.NEAR_DUP_REJECT -> new NearDupReject(entry.src(), ShardCodec.orEmpty(verdict.group()),
+                    ShardCodec.orEmpty(verdict.reason()));
+            default -> new Classification(entry.src(), action, ShardCodec.orEmpty(verdict.reason()));
         });
     }
 
@@ -1222,15 +1222,5 @@ class AnthropicCuller implements VisionCuller {
                     + "' vision provider needs the model id to request");
         }
         return model;
-    }
-
-    /**
-     * Returns the value, or an empty string if it's null.
-     *
-     * @param value {@link String} the value, possibly null
-     * @return {@link String} the value, or empty string if null
-     */
-    private static String orEmpty(final @Nullable String value) {
-        return value == null ? "" : value;
     }
 }

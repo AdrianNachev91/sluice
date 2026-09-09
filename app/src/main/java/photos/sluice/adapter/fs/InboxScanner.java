@@ -66,10 +66,7 @@ public final class InboxScanner implements InboxScannerPort {
 
         final PairingResult pairing = this.sidecarPairer.pair(mediaPaths, jsonPaths);
 
-        final List<MediaFile> media = new ArrayList<>();
-        for (final Path path : mediaPaths) {
-            media.add(new MediaFile(path));
-        }
+        final List<MediaFile> media = mediaPaths.stream().map(MediaFile::new).toList();
         final Map<MediaFile, TakeoutSidecar> sidecars = new LinkedHashMap<>();
         // TakeoutSidecarPairer works in raw Paths, so its result is wrapped into the domain types
         // only here at the end.

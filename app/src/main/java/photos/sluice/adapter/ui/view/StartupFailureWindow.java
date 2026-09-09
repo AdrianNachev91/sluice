@@ -164,16 +164,14 @@ final class StartupFailureWindow {
 
         final var copy = new Button("Copy");
         copy.setId("copy-trace-button");
-        copy.setOnAction(_ -> copyToClipboard(trace, copy));
+        copy.setOnAction(_ -> {
+            CopyableTrace.putOnTheClipboard(trace);
+            copy.setText("Copied");
+        });
 
         final var row = new HBox(disclosure, copy);
         row.getStyleClass().add("trace-row");
         return row;
-    }
-
-    private static void copyToClipboard(final String trace, final Button copy) {
-        CopyableTrace.putOnTheClipboard(trace);
-        copy.setText("Copied");
     }
 
     /**

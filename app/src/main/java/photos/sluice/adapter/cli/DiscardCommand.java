@@ -107,8 +107,7 @@ public class DiscardCommand implements Callable<Integer> {
      * @throws ConfirmationRequiredException when {@code --yes} was not given
      */
     private Path folder() {
-        final Path prepDir = this.address.folderFor(Objects.requireNonNull(this.run,
-                "picocli refuses a missing positional before this runs"));
+        final Path prepDir = this.address.folderFor(this.run);
         if (!this.yes) {
             throw new ConfirmationRequiredException(this.confirmation.messageFor(prepDir));
         }

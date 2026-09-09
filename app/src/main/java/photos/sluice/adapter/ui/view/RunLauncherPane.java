@@ -177,8 +177,7 @@ final class RunLauncherPane {
         final var warningBox = new VBox(warning, repair);
         warningBox.setId("run-estimate-warning-box");
         warningBox.getStyleClass().addAll("warning-box", "run-estimate-warning");
-        warningBox.managedProperty().bind(warningBox.visibleProperty());
-        warningBox.visibleProperty().bind(warning.visibleProperty());
+        SettingsRows.showWhileTheLineDoes(warningBox, warning);
         final var estimate = new VBox(figure, disclaimer, warningBox);
         estimate.setId("run-estimate");
         estimate.getStyleClass().add("run-estimate");
@@ -357,8 +356,7 @@ final class RunLauncherPane {
      */
     private static void showOnly(final Node shown, final Node... faces) {
         for (final Node face : faces) {
-            face.setVisible(face == shown);
-            face.setManaged(face == shown);
+            SettingsRows.showIf(face, face == shown);
         }
     }
 
@@ -377,12 +375,7 @@ final class RunLauncherPane {
      */
     private static void onStart(final RunLauncherPresenter presenter, final Node opensOver,
                                 final Runnable redraw) {
-        final RunSetupPresenter.Confirmation asked = presenter.setup().confirmationNeeded();
-        if (asked != null && Dialogs.ask(opensOver, asked.heading(), asked.detail(),
-                new Dialogs.Choice(asked.goAhead(), Dialogs.Role.GO_AHEAD,
-                        Dialogs.Emphasis.of(asked.goAheadLeads())),
-                new Dialogs.Choice(asked.cancel(), Dialogs.Role.CANCEL,
-                        Dialogs.Emphasis.of(!asked.goAheadLeads()))).isEmpty()) {
+        if (!Dialogs.agreed(opensOver, presenter.setup().confirmationNeeded())) {
             return;
         }
         presenter.press(presenter.setup().view().startAction());
@@ -706,11 +699,9 @@ final class RunLauncherPane {
             this.folding.values().forEach(Timeline::stop);
             this.folding.clear();
             this.unfolded.clear();
-            final List<Node> rows = new ArrayList<>();
-            for (final YearChoice year : view.years()) {
-                rows.add(this.yearRow(year, group, setup));
-            }
-            this.yearRows.getChildren().setAll(rows);
+            this.yearRows.getChildren().setAll(view.years().stream()
+                    .map(year -> this.yearRow(year, group, setup))
+                    .toList());
             this.drawUndated(view.undated(), setup);
             this.fillFrom(view);
         }
@@ -771,7 +762,8 @@ final class RunLauncherPane {
             this.drawCost(view.cost());
             this.start.setText(view.startLabel());
             this.start.setDisable(!view.canStart());
-            this.drawMessage(view.message());
+            SettingsRows.reportRun(this.message, this.messageLocationLink, view.message(),
+                    this.navigation);
         }
 
         /**
@@ -833,9 +825,9 @@ final class RunLauncherPane {
             }
             // Every month built here, whichever year is chosen, and shown or hidden by a fill. Built
             // on selection instead, a year's own press would replace the row it came from.
-            final List<Node> under = new ArrayList<>();
-            year.months().forEach(month -> under.add(this.monthRow(year, month, setup)));
-            final var months = new VBox(under.toArray(new Node[0]));
+            final var months = new VBox(year.months().stream()
+                    .map(month -> this.monthRow(year, month, setup))
+                    .toArray(Node[]::new));
             months.setId(monthsId(year.year()));
             months.getStyleClass().add("run-month-rows");
             croppable(months);
@@ -1226,15 +1218,6 @@ final class RunLauncherPane {
             this.repair.setText(wrong == null ? "" : wrong.repair().label());
             this.freeHeadline.setText(free == null ? "" : free.headline());
             this.freeDetail.setText(free == null ? "" : free.detail());
-        }
-
-        /**
-         * Fills in the line the screen reports on, in the colour its own kind earns.
-         *
-         * @param said {@link RunLauncherView.Message} what to report, or null for nothing
-         */
-        private void drawMessage(final RunLauncherView.@Nullable Message said) {
-            SettingsRows.reportRun(this.message, this.messageLocationLink, said, this.navigation);
         }
     }
 

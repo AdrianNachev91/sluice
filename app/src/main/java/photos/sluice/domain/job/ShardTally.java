@@ -23,7 +23,7 @@ public record ShardTally(int present, int valid, int total) {
      * @param total int the prep dir's own expected montage count
      */
     public ShardTally {
-        if (valid < 0 || total < 0 || present > total || valid > present) {
+        if (valid < 0 || present > total || valid > present) {
             throw new IllegalArgumentException(
                     "require 0 <= valid <= present <= total: present=%d, valid=%d, total=%d"
                             .formatted(present, valid, total));

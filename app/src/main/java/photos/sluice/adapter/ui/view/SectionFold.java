@@ -36,9 +36,8 @@ final class SectionFold {
     // moving to bring the opened section into view, which such a page cannot do anyway.
     private final @Nullable ScrollPane scroll;
 
-    // At most one, since a fold has one travel. Held rather than kept as a field so a press
-    // arriving mid-travel can stop what is already running.
-    private final List<Timeline> running = new ArrayList<>();
+    // Held so a press arriving mid-travel can stop what is already running. Null while nothing is.
+    private @Nullable Timeline running;
 
     private boolean open;
 
@@ -87,8 +86,10 @@ final class SectionFold {
             return;
         }
         this.open = wanted;
-        this.running.forEach(Timeline::stop);
-        this.running.clear();
+        if (this.running != null) {
+            this.running.stop();
+            this.running = null;
+        }
         if (this.travelling.getScene() == null || this.travelling.getWidth() <= 0) {
             settle(this.travelling, wanted);
             return;
@@ -112,13 +113,13 @@ final class SectionFold {
         }
         final var travel = new Timeline(new KeyFrame(TRAVEL, frames.toArray(new KeyValue[0])));
         travel.setOnFinished(_ -> {
-            this.running.clear();
+            this.running = null;
             settle(this.travelling, wanted);
             if (wanted) {
                 Platform.runLater(this::arrive);
             }
         });
-        this.running.add(travel);
+        this.running = travel;
         travel.play();
     }
 

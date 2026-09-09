@@ -167,7 +167,7 @@ public class PrepDirDoctor {
     public CullRunSummary summaryOf(final Path prepDirPath) {
         final Diagnosis diagnosis = this.examine(prepDirPath);
         return new CullRunSummary(CullScope.tagOf(prepDirPath), prepDirPath, diagnosis.health(),
-                diagnosis.shards(), this.lastModifiedOrEpoch(prepDirPath));
+                diagnosis.shards(), lastModifiedOrEpoch(this.mediaStore, prepDirPath));
     }
 
     /**
@@ -304,20 +304,22 @@ public class PrepDirDoctor {
     /**
      * prepDirPath's mtime, or the epoch if it cannot be read.
      *
-     * <p>A run card sorts and ages by this, so a wrong value costs a misplaced row. Throwing costs
-     * the whole dashboard, which is the worse trade. The epoch reads as "as old as anything", which
-     * puts a dir nobody can even stat at the top of a list ordered by neglect. Guarded by a
-     * catch-all, for the reason {@link #examine} is.
+     * <p>The epoch reads as "as old as anything", which puts a dir nobody can even stat at the top
+     * of a list ordered by neglect. Guarded by a catch-all, for the reason {@link #examine} is.
      *
+     * <p>Degrades rather than throwing on any {@link RuntimeException}. This answer is only ever
+     * one field of a larger result, and a caller that has already decided its outcome would have
+     * that outcome replaced by a crash.
+     *
+     * @param mediaStore {@link MediaStore} the filesystem access to read the mtime through
      * @param prepDirPath {@link Path} the prep directory to check
      * @return {@link Instant} the last-modified instant, or {@link Instant#EPOCH} if unreadable
      */
-    private Instant lastModifiedOrEpoch(final Path prepDirPath) {
+    static Instant lastModifiedOrEpoch(final MediaStore mediaStore, final Path prepDirPath) {
         try {
-            return this.mediaStore.lastModifiedTime(prepDirPath);
+            return mediaStore.lastModifiedTime(prepDirPath);
         } catch (final RuntimeException e) {
-            log.warn("Could not read the mtime of {}, ageing it as the epoch: {}",
-                    prepDirPath, e.toString());
+            log.warn("Could not read the mtime of {}, ageing it as the epoch", prepDirPath, e);
             return Instant.EPOCH;
         }
     }

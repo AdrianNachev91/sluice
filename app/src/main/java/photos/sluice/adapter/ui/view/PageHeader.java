@@ -1,6 +1,5 @@
 package photos.sluice.adapter.ui.view;
 
-import javafx.geometry.Bounds;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
@@ -132,18 +131,8 @@ final class PageHeader {
     static void heldToTheViewport(final ScrollPane scroll, final Region... pinned) {
         for (final Region row : pinned) {
             row.maxWidthProperty().bind(scroll.viewportBoundsProperty()
-                    .map(seen -> widthOf(seen) <= 0 ? Double.MAX_VALUE : widthOf(seen)));
+                    .map(seen -> seen.getWidth() <= 0 ? Double.MAX_VALUE : seen.getWidth()));
         }
-    }
-
-    /**
-     * The width of a bounds, as a number a width property can bind to.
-     *
-     * @param seen {@link Bounds} what the pane reports it can show
-     * @return double the width
-     */
-    private static double widthOf(final Bounds seen) {
-        return seen.getWidth();
     }
 
     /**
@@ -191,7 +180,7 @@ final class PageHeader {
                 return;
             }
             if (pressed.getTarget() instanceof final Node hit
-                    && within(hit, page.getScene().getFocusOwner())) {
+                    && SettingsRows.sitsInside(hit, page.getScene().getFocusOwner())) {
                 return;
             }
             page.requestFocus();
@@ -210,22 +199,6 @@ final class PageHeader {
         }
         return node instanceof TextInputControl || node instanceof ComboBoxBase<?>
                 || node instanceof Spinner<?>;
-    }
-
-    /**
-     * Whether one node is another, or sits inside it.
-     *
-     * @param node {@link Node} where the click landed
-     * @param within the control being asked about, or null
-     * @return boolean true when the click was inside it
-     */
-    private static boolean within(final Node node, final @Nullable Node within) {
-        for (Node walk = node; walk != null; walk = walk.getParent()) {
-            if (walk == within) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**

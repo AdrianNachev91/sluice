@@ -93,8 +93,6 @@ final class FirstRunCard {
             // Above the card rather than inside it, which is where the reader is carried to.
             SettingsRows.report(container, banner.anythingWasStored() ? null : "settings-banner-caution",
                     banner.message(), false);
-        }
-        if (banner != null) {
             SettingsRows.travelToTop(container);
         }
     }

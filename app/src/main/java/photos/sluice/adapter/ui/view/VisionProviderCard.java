@@ -105,10 +105,10 @@ final class VisionProviderCard {
                                             final VBox providerFields,
                                             final VBox secretCard) {
         final ProviderFieldControls controls = controlsOf(providerFields);
-        showIf(fields.model(), controls.model().getParent());
-        showIf(fields.endpoint(), controls.endpointField().getParent());
-        showIf(fields.credential(), secretCard);
-        showIf(fields.model() || fields.endpoint(), providerFields);
+        SettingsRows.showIf(controls.model().getParent(), fields.model());
+        SettingsRows.showIf(controls.endpointField().getParent(), fields.endpoint());
+        SettingsRows.showIf(secretCard, fields.credential());
+        SettingsRows.showIf(providerFields, fields.model() || fields.endpoint());
     }
 
     /**
@@ -440,11 +440,6 @@ final class VisionProviderCard {
         return row;
     }
 
-    private static void showIf(final boolean wanted, final Node node) {
-        node.setVisible(wanted);
-        node.setManaged(wanted);
-    }
-
     private static VBox providerFields(final SettingsView view, final VisionProviderPresenter visionProvider,
                                        final ComboBox<SettingsView.ProviderChoice> providerBox) {
         final var model = new ComboBox<SettingsView.ModelChoice>();
@@ -672,14 +667,8 @@ final class VisionProviderCard {
                                                          final VisionProviderPresenter visionProvider,
                                                          final String providerId,
                                                          final ComboBox<SettingsView.ProviderChoice> providerBox) {
-        final var task = new Task<Void>() {
-            @Override
-            protected Void call() {
-                visionProvider.awaitStartUpCheck(providerId);
-                return null;
-            }
-        };
-        redrawWhicheverWayItEnds(task, model, modelInfo, visionProvider, providerId, providerBox);
+        redrawWhicheverWayItEnds(() -> visionProvider.awaitStartUpCheck(providerId),
+                model, modelInfo, visionProvider, providerId, providerBox);
     }
 
     /**
@@ -698,14 +687,8 @@ final class VisionProviderCard {
     private static void refreshModelPicker(final ComboBox<SettingsView.ModelChoice> model, final VBox modelInfo,
                                            final VisionProviderPresenter visionProvider, final String providerId,
                                            final ComboBox<SettingsView.ProviderChoice> providerBox) {
-        final var task = new Task<Void>() {
-            @Override
-            protected Void call() {
-                visionProvider.refreshModels(providerId);
-                return null;
-            }
-        };
-        redrawWhicheverWayItEnds(task, model, modelInfo, visionProvider, providerId, providerBox);
+        redrawWhicheverWayItEnds(() -> visionProvider.refreshModels(providerId),
+                model, modelInfo, visionProvider, providerId, providerBox);
     }
 
     /**
@@ -718,19 +701,26 @@ final class VisionProviderCard {
      * <p>Guarded on the provider. The dropdown may have moved on while this ran, and the answer
      * belongs to the one it was asked about.
      *
-     * @param task {@link Task} the check to run
+     * @param check {@link Runnable} the check to run, off the FX thread
      * @param model {@link ComboBox} the model picker
      * @param modelInfo {@link VBox} where the source note, a violation, or a caution lands
      * @param visionProvider {@link VisionProviderPresenter} answers what to draw
      * @param providerId {@link String} the provider this task asked about
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
      */
-    private static void redrawWhicheverWayItEnds(final Task<Void> task,
+    private static void redrawWhicheverWayItEnds(final Runnable check,
                                                  final ComboBox<SettingsView.ModelChoice> model,
                                                  final VBox modelInfo,
                                                  final VisionProviderPresenter visionProvider,
                                                  final String providerId,
                                                  final ComboBox<SettingsView.ProviderChoice> providerBox) {
+        final var task = new Task<Void>() {
+            @Override
+            protected Void call() {
+                check.run();
+                return null;
+            }
+        };
         final Runnable redraw = () -> {
             if (providerChoiceOf(providerBox).id().equals(providerId)) {
                 selectModelPickerFor(model, modelInfo, visionProvider, providerId, providerBox);

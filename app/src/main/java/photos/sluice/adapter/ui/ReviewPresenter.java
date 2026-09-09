@@ -200,13 +200,13 @@ public class ReviewPresenter {
     public ReviewView view() {
         final ReviewListing listed = this.listing;
         final Message said = this.message;
+        if (!this.hasRead) {
+            return new ReviewView(HEADING, null, null, LOOKING, List.of(), null);
+        }
         final boolean busy = this.pipeline.isBusy();
         final List<Group> groups = new ArrayList<>();
         for (final Section section : SECTIONS) {
             this.group(listed, section, busy).ifPresent(groups::add);
-        }
-        if (!this.hasRead) {
-            return new ReviewView(HEADING, null, null, LOOKING, List.of(), null);
         }
         // Asked of the reading rather than of the sections built from it. A folder no section
         // claimed would otherwise put this line over folders that are there.

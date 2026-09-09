@@ -279,14 +279,12 @@ public class PrepDirRemedies {
         final List<String> entries = montageNumbers.stream().map(MontageNaming::montageIdFor).toList();
 
         final var allSrcs = new ArrayList<Path>();
-        int photos = 0;
         for (final String montage : entries) {
             final Optional<List<Path>> srcs = Sidecars.srcsOf(this.cullPrepPort, prepDirPath, montage);
             if (srcs.isEmpty()) {
                 return Optional.empty();
             }
             allSrcs.addAll(srcs.get());
-            photos += srcs.get().size();
         }
 
         final Path indexPath = prepDirPath.resolve(INDEX_FILE);
@@ -295,7 +293,7 @@ public class PrepDirRemedies {
         }
         final var rebuilt = new PrepDir(prepDirPath.getFileName().toString(),
                 this.cullSettings.categoriesForRepair(),
-                commonParent(allSrcs), photos, List.of(), entries.size(), prepDirPath, entries);
+                commonParent(allSrcs), allSrcs.size(), List.of(), entries.size(), prepDirPath, entries);
         this.cullPrepPort.writeIndex(prepDirPath, rebuilt);
         return Optional.of(rebuilt);
     }

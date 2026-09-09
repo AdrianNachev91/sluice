@@ -122,7 +122,7 @@ final class ShardTallyCalculator {
 
         final List<MontageShardStatus> statuses = prep.entries().stream()
                 .map(montage -> this.montageShardStatus(prep, montage,
-                        srcsByMontage.getOrDefault(montage, List.of()), sidecarSrcs, unreviewable))
+                        srcsByMontage.get(montage), sidecarSrcs, unreviewable))
                 .toList();
         final int present = (int) statuses.stream().filter(MontageShardStatus::present).count();
         final int valid = (int) statuses.stream().filter(MontageShardStatus::valid).count();

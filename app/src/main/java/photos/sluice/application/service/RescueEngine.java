@@ -15,7 +15,6 @@ import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.MediaFile;
 import photos.sluice.domain.model.MediaType;
-import photos.sluice.domain.model.Numerals;
 import photos.sluice.domain.paths.RelativePaths;
 import photos.sluice.domain.paths.SortFolderNames;
 import photos.sluice.domain.rescue.RescueSummary;
@@ -225,7 +224,8 @@ public class RescueEngine implements RescueUseCase {
             return;
         }
         final Path destDir = sortedRoot.resolve(type.get() == MediaType.VIDEO ? "Videos" : "Photos")
-                .resolve(yearFolder(date.get())).resolve(monthFolder(date.get()));
+                .resolve(SortFolderNames.yearFolder(date.get()))
+                .resolve(SortFolderNames.monthFolder(date.get()));
         this.moveOrDropAsAlreadyThere(file, destDir, true, outcome, cancellation, watching);
     }
 
@@ -346,26 +346,6 @@ public class RescueEngine implements RescueUseCase {
             throw new IllegalArgumentException("folder must name something inside its root: " + folder);
         }
         return target;
-    }
-
-    /**
-     * Formats the year as a four-digit folder name.
-     *
-     * @param when {@link LocalDateTime} the date to format
-     * @return {@link String} the four-digit year folder name
-     */
-    private static String yearFolder(final LocalDateTime when) {
-        return Numerals.padded(when.getYear(), 4);
-    }
-
-    /**
-     * Formats the month as a two-digit folder name.
-     *
-     * @param when {@link LocalDateTime} the date to format
-     * @return {@link String} the two-digit month folder name
-     */
-    private static String monthFolder(final LocalDateTime when) {
-        return Numerals.padded(when.getMonthValue(), 2);
     }
 
     /**

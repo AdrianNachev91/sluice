@@ -450,19 +450,28 @@ public class ApplyEngine {
      * <p>The line names the file by where it landed rather than where it came from. A name already
      * taken in the destination lands the file as a " (2)".
      *
-     * <p>The date is the month the photo sat under in Sorted, which is the finest this run knows.
-     *
      * @param from {@link Path} where the file was, under Sorted
      * @param destDir {@link Path} the folder it landed in
      * @param landed {@link Path} the path it landed at
      * @param reason {@link String} why it is here, as the note says it to a reader
      */
     private void note(final Path from, final Path destDir, final Path landed, final String reason) {
-        final String name = landed.getFileName().toString();
         this.mediaStore.appendLine(destDir.resolve(ReasonNotes.FILE_NAME),
-                this.cullDestinations.monthFiledUnder(from)
-                        .map(month -> ReasonNotes.line(name, month, reason))
-                        .orElseGet(() -> ReasonNotes.line(name, reason)));
+                this.noteLine(from, landed.getFileName().toString(), reason));
+    }
+
+    /**
+     * One line of a note, dated by the month the photo sat under in Sorted where that is known.
+     *
+     * @param filedUnder {@link Path} the photo's path under Sorted, which carries the month
+     * @param name {@link String} the file name the line calls it by
+     * @param reason {@link String} why it is here, as the note says it to a reader
+     * @return {@link String} the line
+     */
+    private String noteLine(final Path filedUnder, final String name, final String reason) {
+        return this.cullDestinations.monthFiledUnder(filedUnder)
+                .map(month -> ReasonNotes.line(name, month, reason))
+                .orElseGet(() -> ReasonNotes.line(name, reason));
     }
 
     /**
@@ -614,9 +623,7 @@ public class ApplyEngine {
     private String keptLine(final NearDupChosen chosen) {
         final String name = chosen.file().getFileName().toString();
         final String reason = "kept, " + chosen.chosenReason();
-        return this.cullDestinations.monthFiledUnder(chosen.file())
-                .map(month -> ReasonNotes.line(name, month, reason))
-                .orElseGet(() -> ReasonNotes.line(name, reason));
+        return this.noteLine(chosen.file(), name, reason);
     }
 
     /**
@@ -632,9 +639,7 @@ public class ApplyEngine {
     private String rejectLine(final NearDupReject reject, final ApplyOutcome outcome) {
         final String name = outcome.landedRejects.getOrDefault(reject.file(), reject.file())
                 .getFileName().toString();
-        return this.cullDestinations.monthFiledUnder(reject.file())
-                .map(month -> ReasonNotes.line(name, month, reject.reason()))
-                .orElseGet(() -> ReasonNotes.line(name, reject.reason()));
+        return this.noteLine(reject.file(), name, reject.reason());
     }
 
     /**

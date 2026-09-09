@@ -14,7 +14,6 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -372,7 +371,7 @@ final class MainWindow {
         }
         // A report the save could not leave on the first-run card, because finishing took that card
         // off the screen. It stays until it is dismissed. A library move says what it did with the
-        // old folder, and four seconds is not long enough to take that in.
+        // old folder, and the wait a banner earns is not long enough to take that in.
         final var pane = new VBox(launcher);
         VBox.setVgrow(launcher, Priority.ALWAYS);
         pane.getChildren().addFirst(SettingsRows.banner(pane, "dashboard-banner", said, false));
@@ -520,9 +519,7 @@ final class MainWindow {
                                                 final String label, final Label count) {
         final var entry = navEntry(group, id, label);
         final var name = new Label(label);
-        final var gap = new Region();
-        HBox.setHgrow(gap, Priority.ALWAYS);
-        final var inside = new HBox(name, gap, count);
+        final var inside = new HBox(name, SettingsRows.spacer(), count);
         inside.setAlignment(Pos.CENTER_LEFT);
         inside.getStyleClass().add("nav-item-inside");
         // The graphic carries the name, so the button's own text stays empty.

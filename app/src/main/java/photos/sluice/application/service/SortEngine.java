@@ -26,7 +26,6 @@ import photos.sluice.domain.model.Dimensions;
 import photos.sluice.domain.model.HashedMedia;
 import photos.sluice.domain.model.MediaFile;
 import photos.sluice.domain.model.MediaType;
-import photos.sluice.domain.model.Numerals;
 import photos.sluice.domain.model.ScanResult;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
@@ -483,7 +482,8 @@ public class SortEngine implements SortUseCase {
 
         final String mediaFolder = isVideo ? "Videos" : "Photos";
         final Path destDir = this.pathsPort.sorted().resolve(mediaFolder)
-                .resolve(yearFolder(date.when())).resolve(monthFolder(date.when()));
+                .resolve(SortFolderNames.yearFolder(date.when()))
+                .resolve(SortFolderNames.monthFolder(date.when()));
         this.mediaStore.move(file.path(), destDir, cancellation, watching);
         routing.yearsSorted.add(date.when().getYear());
         if (isVideo) {
@@ -560,33 +560,13 @@ public class SortEngine implements SortUseCase {
     }
 
     /**
-     * Formats the year as a four-digit folder name.
-     *
-     * @param when {@link LocalDateTime} the date to format
-     * @return {@link String} the four-digit year folder name
-     */
-    private static String yearFolder(final LocalDateTime when) {
-        return Numerals.padded(when.getYear(), 4);
-    }
-
-    /**
-     * Formats the month as a two-digit folder name.
-     *
-     * @param when {@link LocalDateTime} the date to format
-     * @return {@link String} the two-digit month folder name
-     */
-    private static String monthFolder(final LocalDateTime when) {
-        return Numerals.padded(when.getMonthValue(), 2);
-    }
-
-    /**
      * Formats the date as a dashed year-and-month folder name.
      *
      * @param when {@link LocalDateTime} the date to format
      * @return {@link String} the dashed year-and-month folder name
      */
     private static String yearMonthDash(final LocalDateTime when) {
-        return yearFolder(when) + "-" + monthFolder(when);
+        return SortFolderNames.yearFolder(when) + "-" + SortFolderNames.monthFolder(when);
     }
 
     /**

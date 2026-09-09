@@ -12,13 +12,10 @@ import photos.sluice.application.port.out.ImageDimensionsPort;
 import photos.sluice.domain.imaging.LowResGate;
 import photos.sluice.domain.model.Dimensions;
 
-import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
-import javax.imageio.stream.ImageInputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.Optional;
 import java.util.function.Function;
 
@@ -70,9 +67,8 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
 
     /**
      * A file can carry dimensions in both directory types at once, one of them a tile or a preview.
-     * Comparing across both, rather than trusting whichever type appears first, extends the same
-     * largest-wins safety margin {@link #largestAcross} applies within a single type. Ties keep the
-     * first argument, an arbitrary but pinned-down choice.
+     * Largest wins, rather than whichever appears first. Ties keep the first argument, an arbitrary
+     * but pinned-down choice.
      *
      * @param a {@link Dimensions} the first candidate dimensions, or null
      * @param b {@link Dimensions} the second candidate dimensions, or null
@@ -123,10 +119,7 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
             final Collection<T> directories, final Function<T, @Nullable Dimensions> extractor) {
         Dimensions largest = null;
         for (final T directory : directories) {
-            final Dimensions candidate = extractor.apply(directory);
-            if (candidate != null && (largest == null || maxDimension(candidate) > maxDimension(largest))) {
-                largest = candidate;
-            }
+            largest = largestOf(largest, extractor.apply(directory));
         }
         return largest;
     }
@@ -196,33 +189,14 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
     }
 
     /**
-     * A multi-image file (e.g. a TIFF with an embedded thumbnail) exposes images in raw physical
-     * order, with no marker for "which one is the real photo". The largest by pixel dimension
-     * across every index is taken here, never index 0 alone.
+     * The file's own dimensions, decoded rather than read off metadata.
      *
      * @param file {@link Path} the image file to decode
      * @return an {@link Optional} {@link Dimensions}, the largest image's dimensions, or empty if
      * no reader could handle the file
      */
     private static Optional<Dimensions> readViaImageIo(final Path file) {
-        try (final ImageInputStream stream = ImageIO.createImageInputStream(file.toFile())) {
-            if (stream == null) {
-                return Optional.empty();
-            }
-            final Iterator<ImageReader> readers = ImageIO.getImageReaders(stream);
-            if (!readers.hasNext()) {
-                return Optional.empty();
-            }
-            final ImageReader reader = readers.next();
-            try {
-                reader.setInput(stream);
-                return largestImage(reader);
-            } finally {
-                reader.dispose();
-            }
-        } catch (IOException | RuntimeException _) {
-            return Optional.empty();
-        }
+        return ImageReaders.readOrElse(file, ImageDimensionsReader::largestImage, Optional.empty());
     }
 
     /**
@@ -240,10 +214,7 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
             // and nothing sits behind this one to recover from a zero treated as real.
             final int width = reader.getWidth(i);
             final int height = reader.getHeight(i);
-            final Dimensions candidate = usable(width, height) ? new Dimensions(width, height) : null;
-            if (candidate != null && (largest == null || maxDimension(candidate) > maxDimension(largest))) {
-                largest = candidate;
-            }
+            largest = largestOf(largest, usable(width, height) ? new Dimensions(width, height) : null);
         }
         return Optional.ofNullable(largest);
     }

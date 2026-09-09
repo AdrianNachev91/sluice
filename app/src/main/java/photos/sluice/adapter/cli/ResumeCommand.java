@@ -88,8 +88,7 @@ public class ResumeCommand implements Callable<Integer> {
      * @throws ScopeRefusedException when the address names no sift on disk
      */
     private Path folder() {
-        return this.address.folderFor(Objects.requireNonNull(this.run,
-                "picocli refuses a missing positional before this runs"));
+        return this.address.folderFor(this.run);
     }
 
     /**

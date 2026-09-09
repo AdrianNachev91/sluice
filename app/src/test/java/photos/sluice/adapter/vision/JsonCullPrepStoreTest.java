@@ -374,6 +374,31 @@ class JsonCullPrepStoreTest {
                     .hasMessageContaining("is not a montage id");
         }
 
+        // A repeat is counted once in the sheets that have answers and twice in the total owed.
+        // A run every sheet had answered would then sit waiting on a sheet that does not exist.
+        @Test
+        void refusesARepeatedEntry(@TempDir final Path dir) throws IOException {
+            Files.writeString(dir.resolve("index.json"), """
+                    {
+                      "scope": "2019-06",
+                      "categories": [
+                        { "name": "junk", "description": "objectively worthless" }
+                      ],
+                      "basePath": "%s",
+                      "photos": 0,
+                      "montages": 2,
+                      "entries": [
+                        "montage-001",
+                        "montage-001"
+                      ]
+                    }
+                    """.formatted(jsonEscaped(dir.resolve("base"))));
+
+            assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
+                    .isInstanceOf(MalformedPrepJsonException.class)
+                    .hasMessageContaining("repeats the entry 'montage-001'");
+        }
+
         @Test
         void refusesANullDocument(@TempDir final Path dir) throws IOException {
             Files.writeString(dir.resolve("index.json"), "null");

@@ -151,11 +151,10 @@ class ShardCodec {
      * @return {@link RawDecision} the raw DTO representation
      */
     private static RawDecision toRaw(final Verdict verdict) {
-        // Structurally similar to toDomain()'s switch below, but it maps the opposite direction
-        // over a different type. Collapsing the two into one generic mapper would cost clarity.
-        //noinspection DuplicatedCode
+        // Mirrors toDomain()'s switch in shape only: a different type, the opposite direction.
         return switch (verdict) {
             case final Keep keep -> new RawDecision(keep.file().toString(), VerdictAction.KEEP, null, null, null);
+            //noinspection DuplicatedCode
             case final Classification c -> new RawDecision(c.file().toString(), c.category(), null, c.reason(), null);
             case final NearDupChosen c -> new RawDecision(c.file().toString(), VerdictAction.NEAR_DUP_CHOSEN,
                     c.group(), null, c.chosenReason());
@@ -224,7 +223,7 @@ class ShardCodec {
      * @param value {@link String} the value, possibly null
      * @return {@link String} the value, or empty string if null
      */
-    private static String orEmpty(final @Nullable String value) {
+    static String orEmpty(final @Nullable String value) {
         return value == null ? "" : value;
     }
 }

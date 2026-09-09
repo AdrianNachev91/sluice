@@ -12,7 +12,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * Runs one command and answers with its exit code. This lives in the wiring layer because it names
@@ -29,8 +28,6 @@ import java.util.stream.Stream;
  * <p>A failure that stops the app before any command runs is answered here rather than escaping.
  */
 public final class CliLauncher {
-
-    private static final String CONFIG_IMPORT_ARG = "--spring.config.import=optional:file:";
 
     /**
      * Where the parser stops treating arguments as options, and so where this class stops filtering.
@@ -104,7 +101,7 @@ public final class CliLauncher {
                     // them.
                     .bannerMode(Banner.Mode.OFF)
                     .logStartupInfo(false)
-                    .run(springArgs(configFile, args));
+                    .run(SpringLaunch.importing(configFile, args));
         } catch (final RuntimeException failedToStart) {
             return new StartupFailureReport(System.out, System.err, SluiceCli.documentAsked(commandArgs(args)))
                     .write(new SpringStartupFailureClassifier(configFile).classify(failedToStart));
@@ -113,22 +110,6 @@ public final class CliLauncher {
             return SluiceCli.parser(context.getBean(SluiceCli.class), context.getBean(IFactory.class))
                     .execute(commandArgs(args));
         }
-    }
-
-    /**
-     * Builds the argument list Spring starts with: the config-file import first, then everything
-     * the user passed. The user's arguments come last so an explicitly passed property still wins.
-     *
-     * <p>Everything is passed on, the parser's own flags included. A flag Spring does not
-     * recognise becomes a property nothing reads, which costs nothing.
-     *
-     * @param configFile {@link Path} the user's config file, which need not exist
-     * @param args {@link String}[] the command-line arguments
-     * @return {@link String}[] the arguments to start Spring with
-     */
-    static String[] springArgs(final Path configFile, final String[] args) {
-        return Stream.concat(Stream.of(CONFIG_IMPORT_ARG + configFile), Stream.of(args))
-                .toArray(String[]::new);
     }
 
     /**

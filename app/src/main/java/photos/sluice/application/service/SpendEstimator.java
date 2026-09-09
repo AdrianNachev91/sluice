@@ -73,7 +73,7 @@ final class SpendEstimator {
     SpendEstimate estimate(final int montages, final SpendForecast forecast, final @Nullable String modelId,
                            final MontageConfig grid) {
         return switch (forecast) {
-            case final SpendForecast.NoSpend ignored -> new SpendEstimate(0, 0, true, false, false);
+            case final SpendForecast.NoSpend ignored -> nothingToSpend();
             case SpendForecast.Counted(final long counted) -> this.estimateFrom(montages, counted, true, modelId, grid);
             case SpendForecast.Unknown(final String reason) -> {
                 log.info("Estimating spend from the shipped seed: the provider could not count a request ({})",
@@ -107,10 +107,10 @@ final class SpendEstimator {
     SpendEstimate estimateBeforePreparing(final int photos, final boolean spends,
                                           final @Nullable String modelId, final MontageConfig grid) {
         if (!spends) {
-            return new SpendEstimate(0, 0, true, false, false);
+            return nothingToSpend();
         }
         final int perMontage = grid.tilesPerRow() * grid.tilesPerRow();
-        final int montages = (photos + perMontage - 1) / perMontage;
+        final int montages = Math.ceilDiv(photos, perMontage);
         return this.estimateFrom(montages, SEED_INPUT_TOKENS_PER_CALL, false, modelId, grid);
     }
 
@@ -186,6 +186,15 @@ final class SpendEstimator {
                     e.toString());
             return new History(List.of(), true);
         }
+    }
+
+    /**
+     * The estimate for a run that calls no model at all.
+     *
+     * @return {@link SpendEstimate} an exact zero
+     */
+    private static SpendEstimate nothingToSpend() {
+        return new SpendEstimate(0, 0, true, false, false);
     }
 
     /**

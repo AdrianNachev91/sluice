@@ -358,7 +358,7 @@ public class VisionProviderPresenter {
      */
     public ConnectionCheckResult testConnection(final String providerId, final String endpoint) {
         final ProviderCheck outcome = this.providers.check(providerId,
-                new CullProviderSettings(null, blankToNull(endpoint), null));
+                new CullProviderSettings(null, SettingsPresenter.blankToNull(endpoint), null));
         return new ConnectionCheckResult(wordCheckOutcome(outcome), outcome instanceof ProviderCheck.Accepted);
     }
 
@@ -589,9 +589,5 @@ public class VisionProviderPresenter {
         return "More than one place on this computer holds a key for this provider. \"Remove\" "
                 + "clears every one Sluice can reach."
                 + (anyUnaskable ? " One place did not answer, so there may be another beyond these." : "");
-    }
-
-    private static @Nullable String blankToNull(final String value) {
-        return value.isBlank() ? null : value;
     }
 }

@@ -8,8 +8,6 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Polygon;
 import javafx.scene.shape.Rectangle;
@@ -139,15 +137,12 @@ final class CategoryCard {
      *
      * @param label {@link String} what the field is called
      * @param field {@link TextArea} the box
-     * @param violation what is wrong with it, or null for a field nothing refuses
+     * @param violation {@link TextArea} what is wrong with it, empty while nothing is
      * @return {@link VBox} the row
      */
     private static VBox labelled(final String label, final TextArea field,
-                                 final @Nullable TextArea violation) {
-        final var row = new VBox(SettingsRows.fieldLabel(label), field);
-        if (violation != null) {
-            row.getChildren().add(violation);
-        }
+                                 final TextArea violation) {
+        final var row = new VBox(SettingsRows.fieldLabel(label), field, violation);
         row.getStyleClass().add("settings-row");
         return row;
     }
@@ -162,9 +157,7 @@ final class CategoryCard {
      * @return {@link HBox} the line
      */
     private static HBox header(final CheckBox enabled, final @Nullable Button delete) {
-        final var spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        final var line = new HBox(enabled, spacer);
+        final var line = new HBox(enabled, SettingsRows.spacer());
         line.setAlignment(Pos.CENTER_LEFT);
         line.getStyleClass().add("category-header");
         if (delete != null) {

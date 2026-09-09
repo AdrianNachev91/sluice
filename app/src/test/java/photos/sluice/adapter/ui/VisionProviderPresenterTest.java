@@ -443,6 +443,18 @@ class VisionProviderPresenterTest {
         assertThat(result.succeeded()).isTrue();
     }
 
+    // Sent as "" the provider would be asked about an endpoint that is not an address.
+    @Test
+    void testConnectionSendsABlankEndpointAsNoEndpointAtAll() {
+        final var received = new ArrayList<CullProviderSettings>();
+        final VisionProviderPresenter visionProvider = new VisionProviderPresenter(new FixedSecretStore(new InKeyring()),
+                candidateCapturingCatalog(received), new FixedSettingsUseCase(settings(null, null, null)));
+
+        visionProvider.testConnection("anthropic", "   ");
+
+        assertThat(received).containsExactly(new CullProviderSettings(null, null, null));
+    }
+
     @Test
     void testConnectionWordsARejectionTheSameWayThePickerDoes() {
         final VisionProviderPresenter visionProvider = visionProviderChecking(settings(null, null, null),

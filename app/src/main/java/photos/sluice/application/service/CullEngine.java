@@ -782,7 +782,7 @@ final class CullEngine {
      * @param scope {@link String} the discarded run's scope tag
      */
     void recordDiscard(final String scope) {
-        this.recordSpend(scope, CullReport.nothingSpent(this.cullSettings.provider(), 0), RunEnding.DISCARDED);
+        this.recordSpend(scope, this.nothingSpent(0), RunEnding.DISCARDED);
     }
 
     /**
@@ -811,7 +811,7 @@ final class CullEngine {
     private WaitingCullJob buildWaitingJob(final PrepDir prep) {
         return new WaitingCullJob(
                 prep.scope(), prep.prepDir(), this.shardTallyCalculator.tally(prep),
-                this.lastModifiedOrEpoch(prep.prepDir()));
+                PrepDirDoctor.lastModifiedOrEpoch(this.mediaStore, prep.prepDir()));
     }
 
     /**
@@ -916,25 +916,5 @@ final class CullEngine {
                 case CEILING_REACHED -> RunEnding.CEILING_REACHED;
             };
         };
-    }
-
-    /**
-     * prepDirPath's mtime, or the epoch if it cannot be read.
-     *
-     * <p>This snapshot sits on a live cull job's resolution path - cancellation, a provider's own
-     * pause, a blocked apply, an empty apply return. Throwing here would replace that outcome with
-     * a crash instead of the Waiting or Blocked result it should have been. The epoch reads as "as
-     * old as anything", the same degrade {@link PrepDirDoctor#diagnose} uses for the same failure.
-     *
-     * @param prepDirPath {@link Path} the prep directory to check
-     * @return {@link Instant} the last-modified instant, or {@link Instant#EPOCH} if unreadable
-     */
-    private Instant lastModifiedOrEpoch(final Path prepDirPath) {
-        try {
-            return this.mediaStore.lastModifiedTime(prepDirPath);
-        } catch (final RuntimeException e) {
-            log.warn("Could not read the mtime of {}, ageing it as the epoch", prepDirPath, e);
-            return Instant.EPOCH;
-        }
     }
 }

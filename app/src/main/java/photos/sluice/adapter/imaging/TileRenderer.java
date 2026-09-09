@@ -15,8 +15,6 @@ import photos.sluice.domain.imaging.LowResGate;
 import photos.sluice.domain.scan.MediaTypeDetector;
 
 import javax.imageio.ImageIO;
-import javax.imageio.ImageReader;
-import javax.imageio.stream.ImageInputStream;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.awt.Color;
 import java.awt.Font;
@@ -28,7 +26,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.file.Path;
-import java.util.Iterator;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
@@ -218,30 +215,15 @@ public class TileRenderer {
      * @return boolean true if the source is too small to judge
      */
     private static boolean isSourceUnreviewable(final Path file) {
-        try (final ImageInputStream stream = ImageIO.createImageInputStream(file.toFile())) {
-            if (stream == null) {
-                return false;
-            }
-            final Iterator<ImageReader> readers = ImageIO.getImageReaders(stream);
-            if (!readers.hasNext()) {
-                return false;
-            }
-            final ImageReader reader = readers.next();
-            try {
-                reader.setInput(stream);
+        return ImageReaders.readOrElse(file, reader ->
                 // Index 0 specifically, matching the sub-image renderRaster's own decode used,
                 // rather than the largest across every sub-image. That match rests on an internal
                 // Thumbnailator detail rather than a documented contract, so it is worth
                 // re-checking on an upgrade. The design doc names the test that guards it.
-                return Math.max(reader.getWidth(0), reader.getHeight(0)) < MIN_JUDGEABLE_DIMENSION;
-            } finally {
-                reader.dispose();
-            }
-        } catch (IOException | RuntimeException _) {
-            // Unknown size fails open (treated as reviewable), matching LowResGate's own philosophy
-            // for a file whose dimensions couldn't be determined.
-            return false;
-        }
+                Math.max(reader.getWidth(0), reader.getHeight(0)) < MIN_JUDGEABLE_DIMENSION,
+                // Unknown size fails open, matching LowResGate's own philosophy for a file whose
+                // dimensions couldn't be determined.
+                false);
     }
 
     /**

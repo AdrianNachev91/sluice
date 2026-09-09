@@ -10,6 +10,7 @@ import photos.sluice.domain.cull.CullRuns;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Turns what a caller typed to name one sift into the folder that sift lives in.
@@ -43,14 +44,15 @@ public class RunAddress {
     /**
      * The folder one address names.
      *
-     * @param address {@link String} the scope tag or path the caller typed
+     * @param address the scope tag or path the caller typed, or null where they gave none
      * @return {@link Path} the folder that sift lives in
      * @throws ScopeRefusedException when no sift answers to it, or the folder holding them could
      *         not be read
      */
-    public Path folderFor(final String address) {
-        final Path path = pathOrNull(address);
-        return path == null ? this.tagged(address) : path;
+    public Path folderFor(final @Nullable String address) {
+        final String typed = Objects.requireNonNull(address, "an address is required");
+        final Path path = pathOrNull(typed);
+        return path == null ? this.tagged(typed) : path;
     }
 
     /**

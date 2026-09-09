@@ -685,7 +685,7 @@ public class RunsPresenter {
         }
         final boolean itJudgesThemItself = this.pipeline.configuredProviderSpends();
         final boolean corrects = !itJudgesThemItself && !this.working()
-                && anAgentLeftItUnfinished(run, state);
+                && anAgentLeftItUnfinished(run);
         final String asks = run.prepDir().equals(this.justCopied)
                 ? COPIED
                 : corrects ? COPY_FOLLOW_UP : COPY_PROMPT;
@@ -699,9 +699,8 @@ public class RunsPresenter {
     /**
      * Whether the press should ask an agent to pick a run back up, rather than start it.
      *
-     * <p>From the moment one sheet has an answer, or from the moment nothing more is coming. Both
-     * are runs an agent has begun and left unfinished, whether it stopped or wrote answers nothing
-     * could use, and the same follow-up serves both.
+     * <p>From the moment one sheet has an answer. That is a run an agent has begun and left
+     * unfinished, whether it stopped or wrote answers nothing could use.
      *
      * <p>Nothing answered and sheets still owed is the one case this refuses. An agent that has
      * written nothing is not making mistakes, it is not working. What its owner needs then is to
@@ -711,12 +710,11 @@ public class RunsPresenter {
      * an agent that started, and it is the one thing a follow-up exists to discard.
      *
      * @param run {@link CullRunSummary} the run
-     * @param state {@link State} its state
      * @return boolean whether the press should ask for a follow-up
      */
-    private static boolean anAgentLeftItUnfinished(final CullRunSummary run, final State state) {
+    private static boolean anAgentLeftItUnfinished(final CullRunSummary run) {
         final ShardTally sheets = run.shards();
-        return state != State.WAITING || (sheets != null && sheets.present() >= 1);
+        return sheets != null && sheets.present() >= 1;
     }
 
     /**

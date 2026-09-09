@@ -7,8 +7,6 @@ import javafx.scene.control.TextArea;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -108,9 +106,8 @@ final class CopyableTrace {
         final TextArea body = area(idPrefix + "-text", text);
         SettingsRows.pointing(toggle, false);
 
-        final var gap = new Region();
-        HBox.setHgrow(gap, Priority.ALWAYS);
-        final var head = new HBox(toggle, gap, copyButton(idPrefix + "-copy", copy, copied, () -> text));
+        final var head = new HBox(toggle, SettingsRows.spacer(),
+                copyButton(idPrefix + "-copy", copy, copied, () -> text));
         head.setAlignment(Pos.CENTER_LEFT);
         final var whole = new VBox(head, body);
         // No pane to carry: this one is drawn on a panel that fills the content area rather than

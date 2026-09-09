@@ -140,7 +140,7 @@ final class SettingsRows {
         });
         spinner.addEventFilter(MouseEvent.MOUSE_PRESSED, pressed ->
                 spinner.getProperties().put(TYPED_INTO,
-                        pressed.getTarget() instanceof final Node hit && inside(hit, spinner.getEditor())));
+                        pressed.getTarget() instanceof final Node hit && sitsInside(hit, spinner.getEditor())));
     }
 
     /**
@@ -157,12 +157,12 @@ final class SettingsRows {
      * Whether one node is another, or sits within it.
      *
      * @param node {@link Node} where the press landed
-     * @param within {@link Node} the part being asked about
+     * @param container the part being asked about, or null
      * @return boolean true when the press was inside it
      */
-    private static boolean inside(final Node node, final Node within) {
+    static boolean sitsInside(final Node node, final @Nullable Node container) {
         for (Node walk = node; walk != null; walk = walk.getParent()) {
-            if (walk == within) {
+            if (walk == container) {
                 return true;
             }
         }
@@ -182,6 +182,33 @@ final class SettingsRows {
         line.getStyleClass().add("settings-help");
         showWhileItSaysSomething(line);
         return line;
+    }
+
+    /**
+     * Something that pushes what follows it to the far side of a row.
+     *
+     * @return {@link Region} the gap
+     */
+    static Region spacer() {
+        final var gap = new Region();
+        HBox.setHgrow(gap, Priority.ALWAYS);
+        return gap;
+    }
+
+    /**
+     * Adds a prose line to a card, where there is one to add.
+     *
+     * @param into {@link VBox} the card's lines
+     * @param value what the line reads, or null where the card has no such line
+     * @param styleClass {@link String} the line's own style class
+     */
+    static void addIfPresent(final VBox into, final @Nullable String value, final String styleClass) {
+        if (value == null) {
+            return;
+        }
+        final TextArea line = SelectableText.prose(value);
+        line.getStyleClass().add(styleClass);
+        into.getChildren().add(line);
     }
 
     /**
@@ -259,8 +286,7 @@ final class SettingsRows {
         final var link = new Hyperlink();
         link.setId(id);
         link.getStyleClass().add("in-app-link");
-        link.managedProperty().bind(link.visibleProperty());
-        link.visibleProperty().bind(link.textProperty().isNotEmpty());
+        showWhileItSaysSomething(link);
         return link;
     }
 
@@ -361,8 +387,7 @@ final class SettingsRows {
         final var row = new HBox(mark, line);
         row.setAlignment(Pos.TOP_LEFT);
         HBox.setHgrow(line, Priority.ALWAYS);
-        row.managedProperty().bind(row.visibleProperty());
-        row.visibleProperty().bind(line.visibleProperty());
+        showWhileTheLineDoes(row, line);
         return row;
     }
 
@@ -381,9 +406,30 @@ final class SettingsRows {
         link.setId(id);
         link.getStyleClass().add("in-app-link");
         link.setOnAction(_ -> goes.run());
-        link.managedProperty().bind(link.visibleProperty());
-        link.visibleProperty().bind(link.textProperty().isNotEmpty());
+        showWhileItSaysSomething(link);
         return link;
+    }
+
+    /**
+     * Has a box take up room only while the line inside it is showing.
+     *
+     * @param box {@link Node} the box around the line
+     * @param line {@link Node} the line that decides
+     */
+    static void showWhileTheLineDoes(final Node box, final Node line) {
+        box.managedProperty().bind(box.visibleProperty());
+        box.visibleProperty().bind(line.visibleProperty());
+    }
+
+    /**
+     * Shows a node, or takes it off the page entirely rather than leaving a hole where it was.
+     *
+     * @param node {@link Node} the node
+     * @param wanted boolean whether the screen has anything to show there
+     */
+    static void showIf(final Node node, final boolean wanted) {
+        node.setVisible(wanted);
+        node.setManaged(wanted);
     }
 
     /**

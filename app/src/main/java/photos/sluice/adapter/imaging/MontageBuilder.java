@@ -53,7 +53,7 @@ public class MontageBuilder {
         final int labelHeight = labelBandHeight();
         final int cellWidth = tileSize + 2 * CELL_PADDING;
         final int cellHeight = tileSize + labelHeight + 2 * CELL_PADDING;
-        final int rows = ceilDiv(tiles.size(), tilesPerRow);
+        final int rows = Math.ceilDiv(tiles.size(), tilesPerRow);
         final int canvasWidth = tilesPerRow * cellWidth;
         final int canvasHeight = rows * cellHeight;
 
@@ -133,16 +133,5 @@ public class MontageBuilder {
         } finally {
             g.dispose();
         }
-    }
-
-    /**
-     * Computes the ceiling of an integer division.
-     *
-     * @param a int the dividend
-     * @param b int the divisor
-     * @return int the ceiling of a divided by b
-     */
-    private static int ceilDiv(final int a, final int b) {
-        return (a + b - 1) / b;
     }
 }

@@ -9,21 +9,17 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
-import photos.sluice.adapter.ui.RunLauncherView;
 import photos.sluice.adapter.ui.RunResultView;
 import photos.sluice.adapter.ui.RunResultView.CardAction;
 import photos.sluice.adapter.ui.RunResultView.Count;
 import photos.sluice.adapter.ui.RunResultView.Tone;
-import photos.sluice.adapter.ui.RunSetupPresenter;
 import photos.sluice.adapter.ui.RunStage;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -98,8 +94,7 @@ final class RunResultPane {
         // Its weight is the arm's, set on every fill, so the class goes on there rather than here.
         final var actionButton = new Button();
         actionButton.setId("run-resume");
-        actionButton.managedProperty().bind(actionButton.visibleProperty());
-        actionButton.visibleProperty().bind(actionButton.textProperty().isNotEmpty());
+        SettingsRows.showWhileItSaysSomething(actionButton);
 
         final var done = new Button();
         done.setId("run-done");
@@ -108,7 +103,7 @@ final class RunResultPane {
             presenter.dismissResult();
             redraw.run();
         });
-        final var doneRow = new HBox(spacer(), actionButton, done);
+        final var doneRow = new HBox(SettingsRows.spacer(), actionButton, done);
         doneRow.getStyleClass().add("run-start-row");
         doneRow.setAlignment(Pos.CENTER_RIGHT);
 
@@ -151,24 +146,8 @@ final class RunResultPane {
      */
     private static void onSiftNow(final RunLauncherPresenter presenter, final Node opensOver,
                                   final CardAction.SiftNow offer, final Runnable redraw) {
-        presenter.siftNow(offer, asked -> agreed(opensOver, asked));
+        presenter.siftNow(offer, asked -> Dialogs.agreed(opensOver, asked));
         redraw.run();
-    }
-
-    /**
-     * Puts one question and answers whether the reader agreed.
-     *
-     * @param opensOver {@link Node} something on the window the question opens over
-     * @param asked {@link RunSetupPresenter.Confirmation} what to ask
-     * @return boolean true where they chose to go ahead
-     */
-    private static boolean agreed(final Node opensOver, final RunSetupPresenter.Confirmation asked) {
-        return Dialogs.ask(opensOver, asked.heading(), asked.detail(),
-                new Dialogs.Choice(asked.goAhead(), Dialogs.Role.GO_AHEAD,
-                        Dialogs.Emphasis.of(asked.goAheadLeads())),
-                new Dialogs.Choice(asked.cancel(), Dialogs.Role.CANCEL,
-                        Dialogs.Emphasis.of(!asked.goAheadLeads())))
-                .isPresent();
     }
 
     /**
@@ -198,17 +177,6 @@ final class RunResultPane {
     private static void showWhile(final Region region, final TextArea says) {
         region.managedProperty().bind(region.visibleProperty());
         region.visibleProperty().bind(says.textProperty().isNotEmpty());
-    }
-
-    /**
-     * Something that pushes what follows it to the far side of a row.
-     *
-     * @return {@link Region} the gap
-     */
-    private static Region spacer() {
-        final var gap = new Region();
-        HBox.setHgrow(gap, Priority.ALWAYS);
-        return gap;
     }
 
     /**
@@ -253,7 +221,8 @@ final class RunResultPane {
             this.warningDetail.setText(view.warning() == null ? "" : view.warning().detail());
             this.drawAction(view.action(), presenter, redraw);
             SettingsRows.pointAt(this.detailLocationLink, view.location(), this.navigation);
-            this.drawMessage(showing.message());
+            SettingsRows.reportRun(this.message, this.messageLocationLink, showing.message(),
+                    this.navigation);
             this.done.setText(view.doneLabel());
         }
 
@@ -286,9 +255,7 @@ final class RunResultPane {
          * @param rows a {@link List} of {@link Count} what the run did
          */
         private void drawCounts(final List<Count> rows) {
-            final List<Node> drawn = new ArrayList<>();
-            rows.forEach(count -> drawn.add(countRow(count)));
-            this.counts.getChildren().setAll(drawn);
+            this.counts.getChildren().setAll(rows.stream().map(Controls::countRow).toList());
         }
 
         /**
@@ -341,15 +308,6 @@ final class RunResultPane {
         }
 
         /**
-         * Fills in the line a refused press leaves behind, in the colour its own kind earns.
-         *
-         * @param said {@link RunLauncherView.Message} what to report, or null for nothing
-         */
-        private void drawMessage(final RunLauncherView.@Nullable Message said) {
-            SettingsRows.reportRun(this.message, this.messageLocationLink, said, this.navigation);
-        }
-
-        /**
          * One counted thing, as a name on the left and its number on the right.
          *
          * @param count {@link Count} what was counted
@@ -360,7 +318,7 @@ final class RunResultPane {
             label.getStyleClass().add("run-result-count-label");
             final TextField value = SelectableText.line(count.value());
             value.getStyleClass().add("run-result-count-value");
-            final var row = new HBox(label, spacer(), value);
+            final var row = new HBox(label, SettingsRows.spacer(), value);
             row.setId(count.id());
             row.setAlignment(Pos.CENTER_LEFT);
             row.getStyleClass().add("run-result-count");

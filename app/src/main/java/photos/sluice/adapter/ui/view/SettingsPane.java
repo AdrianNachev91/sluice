@@ -137,24 +137,22 @@ final class SettingsPane {
             // A refusal answers one press of Save against one set of choices. Changing the provider
             // changes which fields exist and what they must hold. What the last one said is then
             // about a different screen.
+            final var controls = VisionProviderCard.controlsOf(provider.providerFields());
             clearRefusal(status, folders.workingRoot().violation(), folders.libraryRoot().violation(),
-                    folders.inbox().violation(),
-                    VisionProviderCard.controlsOf(provider.providerFields()).modelViolation());
+                    folders.inbox().violation(), controls.modelViolation());
             VisionProviderCard.showOnlyWhatTheProviderUses(chosen.fields(), provider.providerFields(),
                     provider.secretCard());
             // Both rebuilt rather than toggled. A credential and a model catalog each belong to the
             // provider that owns them, so what these say and offer has to change with the choice.
             VisionProviderCard.fillSecretCard(provider.secretCard(), visionProvider, provider.providerBox(),
                     provider.providerFields(), null, view.keyLimit());
-            VisionProviderCard.selectModelPickerFor(VisionProviderCard.controlsOf(provider.providerFields()).model(),
-                    VisionProviderCard.controlsOf(provider.providerFields()).modelInfo(), visionProvider, chosen.id(),
-                    provider.providerBox());
+            VisionProviderCard.selectModelPickerFor(controls.model(), controls.modelInfo(),
+                    visionProvider, chosen.id(), provider.providerBox());
             // A test answered for the provider that was chosen when it ran.
-            VisionProviderCard.controlsOf(provider.providerFields()).testResult().setText("");
+            controls.testResult().setText("");
             // The endpoint field is shared across every provider. A switch has to hand it the newly
             // chosen provider's own default, not leave the old one's showing.
-            VisionProviderCard.controlsOf(provider.providerFields()).endpoint()
-                    .setPromptText(chosen.defaultEndpoint());
+            controls.endpoint().setPromptText(chosen.defaultEndpoint());
         });
 
         header.save().setOnAction(_ -> onSave(container, presenter, visionProvider, folders.workingRoot(),
@@ -171,8 +169,6 @@ final class SettingsPane {
                 PhotoCategoriesCard.build(onOpenPhotoCategories), montage.card(), appearance.card());
         if (banner != null) {
             SettingsRows.report(container, null, banner, SAVED.equals(banner));
-        }
-        if (banner != null) {
             SettingsRows.travelToTop(container);
         }
     }

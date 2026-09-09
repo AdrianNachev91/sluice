@@ -159,11 +159,10 @@ public class CullCommand implements Callable<Integer> {
      * @return {@link String} the line
      */
     private static String estimateLine(final int photos, final SpendEstimate estimate) {
-        final String trust = estimate.exactInput() ? "" : "an estimate, ";
         final String basis = estimate.historicOutput() ? "based on your previous runs"
                 : "based on default estimates";
         return "Sifting " + ResultLines.grouped(photos) + " photos is expected to spend about "
-                + ResultLines.rounded(estimate.totalTokens()) + " tokens (" + trust + basis + "). It stops "
+                + ResultLines.rounded(estimate.totalTokens()) + " tokens (an estimate, " + basis + "). It stops "
                 + "on its own if it goes far past that.";
     }
 

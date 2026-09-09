@@ -40,7 +40,6 @@ import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletionException;
@@ -800,7 +799,13 @@ public class SettingsPresenter {
         }
     }
 
-    private static @Nullable String blankToNull(final String value) {
+    /**
+     * A field left empty as no value at all, which is what an unset setting is.
+     *
+     * @param value {@link String} the field's text
+     * @return {@link String} the text, or null where it is blank
+     */
+    static @Nullable String blankToNull(final String value) {
         return value.isBlank() ? null : value;
     }
 
@@ -1076,18 +1081,9 @@ public class SettingsPresenter {
         }
         final ProgressPhase now = phases.getLast();
         return now.total() > 0
-                ? now.label() + "... " + grouped(now.current()) + " of " + grouped(now.total())
+                ? now.label() + "... " + RunWords.grouped(now.current())
+                        + " of " + RunWords.grouped(now.total())
                 : now.label() + "...";
-    }
-
-    /**
-     * A number with thousands separated, the way somebody reading it would write it.
-     *
-     * @param value int the number
-     * @return {@link String} the number written out
-     */
-    private static String grouped(final int value) {
-        return String.format(Locale.UK, "%,d", value);
     }
 
     /**

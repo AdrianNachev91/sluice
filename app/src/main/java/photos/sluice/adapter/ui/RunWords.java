@@ -10,6 +10,7 @@ import java.time.Month;
 import java.time.format.TextStyle;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Collectors;
 
 /**
  * Turns the numbers and lists behind a run into the words the dashboard says them in.
@@ -183,7 +184,7 @@ final class RunWords {
      * @return {@link String} the months joined by commas
      */
     static String joined(final List<Integer> months) {
-        return months.stream().map(String::valueOf).reduce((a, b) -> a + "," + b).orElse("");
+        return months.stream().map(String::valueOf).collect(Collectors.joining(","));
     }
 
     /**

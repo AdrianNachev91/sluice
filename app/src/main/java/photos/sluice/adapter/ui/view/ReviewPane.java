@@ -10,7 +10,6 @@ import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import photos.sluice.adapter.ui.ReviewPresenter;
 import photos.sluice.adapter.ui.ReviewView;
@@ -64,8 +63,7 @@ final class ReviewPane {
         final var messageBox = new VBox(SettingsRows.locationLines(message, locationLink));
         messageBox.setId("review-message-box");
         messageBox.getStyleClass().add("warning-box");
-        messageBox.managedProperty().bind(messageBox.visibleProperty());
-        messageBox.visibleProperty().bind(message.visibleProperty());
+        SettingsRows.showWhileTheLineDoes(messageBox, message);
         final TextArea nothingYet = SettingsRows.emptyHelpLine("review-nothing-yet");
 
         final TextArea explained = SettingsRows.emptyHelpLine("review-explained");
@@ -73,8 +71,7 @@ final class ReviewPane {
         // on the outside: hiding only the box inside would leave the badge floating on the page.
         final Node explainer = SettingsRows.badgedCallout(new VBox(explained));
         explainer.setId("review-explained-box");
-        explainer.managedProperty().bind(explainer.visibleProperty());
-        explainer.visibleProperty().bind(explained.visibleProperty());
+        SettingsRows.showWhileTheLineDoes(explainer, explained);
 
         final var groups = new VBox();
         groups.setId("review-groups");
@@ -127,8 +124,7 @@ final class ReviewPane {
         final var box = new VBox(line);
         box.setId(id);
         box.getStyleClass().add("warning-box");
-        box.managedProperty().bind(box.visibleProperty());
-        box.visibleProperty().bind(line.visibleProperty());
+        SettingsRows.showWhileTheLineDoes(box, line);
         return box;
     }
 
@@ -165,9 +161,9 @@ final class ReviewPane {
             this.message.setText(view.message() == null ? "" : view.message().text());
             SettingsRows.pointAt(this.locationLink,
                     view.message() == null ? null : view.message().location(), this.navigation);
-            final List<Node> drawn = new ArrayList<>();
-            view.groups().forEach(group -> drawn.add(section(group, presenter, redraw, this.scroll)));
-            this.groups.getChildren().setAll(drawn);
+            this.groups.getChildren().setAll(view.groups().stream()
+                    .map(group -> section(group, presenter, redraw, this.scroll))
+                    .toList());
         }
 
         /**
@@ -188,9 +184,9 @@ final class ReviewPane {
 
             final var cards = new VBox();
             cards.getStyleClass().add("review-cards");
-            final List<Node> drawn = new ArrayList<>();
-            group.folders().forEach(folder -> drawn.add(card(folder, presenter, redraw, scroll)));
-            cards.getChildren().setAll(drawn);
+            cards.getChildren().setAll(group.folders().stream()
+                    .map(folder -> card(folder, presenter, redraw, scroll))
+                    .toList());
 
             final var section = new VBox(heading, explained, cards);
             section.setId("review-group-" + group.id());
@@ -260,9 +256,7 @@ final class ReviewPane {
             toggle.getStyleClass().add("review-notes-toggle");
             SettingsRows.pointing(toggle, notes.shown());
 
-            final var gap = new Region();
-            HBox.setHgrow(gap, Priority.ALWAYS);
-            final var row = new HBox(toggle, gap, buttons);
+            final var row = new HBox(toggle, SettingsRows.spacer(), buttons);
             row.setAlignment(Pos.CENTER_LEFT);
             row.getStyleClass().add("review-notes");
 
@@ -337,9 +331,9 @@ final class ReviewPane {
          */
         private static Node actionRow(final FolderCard folder, final ReviewPresenter presenter,
                                       final Runnable redraw) {
-            final List<Node> buttons = new ArrayList<>();
-            folder.actions().forEach(action -> buttons.add(button(action, presenter, redraw)));
-            final var row = new HBox(buttons.toArray(new Node[0]));
+            final var row = new HBox(folder.actions().stream()
+                    .map(action -> button(action, presenter, redraw))
+                    .toArray(Node[]::new));
             row.setAlignment(Pos.CENTER_RIGHT);
             row.getStyleClass().add("run-start-row");
             return row;

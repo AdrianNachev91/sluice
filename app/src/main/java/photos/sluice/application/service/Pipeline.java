@@ -248,7 +248,7 @@ public class Pipeline {
         this.requireUsableRoots();
         return this.jobRunner.submit(handle -> {
             this.phaseRunner.planned(List.of(COMMITTING));
-            return this.runPhase(COMMITTING,
+            return this.phaseRunner.run(COMMITTING,
                     progress -> this.commitEngine.commit(scope, progress, handle.stopSignal()));
         });
     }
@@ -269,7 +269,7 @@ public class Pipeline {
         this.importEngine.requireImportable(sources);
         return this.jobRunner.submit(handle -> {
             this.phaseRunner.planned(List.of(IMPORTING));
-            return this.runPhase(IMPORTING,
+            return this.phaseRunner.run(IMPORTING,
                     progress -> this.importEngine.importFrom(sources, kind, progress,
                             handle.stopSignal()));
         });
@@ -286,7 +286,7 @@ public class Pipeline {
         this.requireUsableRoots();
         return this.jobRunner.submit(handle -> {
             this.phaseRunner.planned(List.of(RESCUING));
-            return this.runPhase(RESCUING,
+            return this.phaseRunner.run(RESCUING,
                     progress -> this.rescueEngine.rescue(root, folder, progress, handle.stopSignal()));
         });
     }
@@ -646,7 +646,7 @@ public class Pipeline {
             }
             this.cullEngine.disarmWatch(prepDir);
             final DiscardReport report =
-                    this.runPhase(DISCARDING, progress -> this.prepDirRemedies.discard(prepDir, progress));
+                    this.phaseRunner.run(DISCARDING, progress -> this.prepDirRemedies.discard(prepDir, progress));
             // After the file work, so a discard that threw leaves the run still occupying its scope
             // in the ledger as well as on disk.
             this.cullEngine.recordDiscard(prepDir.getFileName().toString());
@@ -789,17 +789,6 @@ public class Pipeline {
         } catch (final RuntimeException e) {
             return false;
         }
-    }
-
-    /**
-     * Runs work through PhaseRunner, bracketing it with the given phase label.
-     *
-     * @param phase {@link String} the phase label for progress reporting
-     * @param work a {@link PhaseRunner.PhaseWork} of T the work to run
-     * @return T the result of the work
-     */
-    private <T> T runPhase(final String phase, final PhaseRunner.PhaseWork<T> work) throws Exception {
-        return this.phaseRunner.run(phase, work);
     }
 
     /**

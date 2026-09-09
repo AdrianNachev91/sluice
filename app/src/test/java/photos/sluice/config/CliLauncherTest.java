@@ -13,32 +13,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CliLauncherTest {
 
     @Test
-    void springArgsImportsTheConfigFile() {
-        final Path configFile = Path.of("somewhere", "config.yml");
-
-        final String[] args = CliLauncher.springArgs(configFile, new String[0]);
-
-        assertThat(args).containsExactly("--spring.config.import=optional:file:" + configFile);
-    }
-
-    // A fresh install has no config file and the command still has to run.
-    @Test
-    void springArgsImportsTheConfigFileOptionally() {
-        final String[] args = CliLauncher.springArgs(Path.of("config.yml"), new String[0]);
-
-        assertThat(args[0]).contains("optional:");
-    }
-
-    @Test
-    void springArgsKeepsTheUsersOwnArgumentsAfterTheImport() {
-        final String[] args = CliLauncher.springArgs(Path.of("config.yml"),
-                new String[]{"sort", "2019", "--sluice.paths.inbox=/photos"});
-
-        assertThat(args).containsExactly("--spring.config.import=optional:file:config.yml",
-                "sort", "2019", "--sluice.paths.inbox=/photos");
-    }
-
-    @Test
     void aVerbAndItsArgumentsAreParsed() {
         final String[] args = CliLauncher.commandArgs(new String[]{"sort", "2019", "--months=6-8"});
 

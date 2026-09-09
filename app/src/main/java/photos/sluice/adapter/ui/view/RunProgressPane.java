@@ -7,8 +7,6 @@ import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.RunProgressView;
@@ -162,9 +160,7 @@ final class RunProgressPane {
         label.getStyleClass().add("run-phase-label");
         final TextField counts = SelectableText.line(SettingsRows.orNothing(phase.counts()));
         counts.getStyleClass().add("run-phase-counts");
-        final var spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        final var top = new HBox(label, spacer, counts);
+        final var top = new HBox(label, SettingsRows.spacer(), counts);
         top.setAlignment(Pos.CENTER_LEFT);
 
         final var bar = new ProgressBar();

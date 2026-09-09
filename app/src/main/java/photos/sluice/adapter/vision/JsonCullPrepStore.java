@@ -18,6 +18,7 @@ import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.MontageNaming;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
+import photos.sluice.domain.cull.VerdictAction;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.exc.JacksonIOException;
 import tools.jackson.databind.json.JsonMapper;
@@ -50,9 +51,6 @@ import java.util.Set;
  */
 @Component
 public class JsonCullPrepStore implements CullPrepPort {
-
-    private static final String NEAR_DUP_CHOSEN = "near-dup-chosen";
-    private static final String NEAR_DUP_REJECT = "near-dup-reject";
 
     private final ShardCodec shardCodec;
     private final SidecarReader sidecarReader;
@@ -407,15 +405,23 @@ public class JsonCullPrepStore implements CullPrepPort {
      * the prep dir, and {@code PrepDirRemedies} moves a stray shard to one of those names. An entry
      * off disk therefore chooses a move destination, which is what the id rule refuses it.
      *
+     * <p>Each id appears once. A sheet's own tally is counted per id while the run's total is
+     * counted per entry, so a repeat makes those two disagree and a finished run read as unfinished.
+     *
      * @param values a {@link List} of {@link String} the parsed entries, non-null and null-free
      * @param indexPath {@link Path} index.json's own path, used only for the error message
      * @return a {@link List} of {@link String} the same values
      */
     private static List<String> montageIds(final List<String> values, final Path indexPath) {
+        final Set<String> seen = new HashSet<>();
         for (final String montage : values) {
             if (!MontageNaming.isMontageId(montage)) {
                 throw new MalformedPrepJsonException("Prep index " + indexPath + " has an entry '" + montage
                         + "' that is not a montage id", new IOException("unusable montage entry"));
+            }
+            if (!seen.add(montage)) {
+                throw new MalformedPrepJsonException("Prep index " + indexPath + " repeats the entry '" + montage
+                        + "'", new IOException("duplicate montage entry"));
             }
         }
         return values;
@@ -546,10 +552,10 @@ public class JsonCullPrepStore implements CullPrepPort {
     private static RawDecision toRaw(final Decision decision) {
         return switch (decision) {
             case final Classification c -> new RawDecision(c.file().toString(), c.category(), null, c.reason(), null);
-            case final NearDupChosen c ->
-                    new RawDecision(c.file().toString(), NEAR_DUP_CHOSEN, c.group(), null, c.chosenReason());
-            case final NearDupReject reject ->
-                    new RawDecision(reject.file().toString(), NEAR_DUP_REJECT, reject.group(), reject.reason(), null);
+            case final NearDupChosen c -> new RawDecision(c.file().toString(),
+                    VerdictAction.NEAR_DUP_CHOSEN, c.group(), null, c.chosenReason());
+            case final NearDupReject reject -> new RawDecision(reject.file().toString(),
+                    VerdictAction.NEAR_DUP_REJECT, reject.group(), reject.reason(), null);
         };
     }
 }

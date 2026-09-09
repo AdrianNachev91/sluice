@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -232,7 +231,7 @@ public class CullMontageRenderer implements MontageRenderer {
                 .filter(this.mediaStore::exists)
                 .flatMap(dir -> this.mediaStore.listFiles(dir).stream())
                 .filter(file -> this.mediaTypeDetector.classify(file).filter(MediaType.PHOTO::equals).isPresent())
-                .map(file -> new CullCandidate(file, mtimeOf(file)))
+                .map(file -> new CullCandidate(file, this.mediaStore.lastModifiedTime(file)))
                 .toList();
     }
 
@@ -276,20 +275,6 @@ public class CullMontageRenderer implements MontageRenderer {
      */
     private static boolean isReceived(final Path path) {
         return RECEIVED_PATTERN.matcher(path.getFileName().toString()).find();
-    }
-
-    /**
-     * Reads a file's last-modified time.
-     *
-     * @param file {@link Path} the file to inspect
-     * @return {@link Instant} the file's last-modified instant
-     */
-    private static Instant mtimeOf(final Path file) {
-        try {
-            return Files.getLastModifiedTime(file).toInstant();
-        } catch (final IOException e) {
-            throw new UncheckedIOException("Failed to read mtime of " + file, e);
-        }
     }
 
     /**
