@@ -66,8 +66,12 @@ jobs:
         # repository has served an index whose hash disagrees with its own Release file, which
         # reddened this leg on a commit that touched no Linux code. Dropped rather than tolerating
         # a failed update, so a source we do need still fails loudly.
+        #
+        # Matched by what it points at rather than by filename, and -v so the log says what went.
+        # The name and the format are the runner image's to change, and `rm -f` on a guessed name
+        # reports nothing when the guess is wrong.
         run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo rm -v -f $(grep -rl 'dl\.google\.com' /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null || true)
           sudo apt-get update && sudo apt-get install -y libheif-examples libheif-plugin-libde265
 
       # The Linux keyring tests need a real Secret Service on a session bus, and a headless runner
