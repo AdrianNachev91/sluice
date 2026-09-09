@@ -21,16 +21,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CsvLibraryHashIndexTest {
 
     @Test
-    void loadReturnsEmptyMapWhenIndexFileMissing(@TempDir final Path repoRoot) {
-        final CsvLibraryHashIndex index = indexAt(repoRoot);
+    void loadReturnsEmptyMapWhenIndexFileMissing(@TempDir final Path workingRoot) {
+        final CsvLibraryHashIndex index = indexAt(workingRoot);
 
         assertThat(index.load()).isEmpty();
     }
 
     @Test
-    void setAsideMovesTheIndexAndLeavesTheNextReadEmpty(@TempDir final Path repoRoot,
+    void setAsideMovesTheIndexAndLeavesTheNextReadEmpty(@TempDir final Path workingRoot,
                                                         @TempDir final Path graveyard) {
-        final CsvLibraryHashIndex index = indexAt(repoRoot);
+        final CsvLibraryHashIndex index = indexAt(workingRoot);
         index.append(List.of(new IndexEntry("aaa", Path.of("holiday.jpg"))));
         final Path filedAt = graveyard.resolve("kept").resolve("library-hashes-2026-08-16.csv");
 
@@ -42,10 +42,10 @@ class CsvLibraryHashIndexTest {
     }
 
     @Test
-    void setAsideAnswersThatThereWasNoIndexToMove(@TempDir final Path repoRoot, @TempDir final Path graveyard) {
+    void setAsideAnswersThatThereWasNoIndexToMove(@TempDir final Path workingRoot, @TempDir final Path graveyard) {
         final Path filedAt = graveyard.resolve("library-hashes-2026-08-16.csv");
 
-        assertThat(indexAt(repoRoot).setAside(filedAt)).isFalse();
+        assertThat(indexAt(workingRoot).setAside(filedAt)).isFalse();
 
         assertThat(filedAt).doesNotExist();
     }
@@ -90,15 +90,15 @@ class CsvLibraryHashIndexTest {
     }
 
     @Test
-    void loadParsesFixtureShapedLikeRealIndexWithBomAndDuplicateHash(@TempDir final Path repoRoot) throws IOException {
-        final Path csv = repoRoot.resolve("logs").resolve("library-hashes.csv");
+    void loadParsesFixtureShapedLikeRealIndexWithBomAndDuplicateHash(@TempDir final Path workingRoot) throws IOException {
+        final Path csv = workingRoot.resolve("logs").resolve("library-hashes.csv");
         Files.createDirectories(csv.getParent());
         Files.writeString(csv, """
                 ﻿"sha256","path"\r
                 "201936E3F7331FE027E25C63481533A55C7BD9F2CF37A2664B4A4AA301CC19FE","D:\\OneDrive\\PhotoLibrary\\Photos\\2017\\08\\a.jpg"\r
                 "201936E3F7331FE027E25C63481533A55C7BD9F2CF37A2664B4A4AA301CC19FE","D:\\OneDrive\\PhotoLibrary\\Photos\\2017\\08\\a (2).jpg"\r
                 """, StandardCharsets.UTF_8);
-        final CsvLibraryHashIndex index = indexAt(repoRoot);
+        final CsvLibraryHashIndex index = indexAt(workingRoot);
 
         final Map<String, List<Path>> loaded = index.load();
 
@@ -110,22 +110,22 @@ class CsvLibraryHashIndexTest {
     }
 
     @Test
-    void containsReflectsLoadedHashes(@TempDir final Path repoRoot) throws IOException {
-        final Path csv = repoRoot.resolve("logs").resolve("library-hashes.csv");
+    void containsReflectsLoadedHashes(@TempDir final Path workingRoot) throws IOException {
+        final Path csv = workingRoot.resolve("logs").resolve("library-hashes.csv");
         Files.createDirectories(csv.getParent());
         Files.writeString(csv, """
                 "sha256","path"
                 "ABC123","D:\\lib\\x.jpg"
                 """, StandardCharsets.UTF_8);
-        final CsvLibraryHashIndex index = indexAt(repoRoot);
+        final CsvLibraryHashIndex index = indexAt(workingRoot);
 
         assertThat(index.contains("ABC123")).isTrue();
         assertThat(index.contains("DOESNOTEXIST")).isFalse();
     }
 
     @Test
-    void appendCreatesFileWithHeaderWhenMissing(@TempDir final Path repoRoot) {
-        final CsvLibraryHashIndex index = indexAt(repoRoot);
+    void appendCreatesFileWithHeaderWhenMissing(@TempDir final Path workingRoot) {
+        final CsvLibraryHashIndex index = indexAt(workingRoot);
         final Path entryPath = Path.of("D:\\lib\\one.jpg");
 
         index.append(List.of(new IndexEntry("HASH1", entryPath)));
@@ -134,14 +134,14 @@ class CsvLibraryHashIndexTest {
     }
 
     @Test
-    void appendAddsRowsWithoutDuplicatingHeaderOnExistingFile(@TempDir final Path repoRoot) throws IOException {
-        final Path csv = repoRoot.resolve("logs").resolve("library-hashes.csv");
+    void appendAddsRowsWithoutDuplicatingHeaderOnExistingFile(@TempDir final Path workingRoot) throws IOException {
+        final Path csv = workingRoot.resolve("logs").resolve("library-hashes.csv");
         Files.createDirectories(csv.getParent());
         Files.writeString(csv, """
                 "sha256","path"
                 "HASH1","D:\\lib\\one.jpg"
                 """, StandardCharsets.UTF_8);
-        final CsvLibraryHashIndex index = indexAt(repoRoot);
+        final CsvLibraryHashIndex index = indexAt(workingRoot);
 
         index.append(List.of(new IndexEntry("HASH2", Path.of("D:\\lib\\two.jpg"))));
 
@@ -153,15 +153,15 @@ class CsvLibraryHashIndexTest {
     }
 
     @Test
-    void appendInsertsMissingNewlineBeforeNewRowsWhenLastLineWasNotTerminated(@TempDir final Path repoRoot)
+    void appendInsertsMissingNewlineBeforeNewRowsWhenLastLineWasNotTerminated(@TempDir final Path workingRoot)
             throws IOException {
-        final Path csv = repoRoot.resolve("logs").resolve("library-hashes.csv");
+        final Path csv = workingRoot.resolve("logs").resolve("library-hashes.csv");
         Files.createDirectories(csv.getParent());
         // Deliberately no trailing newline after the last row.
         Files.writeString(csv, """
                 "sha256","path"
                 "HASH1","D:\\lib\\one.jpg\"""", StandardCharsets.UTF_8);
-        final CsvLibraryHashIndex index = indexAt(repoRoot);
+        final CsvLibraryHashIndex index = indexAt(workingRoot);
         final Path secondEntryPath = Path.of("D:\\lib\\two.jpg");
 
         index.append(List.of(new IndexEntry("HASH2", secondEntryPath)));
@@ -177,9 +177,9 @@ class CsvLibraryHashIndexTest {
     }
 
     @Test
-    void sessionAppendsSeveralEntriesUnderOneHeader(@TempDir final Path repoRoot) throws IOException {
-        final Path csv = repoRoot.resolve("logs").resolve("library-hashes.csv");
-        final CsvLibraryHashIndex index = indexAt(repoRoot);
+    void sessionAppendsSeveralEntriesUnderOneHeader(@TempDir final Path workingRoot) throws IOException {
+        final Path csv = workingRoot.resolve("logs").resolve("library-hashes.csv");
+        final CsvLibraryHashIndex index = indexAt(workingRoot);
 
         try (final HashIndexPort.Session session = index.openSession()) {
             session.append(new IndexEntry("HASH1", Path.of("D:\\lib\\one.jpg")));
@@ -194,9 +194,9 @@ class CsvLibraryHashIndexTest {
     }
 
     @Test
-    void sessionClosedWithoutAnyAppendLeavesIndexFileUntouched(@TempDir final Path repoRoot) {
-        final Path csv = repoRoot.resolve("logs").resolve("library-hashes.csv");
-        final CsvLibraryHashIndex index = indexAt(repoRoot);
+    void sessionClosedWithoutAnyAppendLeavesIndexFileUntouched(@TempDir final Path workingRoot) {
+        final Path csv = workingRoot.resolve("logs").resolve("library-hashes.csv");
+        final CsvLibraryHashIndex index = indexAt(workingRoot);
 
         // Deliberately no append() call before closing - an empty commit/rescue scope.
         index.openSession().close();
@@ -205,9 +205,9 @@ class CsvLibraryHashIndexTest {
     }
 
     @Test
-    void sessionFlushesEachEntryImmediatelyRatherThanBufferingUntilClose(@TempDir final Path repoRoot) throws IOException {
-        final Path csv = repoRoot.resolve("logs").resolve("library-hashes.csv");
-        final CsvLibraryHashIndex index = indexAt(repoRoot);
+    void sessionFlushesEachEntryImmediatelyRatherThanBufferingUntilClose(@TempDir final Path workingRoot) throws IOException {
+        final Path csv = workingRoot.resolve("logs").resolve("library-hashes.csv");
+        final CsvLibraryHashIndex index = indexAt(workingRoot);
 
         try (final HashIndexPort.Session session = index.openSession()) {
             session.append(new IndexEntry("HASH1", Path.of("D:\\lib\\one.jpg")));
@@ -222,8 +222,8 @@ class CsvLibraryHashIndexTest {
     }
 
     @Test
-    void roundTripsCommaInPath(@TempDir final Path repoRoot) {
-        final CsvLibraryHashIndex index = indexAt(repoRoot);
+    void roundTripsCommaInPath(@TempDir final Path workingRoot) {
+        final CsvLibraryHashIndex index = indexAt(workingRoot);
         final Path trickyPath = Path.of("D:\\lib\\a, b.jpg");
 
         index.append(List.of(new IndexEntry("HASH3", trickyPath)));
@@ -231,7 +231,7 @@ class CsvLibraryHashIndexTest {
         assertThat(index.load()).containsEntry("HASH3", List.of(trickyPath));
     }
 
-    private static CsvLibraryHashIndex indexAt(final Path repoRoot) {
-        return new CsvLibraryHashIndex(SettingsFixture.workingRoot(repoRoot));
+    private static CsvLibraryHashIndex indexAt(final Path workingRoot) {
+        return new CsvLibraryHashIndex(SettingsFixture.workingRoot(workingRoot));
     }
 }

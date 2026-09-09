@@ -38,17 +38,17 @@ public final class RootLayout {
     /**
      * Checks three real, existing roots against the rules above.
      *
-     * @param repoRoot {@link Path} the real working root
+     * @param workingRoot {@link Path} the real working root
      * @param libraryRoot {@link Path} the real library root
      * @param inbox {@link Path} the real inbox root
      * @return a {@link List} of {@link PathViolation}, empty when the layout is legal
      */
-    public static List<PathViolation> violations(final Path repoRoot, final Path libraryRoot, final Path inbox) {
+    public static List<PathViolation> violations(final Path workingRoot, final Path libraryRoot, final Path inbox) {
         final List<PathViolation> violations = new ArrayList<>();
         if (contains(libraryRoot, inbox) || contains(inbox, libraryRoot)) {
             violations.add(new Overlap(PathRole.LIBRARY_ROOT, PathRole.INBOX));
         }
-        if (contains(inbox, repoRoot)) {
+        if (contains(inbox, workingRoot)) {
             violations.add(new Overlap(PathRole.WORKING_ROOT, PathRole.INBOX));
         }
         return List.copyOf(violations);

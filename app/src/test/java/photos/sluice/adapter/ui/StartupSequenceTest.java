@@ -193,10 +193,10 @@ class StartupSequenceTest {
         }
     }
 
-    // Only repoRoot() is ever asked for here.
+    // Only workingRoot() is ever asked for here.
     private record FixedPaths(Path root) implements PathsPort {
         @Override
-        public Path repoRoot() {
+        public Path workingRoot() {
             return this.root;
         }
 

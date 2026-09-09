@@ -66,7 +66,7 @@ class SettingsServiceLockTest {
 
         assertThatThrownBy(() -> service.save(settings(after))).isInstanceOf(WorkingRootBusyException.class);
 
-        assertThat(service.settings().paths().repoRoot()).isEqualTo(before.toString());
+        assertThat(service.settings().paths().workingRoot()).isEqualTo(before.toString());
         assertThat(configDir.resolve("config.yml")).doesNotExist();
         assertThatThrownBy(() -> new FileChannelWorkingRootLock().acquire(before))
                 .isInstanceOf(WorkingRootBusyException.class);
@@ -114,8 +114,8 @@ class SettingsServiceLockTest {
         assertThatCode(() -> new FileChannelWorkingRootLock().acquire(after)).doesNotThrowAnyException();
     }
 
-    private SettingsService service(final Path repoRoot, final Path configDir) {
-        final LiveSettings live = new SettingsHolder(settings(repoRoot));
+    private SettingsService service(final Path workingRoot, final Path configDir) {
+        final LiveSettings live = new SettingsHolder(settings(workingRoot));
         return settingsService(live, new YamlSettingsStore(configDir.resolve("config.yml")), this.lock);
     }
 

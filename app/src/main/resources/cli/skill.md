@@ -112,7 +112,7 @@ The three folders it needs. Write the user's own paths in their platform's own s
 # macOS and Linux
 sluice:
   paths:
-    repo-root: /home/example/Sluice
+    working-root: /home/example/Sluice
     library-root: /home/example/Pictures/Sluice
     inbox: /home/example/Sluice/Inbox
 ```
@@ -121,12 +121,12 @@ sluice:
 # Windows. Forward slashes work here too, and stay safe if the value is ever quoted.
 sluice:
   paths:
-    repo-root: C:\Users\example\Sluice
+    working-root: C:\Users\example\Sluice
     library-root: C:\Users\example\Pictures\Sluice
     inbox: C:\Users\example\Sluice\Inbox
 ```
 
-`repo-root` is the working folder, holding the Inbox, sorted media and logs. It is
+`working-root` is the working folder, holding the Inbox, sorted media and logs. It is
 transient staging, so keep it off a cloud-synced folder. `library-root` is where keepers
 live for good. The Library and the Inbox must not contain each other. The Inbox must not
 be, or contain, the working folder.

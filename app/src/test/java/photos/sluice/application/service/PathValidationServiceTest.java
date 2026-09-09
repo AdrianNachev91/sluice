@@ -72,7 +72,7 @@ class PathValidationServiceTest {
         final PathSettings paths = directories(root, "work", "library", "inbox");
         final Path file = Files.createFile(root.resolve("not-a-folder"));
 
-        assertThat(validate(new PathSettings(paths.repoRoot(), paths.libraryRoot(), file.toString())))
+        assertThat(validate(new PathSettings(paths.workingRoot(), paths.libraryRoot(), file.toString())))
                 .containsExactly(new NotADirectory(PathRole.INBOX, file));
     }
 
@@ -161,7 +161,7 @@ class PathValidationServiceTest {
     @Test
     void theRootsInForceAreTheOnesRead(@TempDir final Path root) throws IOException {
         final PathSettings paths = directories(root, "work", "library", "inbox");
-        final var holder = SettingsFixture.holder(paths.repoRoot(), paths.libraryRoot(), paths.inbox());
+        final var holder = SettingsFixture.holder(paths.workingRoot(), paths.libraryRoot(), paths.inbox());
         final var service = new PathValidationService(new NioMediaStore(), holder);
         assertThat(service.violationsInForce()).isEmpty();
 
@@ -170,9 +170,9 @@ class PathValidationServiceTest {
         assertThat(service.violationsInForce()).containsExactly(new NotConfigured(PathRole.WORKING_ROOT));
     }
 
-    private static PathSettings directories(final Path root, final String repoRoot, final String libraryRoot,
+    private static PathSettings directories(final Path root, final String workingRoot, final String libraryRoot,
                                             final String inbox) throws IOException {
-        return new PathSettings(Files.createDirectories(root.resolve(repoRoot)).toString(),
+        return new PathSettings(Files.createDirectories(root.resolve(workingRoot)).toString(),
                 Files.createDirectories(root.resolve(libraryRoot)).toString(),
                 Files.createDirectories(root.resolve(inbox)).toString());
     }

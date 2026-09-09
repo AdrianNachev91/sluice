@@ -14,7 +14,7 @@ public interface PathsPort {
      *
      * @return {@link Path} the working root directory
      */
-    Path repoRoot();
+    Path workingRoot();
 
     /**
      * The Inbox root path.

@@ -62,7 +62,7 @@ public class YamlSettingsStore implements SettingsStore {
         final Map<String, Object> sluice = this.document.ensureGroup(root, "sluice");
 
         final Map<String, Object> paths = this.document.ensureGroup(sluice, "paths");
-        YamlConfigFile.set(paths, "repo-root", settings.paths().repoRoot());
+        YamlConfigFile.set(paths, "working-root", settings.paths().workingRoot());
         YamlConfigFile.set(paths, "library-root", settings.paths().libraryRoot());
         YamlConfigFile.set(paths, "inbox", settings.paths().inbox());
 

@@ -51,7 +51,7 @@ class FolderRootsSaveCompositionTest {
 
     @DynamicPropertySource
     static void paths(final DynamicPropertyRegistry registry) {
-        registry.add("sluice.paths.repo-root", workingRoot::toString);
+        registry.add("sluice.paths.working-root", workingRoot::toString);
         registry.add("sluice.paths.library-root", () -> workingRoot.resolve("Library").toString());
         registry.add("sluice.paths.inbox", () -> workingRoot.resolve("Inbox").toString());
     }

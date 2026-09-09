@@ -18,7 +18,7 @@ import java.util.Objects;
  * Callers run that check first rather than meeting it here.
  *
  * <p>The logs, Sorted, Review, Duplicates, and Unreviewable directories are all derived from the
- * repo root rather than configured independently.
+ * working root rather than configured independently.
  *
  * <p>Every accessor reads the settings again rather than holding a resolved path. That is what
  * makes a saved folder root reach the engines with nothing restarted.
@@ -38,13 +38,13 @@ public class PathsConfig implements PathsPort {
     }
 
     /**
-     * Resolves the configured repo root path.
+     * Resolves the configured working root path.
      *
-     * @return {@link Path} the absolute repo root path
+     * @return {@link Path} the absolute working root path
      */
     @Override
-    public Path repoRoot() {
-        return resolve(Objects.requireNonNull(this.paths().repoRoot()));
+    public Path workingRoot() {
+        return resolve(Objects.requireNonNull(this.paths().workingRoot()));
     }
 
     /**
@@ -68,53 +68,53 @@ public class PathsConfig implements PathsPort {
     }
 
     /**
-     * Resolves the logs directory under the repo root.
+     * Resolves the logs directory under the working root.
      *
      * @return {@link Path} the logs directory path
      */
     @Override
     public Path logs() {
-        return this.repoRoot().resolve("logs");
+        return this.workingRoot().resolve("logs");
     }
 
     /**
-     * Resolves the Sorted staging directory under the repo root.
+     * Resolves the Sorted staging directory under the working root.
      *
      * @return {@link Path} the Sorted directory path
      */
     @Override
     public Path sorted() {
-        return this.repoRoot().resolve("Sorted");
+        return this.workingRoot().resolve("Sorted");
     }
 
     /**
-     * Resolves the Review directory under the repo root.
+     * Resolves the Review directory under the working root.
      *
      * @return {@link Path} the Review directory path
      */
     @Override
     public Path review() {
-        return this.repoRoot().resolve("Review");
+        return this.workingRoot().resolve("Review");
     }
 
     /**
-     * Resolves the Duplicates directory under the repo root.
+     * Resolves the Duplicates directory under the working root.
      *
      * @return {@link Path} the Duplicates directory path
      */
     @Override
     public Path duplicates() {
-        return this.repoRoot().resolve("Duplicates");
+        return this.workingRoot().resolve("Duplicates");
     }
 
     /**
-     * Resolves the Unreviewable directory under the repo root.
+     * Resolves the Unreviewable directory under the working root.
      *
      * @return {@link Path} the Unreviewable directory path
      */
     @Override
     public Path unreviewable() {
-        return this.repoRoot().resolve("Unreviewable");
+        return this.workingRoot().resolve("Unreviewable");
     }
 
     /**

@@ -104,7 +104,7 @@ public class StartupSequence {
         if (violations.stream().anyMatch(StartupSequence::leavesTheWorkingRootUnusable)) {
             return;
         }
-        this.workingRootLock.acquire(this.paths.repoRoot());
+        this.workingRootLock.acquire(this.paths.workingRoot());
         if (!violations.isEmpty()) {
             return;
         }
@@ -175,7 +175,7 @@ public class StartupSequence {
      * keeps a second process out of it.
      *
      * <p>Each arm earns its place, for one of two reasons. {@code NotConfigured} and
-     * {@code NotAPath} are the two ways {@link PathsPort#repoRoot} itself throws, so admitting
+     * {@code NotAPath} are the two ways {@link PathsPort#workingRoot} itself throws, so admitting
      * either would fail before a claim was even attempted. {@code NotADirectory} and
      * {@code Unreadable} let that call return, and the claim then fails opening its marker file
      * inside a folder that is not there. Admitting those would turn a misconfigured install into a

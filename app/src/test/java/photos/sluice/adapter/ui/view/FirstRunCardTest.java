@@ -348,7 +348,7 @@ class FirstRunCardTest {
         @Override
         public List<PathViolation> violations(final PathSettings paths) {
             final var found = new ArrayList<PathViolation>();
-            judge(found, PathRole.WORKING_ROOT, paths.repoRoot());
+            judge(found, PathRole.WORKING_ROOT, paths.workingRoot());
             judge(found, PathRole.LIBRARY_ROOT, paths.libraryRoot());
             judge(found, PathRole.INBOX, paths.inbox());
             return List.copyOf(found);

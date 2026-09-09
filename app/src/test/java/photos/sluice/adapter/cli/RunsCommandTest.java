@@ -167,7 +167,7 @@ class RunsCommandTest {
 
         assertThat(result.exitCode()).isEqualTo(CommandStatus.REFUSED.exitCode());
         assertThat(result.out()).isEmpty();
-        assertThat(result.err()).contains("sluice.paths.repo-root");
+        assertThat(result.err()).contains("sluice.paths.working-root");
     }
 
     @Test
@@ -178,7 +178,7 @@ class RunsCommandTest {
         final CliHarness.Result result = this.run("runs", "--json");
 
         assertThat(result.out()).contains("\"status\":\"REFUSED\"").contains("\"kind\":\"FOLDERS_UNUSABLE\"");
-        assertThat(result.err()).contains("sluice.paths.repo-root");
+        assertThat(result.err()).contains("sluice.paths.working-root");
     }
 
     @Test

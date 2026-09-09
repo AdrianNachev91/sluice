@@ -190,7 +190,7 @@ public class SettingsService implements SettingsUseCase {
     private Settings withLibraryRootAt(final Path newLibraryRoot) {
         final Settings current = this.live.current();
         final PathSettings paths = current.paths();
-        return new Settings(new PathSettings(paths.repoRoot(), newLibraryRoot.toString(), paths.inbox()),
+        return new Settings(new PathSettings(paths.workingRoot(), newLibraryRoot.toString(), paths.inbox()),
                 current.provider(), current.providerSettingsById(), current.categories(),
                 current.montage(), current.theme());
     }
@@ -435,8 +435,8 @@ public class SettingsService implements SettingsUseCase {
      * @return an {@link Optional} of {@link Path} the working root, empty when none is configured
      */
     private static Optional<Path> workingRoot(final Settings settings) {
-        return Optional.ofNullable(settings.paths().repoRoot())
-                .filter(repoRoot -> !repoRoot.isBlank())
-                .map(repoRoot -> Path.of(repoRoot).toAbsolutePath().normalize());
+        return Optional.ofNullable(settings.paths().workingRoot())
+                .filter(workingRoot -> !workingRoot.isBlank())
+                .map(workingRoot -> Path.of(workingRoot).toAbsolutePath().normalize());
     }
 }

@@ -40,7 +40,7 @@ class YamlSettingsStoreTest {
         new YamlSettingsStore(file).save(settings());
 
         assertThat(Files.readString(file))
-                .contains("repo-root: /photos/work")
+                .contains("working-root: /photos/work")
                 .contains("library-root: /photos/library")
                 .contains("inbox: /photos/work/Inbox")
                 .contains("tile-size: 96")
@@ -204,7 +204,7 @@ class YamlSettingsStoreTest {
 
         new YamlSettingsStore(file).save(SettingsFixture.settings(new PathSettings(null, null, null)));
 
-        assertThat(Files.readString(file)).doesNotContain("repo-root");
+        assertThat(Files.readString(file)).doesNotContain("working-root");
     }
 
     @Test
@@ -356,7 +356,7 @@ class YamlSettingsStoreTest {
                         exampleLines(card.get("examples")), (Boolean) card.get("enabled")))
                 .toList();
         return new Settings(
-                new PathSettings((String) paths.get("repo-root"), (String) paths.get("library-root"),
+                new PathSettings((String) paths.get("working-root"), (String) paths.get("library-root"),
                         (String) paths.get("inbox")),
                 (String) cull.get("provider"),
                 Map.of("anthropic", new CullProviderSettings((String) anthropic.get("model"),

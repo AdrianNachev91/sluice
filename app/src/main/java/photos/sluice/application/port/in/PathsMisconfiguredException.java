@@ -58,14 +58,14 @@ public final class PathsMisconfiguredException extends IllegalStateException {
      * this name. A second mapping elsewhere would be a second thing to keep in step.
      *
      * <p>The role and the property are not interchangeable. {@code WORKING_ROOT} is spelled
-     * {@code repo-root} in a config file, and either could be renamed without the other.
+     * {@code working-root} in a config file, and either could be renamed without the other.
      *
      * @param role {@link PathRole} the root to name
      * @return {@link String} the configuration property that sets it
      */
     public static String property(final PathRole role) {
         return switch (role) {
-            case WORKING_ROOT -> "sluice.paths.repo-root";
+            case WORKING_ROOT -> "sluice.paths.working-root";
             case LIBRARY_ROOT -> "sluice.paths.library-root";
             case INBOX -> "sluice.paths.inbox";
         };

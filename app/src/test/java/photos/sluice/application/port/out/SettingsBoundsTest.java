@@ -55,13 +55,13 @@ class SettingsBoundsTest {
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("library root");
         assertThatThrownBy(() -> new PathSettings(null, null, tooLong))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("inbox");
-        assertThat(new PathSettings("p".repeat(PathSettings.maxRoot()), null, null).repoRoot())
+        assertThat(new PathSettings("p".repeat(PathSettings.maxRoot()), null, null).workingRoot())
                 .hasSize(PathSettings.maxRoot());
     }
 
     @Test
     void anUnconfiguredInstallStaysLegal() {
-        assertThat(new PathSettings(null, null, null).repoRoot()).isNull();
+        assertThat(new PathSettings(null, null, null).workingRoot()).isNull();
     }
 
     @Test

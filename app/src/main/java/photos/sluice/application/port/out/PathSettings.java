@@ -13,7 +13,7 @@ import org.jspecify.annotations.Nullable;
  * <p>They travel together because they are edited together, checked against each other, and held
  * still together while a job runs.
  */
-public record PathSettings(@Nullable String repoRoot, @Nullable String libraryRoot, @Nullable String inbox) {
+public record PathSettings(@Nullable String workingRoot, @Nullable String libraryRoot, @Nullable String inbox) {
 
     // A root is text before anything resolves it, so the ceiling is on the text rather than on what
     // the filesystem would make of it. Four thousand and ninety-six is the longest path Linux
@@ -25,12 +25,12 @@ public record PathSettings(@Nullable String repoRoot, @Nullable String libraryRo
     /**
      * Holds each root to a length, so no surface can store one without end.
      *
-     * @param repoRoot the working root as typed, or null when unset
+     * @param workingRoot the working root as typed, or null when unset
      * @param libraryRoot the library root as typed, or null when unset
      * @param inbox the inbox as typed, or null when unset
      */
     public PathSettings {
-        refuseLongerThan(repoRoot, "working root");
+        refuseLongerThan(workingRoot, "working root");
         refuseLongerThan(libraryRoot, "library root");
         refuseLongerThan(inbox, "inbox");
     }

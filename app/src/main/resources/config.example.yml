@@ -5,7 +5,7 @@
 # typed here by hand.
 #
 # Folder roots, before any single setting below. Three folders, and how they relate to each other:
-#   - The Working root (sluice.paths.repo-root) is where Sluice stages everything: the Inbox,
+#   - The Working root (sluice.paths.working-root) is where Sluice stages everything: the Inbox,
 #     sorted media waiting to move to your Library, and logs. Transient staging, so it should not
 #     ride a cloud sync - a folder under a OneDrive- or iCloud-synced Documents directory is a
 #     common way to get one by accident.
@@ -24,7 +24,7 @@
 sluice:
   paths:
     # The Working root. See the folder-roots note above.
-    repo-root: /home/example/Sluice
+    working-root: /home/example/Sluice
     # The Library root. See the folder-roots note above.
     library-root: /home/example/Pictures/Sluice
     # The Inbox. See the folder-roots note above.

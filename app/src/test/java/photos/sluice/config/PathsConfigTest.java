@@ -14,7 +14,7 @@ class PathsConfigTest {
         final var config = SettingsFixture.pathsConfig("relative-repo", "relative-lib", "relative-inbox");
 
         final Path expectedBase = Path.of("").toAbsolutePath().normalize();
-        assertThat(config.repoRoot()).isEqualTo(expectedBase.resolve("relative-repo"));
+        assertThat(config.workingRoot()).isEqualTo(expectedBase.resolve("relative-repo"));
         assertThat(config.library()).isEqualTo(expectedBase.resolve("relative-lib"));
         assertThat(config.inbox()).isEqualTo(expectedBase.resolve("relative-inbox"));
     }
@@ -24,11 +24,11 @@ class PathsConfigTest {
         final Path absolute = Path.of("").toAbsolutePath().normalize();
         final var config = SettingsFixture.pathsConfig(absolute, absolute, absolute);
 
-        assertThat(config.repoRoot()).isEqualTo(absolute);
+        assertThat(config.workingRoot()).isEqualTo(absolute);
     }
 
     @Test
-    void logsIsDerivedFromRepoRoot() {
+    void logsIsDerivedFromWorkingRoot() {
         final Path absolute = Path.of("").toAbsolutePath().normalize();
         final var config = SettingsFixture.pathsConfig(absolute, absolute, absolute);
 
@@ -36,7 +36,7 @@ class PathsConfigTest {
     }
 
     @Test
-    void sortedIsDerivedFromRepoRoot() {
+    void sortedIsDerivedFromWorkingRoot() {
         final Path absolute = Path.of("").toAbsolutePath().normalize();
         final var config = SettingsFixture.pathsConfig(absolute, absolute, absolute);
 
@@ -44,7 +44,7 @@ class PathsConfigTest {
     }
 
     @Test
-    void reviewIsDerivedFromRepoRoot() {
+    void reviewIsDerivedFromWorkingRoot() {
         final Path absolute = Path.of("").toAbsolutePath().normalize();
         final var config = SettingsFixture.pathsConfig(absolute, absolute, absolute);
 
@@ -62,7 +62,7 @@ class PathsConfigTest {
         holder.apply(SettingsFixture.settings(
                 new PathSettings(after.toString(), after.toString(), after.resolve("Inbox").toString())));
 
-        assertThat(config.repoRoot()).isEqualTo(after);
+        assertThat(config.workingRoot()).isEqualTo(after);
         assertThat(config.logs()).isEqualTo(after.resolve("logs"));
         assertThat(config.sorted()).isEqualTo(after.resolve("Sorted"));
         assertThat(config.inbox()).isEqualTo(after.resolve("Inbox"));

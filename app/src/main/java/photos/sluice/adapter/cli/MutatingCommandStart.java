@@ -66,7 +66,7 @@ public class MutatingCommandStart {
         if (!this.pathValidation.violationsInForce().isEmpty()) {
             return;
         }
-        this.workingRootLock.acquire(this.paths.repoRoot());
+        this.workingRootLock.acquire(this.paths.workingRoot());
         this.pipeline.sweepExpiredDisasterDrawers();
     }
 }

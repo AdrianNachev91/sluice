@@ -142,9 +142,9 @@ public class SettingsPresenter {
         final Map<PathRole, String> violations = this.violationsByRole(paths);
         final VisionProviderPresenter.ModelPickerResult modelPicker = this.visionProvider.modelPickerFor(shownProvider);
         return new SettingsView(
-                folderField(paths.repoRoot(), workingRootSuggestion(), violations.get(PathRole.WORKING_ROOT)),
+                folderField(paths.workingRoot(), workingRootSuggestion(), violations.get(PathRole.WORKING_ROOT)),
                 folderField(paths.libraryRoot(), librarySuggestion(), violations.get(PathRole.LIBRARY_ROOT)),
-                folderField(paths.inbox(), inboxSuggestion(paths.repoRoot()), violations.get(PathRole.INBOX)),
+                folderField(paths.inbox(), inboxSuggestion(paths.workingRoot()), violations.get(PathRole.INBOX)),
                 shownProvider, this.visionProvider.providerChoices(),
                 this.overrideNote("sluice.cull.provider"),
                 this.unrecognisedProviderNote(settings.provider()),
@@ -283,11 +283,11 @@ public class SettingsPresenter {
      * value is text a user typed, or wrote into their own config file. This screen is where they go
      * to correct it, and a refusal to answer here would take that screen down with it.
      *
-     * @param repoRoot the working root's own current text, possibly unset or unusable
+     * @param workingRoot the working root's own current text, possibly unset or unusable
      * @return {@link String} the suggested inbox folder
      */
-    public static String inboxSuggestion(final @Nullable String repoRoot) {
-        final String base = repoRoot == null || repoRoot.isBlank() ? workingRootSuggestion() : repoRoot;
+    public static String inboxSuggestion(final @Nullable String workingRoot) {
+        final String base = workingRoot == null || workingRoot.isBlank() ? workingRootSuggestion() : workingRoot;
         try {
             return Path.of(base).resolve("Inbox").toString();
         } catch (final InvalidPathException e) {
@@ -392,7 +392,7 @@ public class SettingsPresenter {
      */
     private SaveOutcome saveWithoutMovingLibrary(final Settings settings, final Path stayingAt) {
         final PathSettings asked = settings.paths();
-        final var keeping = new PathSettings(asked.repoRoot(), stayingAt.toString(), asked.inbox());
+        final var keeping = new PathSettings(asked.workingRoot(), stayingAt.toString(), asked.inbox());
         try {
             this.settingsUseCase.save(new Settings(keeping, settings.provider(),
                     settings.providerSettingsById(), settings.categories(),

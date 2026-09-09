@@ -70,7 +70,7 @@ class RefusalClassifierTest {
                         new Overlap(PathRole.LIBRARY_ROOT, PathRole.INBOX))));
 
         assertThat(refusal).isNotNull();
-        assertThat(refusal.sentence()).isEqualTo("Unusable folder settings. sluice.paths.repo-root is "
+        assertThat(refusal.sentence()).isEqualTo("Unusable folder settings. sluice.paths.working-root is "
                 + "not set. sluice.paths.library-root and sluice.paths.inbox must not contain each other.");
     }
 
@@ -92,17 +92,16 @@ class RefusalClassifierTest {
 
         assertThat(refusal).isNotNull();
         assertThat(violations(refusal).getFirst())
-                .containsEntry("firstProperty", "sluice.paths.repo-root")
+                .containsEntry("firstProperty", "sluice.paths.working-root")
                 .containsEntry("secondProperty", "sluice.paths.inbox");
     }
 
-    // The property a reader has to edit is spelled differently from the role it plays, and the two
-    // are free to be renamed apart. A test that read one from the other would pass either way.
+    // The property a reader has to edit is spelled independently of the role it plays, and the two
+    // are free to be renamed apart.
     @Test
     void theSettingNameIsNotDerivableFromTheRoleName() {
         assertThat(PathsMisconfiguredException.property(PathRole.WORKING_ROOT))
-                .isEqualTo("sluice.paths.repo-root")
-                .doesNotContain("working");
+                .isEqualTo("sluice.paths.working-root");
     }
 
     @SuppressWarnings("unchecked")

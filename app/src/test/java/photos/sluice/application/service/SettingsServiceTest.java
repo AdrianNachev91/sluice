@@ -203,7 +203,7 @@ class SettingsServiceTest {
 
         service.saveMovingTheLibraryRoot(library);
 
-        assertThat(live.current().paths().repoRoot()).isEqualTo(before.repoRoot());
+        assertThat(live.current().paths().workingRoot()).isEqualTo(before.workingRoot());
         assertThat(live.current().paths().inbox()).isEqualTo(before.inbox());
     }
 
@@ -536,7 +536,7 @@ class SettingsServiceTest {
         service.save(SettingsFixture.settings(new PathSettings(root.toString(), null, null)));
 
         assertThat(lock.claimed).containsExactly(root.toAbsolutePath().normalize());
-        assertThat(live.current().paths().repoRoot()).isEqualTo(root.toString());
+        assertThat(live.current().paths().workingRoot()).isEqualTo(root.toString());
     }
 
     @Test

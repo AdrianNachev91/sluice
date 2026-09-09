@@ -269,20 +269,20 @@ class CommitEngineTest {
         }
     }
 
-    private static CommitEngine commitEngine(final Path repoRoot, final Path libraryRoot) {
-        return commitEngine(repoRoot, libraryRoot,
-                new CsvLibraryHashIndex(SettingsFixture.workingRoot(repoRoot)));
+    private static CommitEngine commitEngine(final Path workingRoot, final Path libraryRoot) {
+        return commitEngine(workingRoot, libraryRoot,
+                new CsvLibraryHashIndex(SettingsFixture.workingRoot(workingRoot)));
     }
 
-    private static CommitEngine commitEngine(final Path repoRoot, final Path libraryRoot,
+    private static CommitEngine commitEngine(final Path workingRoot, final Path libraryRoot,
                                              final CsvLibraryHashIndex hashIndex) {
-        return commitEngine(repoRoot, libraryRoot, hashIndex, new NioMediaStore());
+        return commitEngine(workingRoot, libraryRoot, hashIndex, new NioMediaStore());
     }
 
-    private static CommitEngine commitEngine(final Path repoRoot, final Path libraryRoot,
+    private static CommitEngine commitEngine(final Path workingRoot, final Path libraryRoot,
                                              final CsvLibraryHashIndex hashIndex,
                                              final MediaStore mediaStore) {
-        final var pathsConfig = SettingsFixture.pathsConfig(repoRoot, libraryRoot, repoRoot.resolve("Inbox"));
+        final var pathsConfig = SettingsFixture.pathsConfig(workingRoot, libraryRoot, workingRoot.resolve("Inbox"));
         return new CommitEngine(pathsConfig, mediaStore, new Sha256Hasher(), hashIndex);
     }
 

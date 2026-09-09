@@ -39,7 +39,7 @@ class YamlConfigFileRepairTest {
         Files.writeString(file, """
                 sluice:
                   paths:
-                    repo-root: /photos/work
+                    working-root: /photos/work
                   montage:
                     tile-size: many
                   cull:
@@ -53,7 +53,7 @@ class YamlConfigFileRepairTest {
         new YamlConfigFileRepair(file).removeSetting("sluice.montage.tile-size");
 
         assertThat(Files.readString(file))
-                .contains("repo-root: /photos/work")
+                .contains("working-root: /photos/work")
                 .contains("name: receipts")
                 .contains("description: photographed paperwork")
                 .contains("kept: true");
@@ -103,7 +103,7 @@ class YamlConfigFileRepairTest {
                 # the folders Sluice works in
                 sluice:
                   paths:
-                    repo-root: /photos/work
+                    working-root: /photos/work
                 """;
         Files.writeString(file, original);
 

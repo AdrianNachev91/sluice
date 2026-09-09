@@ -165,9 +165,9 @@ class YamlConfigFileTest {
     @Test
     void settingAKeyToNothingRemovesIt() {
         final Map<String, Object> mapping = new LinkedHashMap<>();
-        mapping.put("repo-root", "/photos/work");
+        mapping.put("working-root", "/photos/work");
 
-        YamlConfigFile.set(mapping, "repo-root", null);
+        YamlConfigFile.set(mapping, "working-root", null);
 
         assertThat(mapping).isEmpty();
     }

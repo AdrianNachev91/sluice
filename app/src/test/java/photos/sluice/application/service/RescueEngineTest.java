@@ -557,15 +557,15 @@ class RescueEngineTest {
                 : Optional.empty();
     }
 
-    private static RescueEngine rescueEngine(final Path repoRoot, final DateSource exifSource,
+    private static RescueEngine rescueEngine(final Path workingRoot, final DateSource exifSource,
                                              final DateSource filenameSource) {
-        return rescueEngine(repoRoot, exifSource, filenameSource, new NioMediaStore());
+        return rescueEngine(workingRoot, exifSource, filenameSource, new NioMediaStore());
     }
 
-    private static RescueEngine rescueEngine(final Path repoRoot, final DateSource exifSource,
+    private static RescueEngine rescueEngine(final Path workingRoot, final DateSource exifSource,
                                              final DateSource filenameSource, final MediaStore mediaStore) {
-        final var pathsConfig = SettingsFixture.pathsConfig(repoRoot, repoRoot.resolve("Library"),
-                repoRoot.resolve("Inbox"));
+        final var pathsConfig = SettingsFixture.pathsConfig(workingRoot, workingRoot.resolve("Library"),
+                workingRoot.resolve("Inbox"));
         final var rescueDateResolver = new RescueDateResolver(exifSource, filenameSource);
         return new RescueEngine(pathsConfig, mediaStore, rescueDateResolver, new Sha256Hasher());
     }

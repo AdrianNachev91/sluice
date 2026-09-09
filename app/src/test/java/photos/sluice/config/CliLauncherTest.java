@@ -80,7 +80,7 @@ class CliLauncherTest {
     void aConfigFileTheParserGivesUpOnIsRefusedRatherThanCrashingTheProcess(@TempDir final Path dir)
             throws IOException {
         final Path config = dir.resolve("config.yml");
-        Files.writeString(config, "sluice:\n  paths:\n    repo-root: \"unclosed");
+        Files.writeString(config, "sluice:\n  paths:\n    working-root: \"unclosed");
 
         final int exitCode = CliLauncher.run(config, new String[]{"runs"});
 

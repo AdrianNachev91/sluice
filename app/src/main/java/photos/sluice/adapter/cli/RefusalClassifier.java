@@ -227,7 +227,7 @@ public class RefusalClassifier {
     private static Refusal runOutsideWorkingRoot(final Pipeline.RunOutsideWorkingRootException outside) {
         return new Refusal(RefusalKind.RUN_OUTSIDE_WORKING_ROOT,
                 "This sift is at " + outside.prepDir() + ", which is not inside the folders currently set "
-                        + "up. Point sluice.paths.repo-root back at the folder holding it to work on it "
+                        + "up. Point sluice.paths.working-root back at the folder holding it to work on it "
                         + "again.",
                 Fields.of("prepDir", outside.prepDir().toString()));
     }

@@ -142,8 +142,8 @@ final class CullPrepTestSupport {
         Files.write(file, new byte[]{(byte) 0xFF, (byte) 0xFE, (byte) 0xFF});
     }
 
-    static PathsConfig pathsConfig(final Path repoRoot, final Path libraryRoot) {
-        return SettingsFixture.pathsConfig(repoRoot, libraryRoot, repoRoot.resolve("Inbox"));
+    static PathsConfig pathsConfig(final Path workingRoot, final Path libraryRoot) {
+        return SettingsFixture.pathsConfig(workingRoot, libraryRoot, workingRoot.resolve("Inbox"));
     }
 
     static CullSettings fixedSettings() {
@@ -153,19 +153,19 @@ final class CullPrepTestSupport {
                 CullCategory.of("funny", "funny description")));
     }
 
-    static ApplyEngine applyEngine(final Path repoRoot, final Path libraryRoot) {
-        return applyEngine(repoRoot, libraryRoot, hashIndex(repoRoot));
+    static ApplyEngine applyEngine(final Path workingRoot, final Path libraryRoot) {
+        return applyEngine(workingRoot, libraryRoot, hashIndex(workingRoot));
     }
 
-    static ApplyEngine applyEngine(final Path repoRoot, final Path libraryRoot, final CsvLibraryHashIndex hashIndex) {
-        return applyEngine(repoRoot, libraryRoot, hashIndex, new NioMediaStore());
+    static ApplyEngine applyEngine(final Path workingRoot, final Path libraryRoot, final CsvLibraryHashIndex hashIndex) {
+        return applyEngine(workingRoot, libraryRoot, hashIndex, new NioMediaStore());
     }
 
-    static ApplyEngine applyEngine(final Path repoRoot, final Path libraryRoot, final CsvLibraryHashIndex hashIndex,
+    static ApplyEngine applyEngine(final Path workingRoot, final Path libraryRoot, final CsvLibraryHashIndex hashIndex,
                                    final MediaStore mediaStore) {
         // One paths config for both, as in production, where they take the one bean. The engine's
         // destination refusals and the planner's source refusals must be measuring the same roots.
-        final PathsConfig paths = pathsConfig(repoRoot, libraryRoot);
+        final PathsConfig paths = pathsConfig(workingRoot, libraryRoot);
         return new ApplyEngine(mediaStore, new JsonCullPrepStore(), new Sha256Hasher(), hashIndex,
                 new CullDestinations(paths), moveLedger(mediaStore), applyPlanner(paths, mediaStore));
     }
@@ -174,18 +174,18 @@ final class CullPrepTestSupport {
         return new MoveLedger(mediaStore, new DisasterDrawer(mediaStore));
     }
 
-    static ApplyPlanner applyPlanner(final Path repoRoot) {
-        return applyPlanner(SettingsFixture.workingRoot(repoRoot), new NioMediaStore());
+    static ApplyPlanner applyPlanner(final Path workingRoot) {
+        return applyPlanner(SettingsFixture.workingRoot(workingRoot), new NioMediaStore());
     }
 
-    static ApplyPlanner applyPlanner(final Path repoRoot, final MediaStore mediaStore) {
-        return applyPlanner(SettingsFixture.workingRoot(repoRoot), mediaStore);
+    static ApplyPlanner applyPlanner(final Path workingRoot, final MediaStore mediaStore) {
+        return applyPlanner(SettingsFixture.workingRoot(workingRoot), mediaStore);
     }
 
     // A real NioMediaStore backs every other read, so the sidecar and shard reads this port covers
     // are the only ones a test can fail.
-    static ApplyPlanner applyPlanner(final Path repoRoot, final CullPrepPort cullPrepPort) {
-        return applyPlanner(SettingsFixture.workingRoot(repoRoot), new NioMediaStore(), cullPrepPort);
+    static ApplyPlanner applyPlanner(final Path workingRoot, final CullPrepPort cullPrepPort) {
+        return applyPlanner(SettingsFixture.workingRoot(workingRoot), new NioMediaStore(), cullPrepPort);
     }
 
     static ApplyPlanner applyPlanner(final PathsPort paths, final MediaStore mediaStore) {
@@ -204,26 +204,26 @@ final class CullPrepTestSupport {
         return moveLedger(new NioMediaStore()).read(prepDir);
     }
 
-    static ReconcileEngine reconcileEngine(final Path repoRoot, final Path libraryRoot) {
+    static ReconcileEngine reconcileEngine(final Path workingRoot, final Path libraryRoot) {
         final var mediaStore = new NioMediaStore();
-        final PathsConfig paths = pathsConfig(repoRoot, libraryRoot);
+        final PathsConfig paths = pathsConfig(workingRoot, libraryRoot);
         return new ReconcileEngine(mediaStore, new JsonCullPrepStore(), new Sha256Hasher(),
                 new DisasterDrawer(mediaStore), new CullDestinations(paths),
                 moveLedger(mediaStore), applyPlanner(paths, mediaStore));
     }
 
-    static PrepDirRemedies prepDirRemedies(final Path repoRoot, final Path libraryRoot) {
-        return prepDirRemedies(repoRoot, libraryRoot, new JsonCullPrepStore());
+    static PrepDirRemedies prepDirRemedies(final Path workingRoot, final Path libraryRoot) {
+        return prepDirRemedies(workingRoot, libraryRoot, new JsonCullPrepStore());
     }
 
-    static PrepDirRemedies prepDirRemedies(final Path repoRoot, final Path libraryRoot, final CullPrepPort cullPrepPort) {
+    static PrepDirRemedies prepDirRemedies(final Path workingRoot, final Path libraryRoot, final CullPrepPort cullPrepPort) {
         final var mediaStore = new NioMediaStore();
-        return new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig(repoRoot, libraryRoot), fixedSettings(),
+        return new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig(workingRoot, libraryRoot), fixedSettings(),
                 new DisasterDrawer(mediaStore), moveLedger(mediaStore));
     }
 
-    static PrepDirDoctor prepDirDoctor(final Path repoRoot) {
-        return prepDirDoctor(repoRoot, new JsonCullPrepStore());
+    static PrepDirDoctor prepDirDoctor(final Path workingRoot) {
+        return prepDirDoctor(workingRoot, new JsonCullPrepStore());
     }
 
     // A read failure is injected at a seam this code owns rather than through the filesystem.
@@ -233,10 +233,10 @@ final class CullPrepTestSupport {
     // The planner reads through the same port, matching production, where both take the one bean.
     // Handing it a separate real store would leave every read past the index working normally, so
     // only an index-read failure could ever be injected.
-    static PrepDirDoctor prepDirDoctor(final Path repoRoot, final CullPrepPort cullPrepPort) {
+    static PrepDirDoctor prepDirDoctor(final Path workingRoot, final CullPrepPort cullPrepPort) {
         final var mediaStore = new NioMediaStore();
         return new PrepDirDoctor(cullPrepPort, mediaStore,
-                applyPlanner(SettingsFixture.workingRoot(repoRoot), mediaStore, cullPrepPort),
+                applyPlanner(SettingsFixture.workingRoot(workingRoot), mediaStore, cullPrepPort),
                 moveLedger(mediaStore));
     }
 
@@ -244,21 +244,21 @@ final class CullPrepTestSupport {
     // planner and the ledger too, matching production, where all three take the one bean. Building
     // those with a fresh real store instead would leave the injected failure unreachable from
     // everything except the doctor's own direct calls.
-    static PrepDirDoctor prepDirDoctor(final Path repoRoot, final MediaStore mediaStore) {
+    static PrepDirDoctor prepDirDoctor(final Path workingRoot, final MediaStore mediaStore) {
         final var cullPrepPort = new JsonCullPrepStore();
         return new PrepDirDoctor(cullPrepPort, mediaStore,
-                applyPlanner(SettingsFixture.workingRoot(repoRoot), mediaStore, cullPrepPort),
+                applyPlanner(SettingsFixture.workingRoot(workingRoot), mediaStore, cullPrepPort),
                 moveLedger(mediaStore));
     }
 
-    static Troubleshooter troubleshooter(final Path repoRoot, final Path libraryRoot) {
+    static Troubleshooter troubleshooter(final Path workingRoot, final Path libraryRoot) {
         final var mediaStore = new NioMediaStore();
-        return new Troubleshooter(prepDirDoctor(repoRoot), reconcileEngine(repoRoot, libraryRoot),
-                prepDirRemedies(repoRoot, libraryRoot), new DisasterDrawer(mediaStore));
+        return new Troubleshooter(prepDirDoctor(workingRoot), reconcileEngine(workingRoot, libraryRoot),
+                prepDirRemedies(workingRoot, libraryRoot), new DisasterDrawer(mediaStore));
     }
 
-    static CsvLibraryHashIndex hashIndex(final Path repoRoot) {
-        return new CsvLibraryHashIndex(SettingsFixture.workingRoot(repoRoot));
+    static CsvLibraryHashIndex hashIndex(final Path workingRoot) {
+        return new CsvLibraryHashIndex(SettingsFixture.workingRoot(workingRoot));
     }
 
     private record FixedSettings(String provider, List<CullCategory> categories) implements CullSettings {

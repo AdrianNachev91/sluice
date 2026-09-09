@@ -62,11 +62,11 @@ public class PathValidationService implements PathValidationUseCase {
     @Override
     public List<PathViolation> violations(final PathSettings paths) {
         final List<PathViolation> violations = new ArrayList<>();
-        final Path repoRoot = this.resolve(PathRole.WORKING_ROOT, paths.repoRoot(), violations);
+        final Path workingRoot = this.resolve(PathRole.WORKING_ROOT, paths.workingRoot(), violations);
         final Path libraryRoot = this.resolve(PathRole.LIBRARY_ROOT, paths.libraryRoot(), violations);
         final Path inbox = this.resolve(PathRole.INBOX, paths.inbox(), violations);
-        if (repoRoot != null && libraryRoot != null && inbox != null) {
-            violations.addAll(RootLayout.violations(repoRoot, libraryRoot, inbox));
+        if (workingRoot != null && libraryRoot != null && inbox != null) {
+            violations.addAll(RootLayout.violations(workingRoot, libraryRoot, inbox));
         }
         return List.copyOf(violations);
     }

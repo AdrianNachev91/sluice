@@ -19,7 +19,7 @@ class PathsMisconfiguredExceptionTest {
     @Test
     void anUnsetRootIsNamedByItsProperty() {
         assertThat(new PathsMisconfiguredException(List.of(new NotConfigured(PathRole.WORKING_ROOT)))
-                .getMessage()).contains("sluice.paths.repo-root", "is not set");
+                .getMessage()).contains("sluice.paths.working-root", "is not set");
     }
 
     @Test
@@ -61,7 +61,7 @@ class PathsMisconfiguredExceptionTest {
         final var exception = new PathsMisconfiguredException(
                 List.of(new NotConfigured(PathRole.WORKING_ROOT), new NotConfigured(PathRole.INBOX)));
 
-        assertThat(exception.getMessage()).contains("sluice.paths.repo-root", "sluice.paths.inbox");
+        assertThat(exception.getMessage()).contains("sluice.paths.working-root", "sluice.paths.inbox");
     }
 
     @Test

@@ -75,30 +75,30 @@ class SluiceFxApplicationTest {
     }
 
     @Test
-    void aConfiguredInstallOpensItsWindow(@TempDir final Path repoRoot, @TempDir final Path libraryRoot,
+    void aConfiguredInstallOpensItsWindow(@TempDir final Path workingRoot, @TempDir final Path libraryRoot,
                                           @TempDir final Path inbox) throws Exception {
-        this.startApplication(repoRoot, libraryRoot, inbox);
+        this.startApplication(workingRoot, libraryRoot, inbox);
 
         assertThat(styleClassesOfRoot()).contains("shell").doesNotContain("failure-screen");
         // Starting is also where the app takes the working root.
-        assertThat(repoRoot.resolve(".sluice-lock")).exists();
+        assertThat(workingRoot.resolve(".sluice-lock")).exists();
     }
 
     @Test
     void aConfiguredInstallShowsTheOrdinaryDashboardRatherThanTheFirstRunCard(
-            @TempDir final Path repoRoot, @TempDir final Path libraryRoot, @TempDir final Path inbox)
+            @TempDir final Path workingRoot, @TempDir final Path libraryRoot, @TempDir final Path inbox)
             throws Exception {
-        this.startApplication(repoRoot, libraryRoot, inbox);
+        this.startApplication(workingRoot, libraryRoot, inbox);
 
         assertThat(nodeExists(".first-run-card")).isFalse();
         assertThat(paneHeadingText()).isEqualTo("Dashboard");
     }
 
     @Test
-    void clickingASidebarEntrySwitchesTheVisiblePane(@TempDir final Path repoRoot,
+    void clickingASidebarEntrySwitchesTheVisiblePane(@TempDir final Path workingRoot,
                                                       @TempDir final Path libraryRoot,
                                                       @TempDir final Path inbox) throws Exception {
-        this.startApplication(repoRoot, libraryRoot, inbox);
+        this.startApplication(workingRoot, libraryRoot, inbox);
 
         new FxRobot().clickOn("#nav-settings");
 
@@ -106,10 +106,10 @@ class SluiceFxApplicationTest {
     }
 
     @Test
-    void clickingTheAlreadySelectedEntryLeavesItSelected(@TempDir final Path repoRoot,
+    void clickingTheAlreadySelectedEntryLeavesItSelected(@TempDir final Path workingRoot,
                                                           @TempDir final Path libraryRoot,
                                                           @TempDir final Path inbox) throws Exception {
-        this.startApplication(repoRoot, libraryRoot, inbox);
+        this.startApplication(workingRoot, libraryRoot, inbox);
 
         new FxRobot().clickOn("#nav-dashboard");
 
@@ -120,9 +120,9 @@ class SluiceFxApplicationTest {
     // just exited. The kernel would free it eventually, but only once the process is gone, and
     // nothing guarantees that has happened by the time somebody launches again.
     @Test
-    void closingTheAppGivesTheWorkingRootBack(@TempDir final Path repoRoot, @TempDir final Path libraryRoot,
+    void closingTheAppGivesTheWorkingRootBack(@TempDir final Path workingRoot, @TempDir final Path libraryRoot,
                                               @TempDir final Path inbox) throws Exception {
-        this.startApplication(repoRoot, libraryRoot, inbox);
+        this.startApplication(workingRoot, libraryRoot, inbox);
         final Application started = this.application;
         this.application = null;
         FxToolkit.cleanupApplication(started);
@@ -131,20 +131,20 @@ class SluiceFxApplicationTest {
         // launch would meet.
         final var lock = new FileChannelWorkingRootLock();
         try {
-            assertThatCode(() -> lock.acquire(repoRoot)).doesNotThrowAnyException();
+            assertThatCode(() -> lock.acquire(workingRoot)).doesNotThrowAnyException();
         } finally {
             lock.releaseAll();
         }
     }
 
     @Test
-    void anInstallWhoseRootIsAlreadyHeldOpensAWindowSayingSo(@TempDir final Path repoRoot,
+    void anInstallWhoseRootIsAlreadyHeldOpensAWindowSayingSo(@TempDir final Path workingRoot,
                                                              @TempDir final Path libraryRoot,
                                                              @TempDir final Path inbox) throws Exception {
         final var holder = new FileChannelWorkingRootLock();
-        holder.acquire(repoRoot);
+        holder.acquire(workingRoot);
         try {
-            this.startApplication(repoRoot, libraryRoot, inbox);
+            this.startApplication(workingRoot, libraryRoot, inbox);
 
             assertThat(styleClassesOfRoot()).contains("failure-screen");
             assertThat(failureDetail()).contains("Another Sluice process is already running");
@@ -165,11 +165,11 @@ class SluiceFxApplicationTest {
     // attempt, rather than proving only that a redraw redraws.
     @Test
     void theBusyRootCardsRetryButtonSwapsToTheShellOnceTheOtherProcessLetsGo(
-            @TempDir final Path repoRoot, @TempDir final Path libraryRoot, @TempDir final Path inbox)
+            @TempDir final Path workingRoot, @TempDir final Path libraryRoot, @TempDir final Path inbox)
             throws Exception {
         final var holder = new FileChannelWorkingRootLock();
-        holder.acquire(repoRoot);
-        this.startApplication(repoRoot, libraryRoot, inbox);
+        holder.acquire(workingRoot);
+        this.startApplication(workingRoot, libraryRoot, inbox);
         assertThat(styleClassesOfRoot()).contains("failure-screen");
         holder.releaseAll();
 
@@ -231,9 +231,9 @@ class SluiceFxApplicationTest {
     // The stylesheet is loaded off the classpath, so it can be present in source and absent from
     // the build. A window with no sheet attached renders unstyled and says nothing about why.
     @Test
-    void theWindowCarriesTheBaseStylesheet(@TempDir final Path repoRoot, @TempDir final Path libraryRoot,
+    void theWindowCarriesTheBaseStylesheet(@TempDir final Path workingRoot, @TempDir final Path libraryRoot,
                                            @TempDir final Path inbox) throws Exception {
-        this.startApplication(repoRoot, libraryRoot, inbox);
+        this.startApplication(workingRoot, libraryRoot, inbox);
 
         assertThat(onFxThread(() -> scene().getStylesheets()))
                 .anyMatch(sheet -> sheet.endsWith("/ui/sluice.css"));
@@ -242,9 +242,9 @@ class SluiceFxApplicationTest {
     // Loading the files and handing them to the window are separate steps, and only the second one
     // is what a desktop reads. A platform given none of them reports nothing and shows its default.
     @Test
-    void theWindowCarriesTheProductIcon(@TempDir final Path repoRoot, @TempDir final Path libraryRoot,
+    void theWindowCarriesTheProductIcon(@TempDir final Path workingRoot, @TempDir final Path libraryRoot,
                                         @TempDir final Path inbox) throws Exception {
-        this.startApplication(repoRoot, libraryRoot, inbox);
+        this.startApplication(workingRoot, libraryRoot, inbox);
 
         assertThat(onFxThread(() -> FxToolkit.toolkitContext().getRegisteredStage().getIcons()))
                 .isNotEmpty()
@@ -253,7 +253,7 @@ class SluiceFxApplicationTest {
 
     // Without the cap the scene would keep its own INITIAL_WIDTH.
     @Test
-    void theWindowOpensNoWiderThanTheDisplaysUsableArea(@TempDir final Path repoRoot,
+    void theWindowOpensNoWiderThanTheDisplaysUsableArea(@TempDir final Path workingRoot,
                                                         @TempDir final Path libraryRoot,
                                                         @TempDir final Path inbox) throws Exception {
         final Rectangle2D area = onFxThread(() -> Screen.getPrimary().getVisualBounds());
@@ -262,13 +262,13 @@ class SluiceFxApplicationTest {
                         Stylesheet.INITIAL_WIDTH)
                 .isLessThan(Stylesheet.INITIAL_WIDTH);
 
-        this.startApplication(repoRoot, libraryRoot, inbox);
+        this.startApplication(workingRoot, libraryRoot, inbox);
 
         assertThat(onFxThread(() -> scene().getWidth())).isEqualTo(area.getWidth());
     }
 
-    private void startApplication(final Path repoRoot, final Path libraryRoot, final Path inbox) throws Exception {
-        this.startApplication("--sluice.paths.repo-root=" + repoRoot,
+    private void startApplication(final Path workingRoot, final Path libraryRoot, final Path inbox) throws Exception {
+        this.startApplication("--sluice.paths.working-root=" + workingRoot,
                 "--sluice.paths.library-root=" + libraryRoot,
                 "--sluice.paths.inbox=" + inbox);
     }

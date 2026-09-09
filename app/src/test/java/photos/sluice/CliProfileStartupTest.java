@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CliProfileStartupTest {
 
     @TempDir
-    static Path repoRoot;
+    static Path workingRoot;
 
     @TempDir
     static Path libraryRoot;
@@ -42,7 +42,7 @@ class CliProfileStartupTest {
 
     @DynamicPropertySource
     static void paths(final DynamicPropertyRegistry registry) {
-        registry.add("sluice.paths.repo-root", repoRoot::toString);
+        registry.add("sluice.paths.working-root", workingRoot::toString);
         registry.add("sluice.paths.library-root", libraryRoot::toString);
         registry.add("sluice.paths.inbox", inbox::toString);
     }

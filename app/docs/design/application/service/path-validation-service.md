@@ -21,14 +21,14 @@ filesystem at all.
 
 ```mermaid
 flowchart TD
-    A["violations(paths)"] --> B["resolve repoRoot<br/>(see section 2)"]
+    A["violations(paths)"] --> B["resolve workingRoot<br/>(see section 2)"]
     A --> C["resolve libraryRoot<br/>(see section 2)"]
     A --> D["resolve inbox<br/>(see section 2)"]
     B --> E{"did all three<br/>resolve to a<br/>real directory?"}
     C --> E
     D --> E
     E -- no --> F(["return the violations<br/>collected so far -<br/>RootLayout never runs"])
-    E -- yes --> G["RootLayout.violations(repoRoot,<br/>libraryRoot, inbox)"]
+    E -- yes --> G["RootLayout.violations(workingRoot,<br/>libraryRoot, inbox)"]
     G --> H(["return every violation,<br/>resolution plus layout"])
 ```
 
@@ -74,7 +74,7 @@ drive, or the permission. The failure itself is logged at the point it was caugh
 | A candidate path exists but the filesystem cannot say what it really is   | `Unreadable` for that role, and the underlying failure is logged                  |
 | Only the inbox fails to resolve, the other two are real directories       | Just the inbox's own violation - the overlap rule is skipped entirely             |
 | All three resolve, and the library and inbox roots contain each other     | An `Overlap(LIBRARY_ROOT, INBOX)` violation added on top of resolution            |
-| All three resolve, and the inbox is the working root or an ancestor of it | An `Overlap(REPO_ROOT, INBOX)` violation                                          |
+| All three resolve, and the inbox is the working root or an ancestor of it | An `Overlap(WORKING_ROOT, INBOX)` violation                                       |
 | All three resolve, and the working root is an ancestor of the inbox       | No violation - that is the documented layout, and `RootLayout` treats it as legal |
 | All three roots resolve to distinct, non-nested directories               | An empty list - the roots are usable                                              |
 | `violationsInForce()` is called                                           | Same checks, run against whatever `LiveSettings.current()` holds right now        |

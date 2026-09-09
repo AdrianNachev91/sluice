@@ -693,9 +693,9 @@ class VisionProviderPresenterTest {
         };
     }
 
-    private static Settings settings(final @Nullable String repoRoot, final @Nullable String libraryRoot,
+    private static Settings settings(final @Nullable String workingRoot, final @Nullable String libraryRoot,
                                      final @Nullable String inbox) {
-        return new Settings(new PathSettings(repoRoot, libraryRoot, inbox), "anthropic",
+        return new Settings(new PathSettings(workingRoot, libraryRoot, inbox), "anthropic",
                 Map.of("anthropic", new CullProviderSettings("claude-opus-5", null, null)), List.of(),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM);
     }

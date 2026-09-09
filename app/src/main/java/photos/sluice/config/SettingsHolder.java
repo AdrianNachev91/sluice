@@ -65,7 +65,7 @@ public class SettingsHolder implements LiveSettings, CullSettings {
     static Settings boundSettings(final PathsProperties paths, final CullConfig cull, final MontageProperties montage,
                                   final UiProperties ui) {
         return new Settings(
-                new PathSettings(paths.repoRoot(), paths.libraryRoot(), paths.inbox()),
+                new PathSettings(paths.workingRoot(), paths.libraryRoot(), paths.inbox()),
                 cull.provider(), cull.providerSettings(), cull.categories(),
                 new MontageConfig(montage.tileSize(), montage.tilesPerRow()), ui.theme());
     }
