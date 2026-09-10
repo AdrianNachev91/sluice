@@ -17,17 +17,18 @@ which is exactly what these repairs exist to reason about.
 
 The disposition ledger covers every decision and unreviewable file the shard/`index.json` alone
 can't resolve. A witnessed or reconstructed move record is one disposition, held in
-`move-records.log` (see `apply-planner.md` and `reconcile-engine.md`). `skipMissingSource()` and
-`resolveOverlap()` append two more, each a **CHOICE** remedy a user picks between, never guessed at
-automatically. Those land in `choices.log`, the ledger's other half. Neither one ever edits a shard
-or `index.json`. Both work by appending a ledger entry that
-`ApplyPlanner.validate()`/`classify()` consult on every later read.
+`move-records.log` (see [`apply-planner.md`](apply-planner.md) and
+[`reconcile-engine.md`](reconcile-engine.md)). `skipMissingSource()` and `resolveOverlap()` append
+two more, each a **CHOICE** remedy a user picks between, never guessed at automatically. Those land
+in `choices.log`, the ledger's other half. Neither one ever edits a shard or `index.json`. Both work
+by appending a ledger entry that `ApplyPlanner.validate()`/`classify()` consult on every later read.
 
 The write side of each CHOICE lives here: `skipMissingSource`, `resolveOverlap`,
 `resolveCorruptSidecar`. The read side that consults it - suppressing findings and filtering the
 decisions and unreviewable files `apply()` acts on - lives in `ApplyPlanner`. See
-`apply-planner.md`. `MoveLedger.read()` parses both files into their four dispositions in one
-pass; see `move-ledger.md` for the file formats and why the ledger is split in two.
+[`apply-planner.md`](apply-planner.md). `MoveLedger.read()` parses both files into their four
+dispositions in one pass; see [`move-ledger.md`](move-ledger.md) for the file formats and why the
+ledger is split in two.
 
 An answer, once given, is permanent. It survives a reconcile, a troubleshoot and a restart, and
 nothing re-asks it. There is no un-answer affordance, deliberately. An answer only ever changes
@@ -36,8 +37,8 @@ stays in `Sorted` for a future cull. `resolveCorruptSidecar` has the widest reac
 since it is keyed by montage rather than by file, so a `SET_ASIDE` settles a whole montage at once.
 
 Two things end an answer, neither of them an undo. A `choices.log` whose bytes do not decode loses
-what it held; `reconcile-engine.md` covers that. `discard()` below gives up on the whole run, ledger
-included, and is the one sanctioned give-up path.
+what it held; [`reconcile-engine.md`](reconcile-engine.md) covers that. `discard()` below gives up
+on the whole run, ledger included, and is the one sanctioned give-up path.
 
 ```mermaid
 flowchart TD
@@ -75,7 +76,7 @@ untouched: more than one montage unclaimed, or a decision naming a file the cand
 never showed. `setAsideStrayShard()` is the CHOICE fallback for that case. It files the stray
 file into the disaster drawer (never a true delete), so the culler can redo that montage from a
 clean slate. `Troubleshooter` attempts this AUTO repair for every `StrayShard` finding it sees,
-regardless of overall prep-dir state. See `troubleshooter.md`.
+regardless of overall prep-dir state. See [`troubleshooter.md`](troubleshooter.md).
 
 ## 2. Corrupt or missing index.json / sidecar
 
@@ -121,9 +122,9 @@ recorded at all. So the repair path is no worse than what it replaces, while the
 drifting. This is the only place in the app that makes that substitution.
 
 A montage's own sidecar failing to read, with `index.json` itself intact, is a narrower problem:
-`Finding.CorruptSidecar` (CHOICE). This per-montage check is `ApplyPlanner.collectMontage()`, run
-as part of `validate()`'s own sidecar/shard collection loop. See `apply-planner.md` for that
-method; the resolution below is what this class contributes.
+`Finding.CorruptSidecar` (CHOICE). This per-montage check is `ApplyPlanner.collectMontage()`, run as
+part of `validate()`'s own sidecar/shard collection loop. See [`apply-planner.md`](apply-planner.md)
+for that method; the resolution below is what this class contributes.
 
 ```mermaid
 flowchart TD
@@ -168,7 +169,7 @@ A watcher's automatic resume reaches those answers the ordinary way. Its readine
 (`ShardTallyCalculator.isReadyToResume`) only asks whether every shard has arrived and parses, never
 whether the batch is any good. So a run whose remaining problem the user has already answered simply
 resumes, and the gate above honours the answer. Nothing between the two holds a second opinion. See
-`cull-engine.md` for why readiness is deliberately that narrow.
+[`cull-engine.md`](cull-engine.md) for why readiness is deliberately that narrow.
 
 ## 3. Last-resort discard
 
@@ -193,8 +194,8 @@ still-waiting job - call that one `Pipeline.discard()` method.
 
 The cull engine's own scope claim requires exactly the opposite: `COMPLETE`, and nothing else. A
 fresh run over a finished one archives that record here rather than letting prep overwrite it (see
-`cull-engine.md`). Same file moves, opposite preconditions, because the only question either caller
-asks is whether the run being filed away is finished.
+[`cull-engine.md`](cull-engine.md)). Same file moves, opposite preconditions, because the only
+question either caller asks is whether the run being filed away is finished.
 
 ## Scenarios
 
@@ -220,15 +221,16 @@ asks is whether the run being filed away is finished.
 - The shard contract itself, and the auto-heal rule: `ShardValidator`'s own doc comment
   (`domain/cull/ShardValidator.java`).
 - The validation and classification that surface every finding resolved here, and that consult
-  the ledger entries these remedies write: `apply-planner.md`.
-- The move-record log's own file format, markers, and parsing rules: `move-ledger.md`.
+  the ledger entries these remedies write: [`apply-planner.md`](apply-planner.md).
+- The move-record log's own file format, markers, and parsing rules:
+  [`move-ledger.md`](move-ledger.md).
 - The pipeline that carries decisions out once validation and classification are clean, and its
-  own cancellation handling: `apply-engine.md`.
+  own cancellation handling: [`apply-engine.md`](apply-engine.md).
 - The offline rebuild this class's `rebuildIndex()` complements, for when the move ledger itself
-  (rather than the index) can't be trusted: `reconcile-engine.md`.
+  (rather than the index) can't be trusted: [`reconcile-engine.md`](reconcile-engine.md).
 - `Pipeline.discard()`'s `PrepDirDoctor`/`JobRunner`/watcher wiring around the raw `discard()`
-  mechanism here: `pipeline.md`.
+  mechanism here: [`pipeline.md`](pipeline.md).
 - The single-button recovery that runs `rebuildIndex()`, `autoRepairStrayShard()`, and (via a
-  separate reconcile call) resolves a lost move ledger: `troubleshooter.md`.
+  separate reconcile call) resolves a lost move ledger: [`troubleshooter.md`](troubleshooter.md).
 - Where a repaired decision's file ends up once applied: `CullDestinations`
-  (`application/service/CullDestinations.java`), described in `apply-engine.md`.
+  (`application/service/CullDestinations.java`), described in [`apply-engine.md`](apply-engine.md).

@@ -32,9 +32,9 @@ flowchart TD
 `reconcile()` exists for when the ledger itself can't be trusted, missing or found corrupt, while
 the shard contract is otherwise intact. It reads both ledger files into one snapshot before doing
 anything else. That same snapshot is what `validate()` and `resolvedUnreviewable()` both consume.
-See `move-ledger.md` for the ordering rule this follows. It never salvages a corrupt file
-line-by-line. Hashes are the ground truth, so the move records are re-derived from disk state.
-`move-records.log` itself is filed away for forensics, if it was there at all.
+See [`move-ledger.md`](move-ledger.md) for the ordering rule this follows. It never salvages a
+corrupt file line-by-line. Hashes are the ground truth, so the move records are re-derived from disk
+state. `move-records.log` itself is filed away for forensics, if it was there at all.
 
 The counts-match rule is what keeps a rebuilt record honest. A destination like library `Funny/`
 accumulates files across every run this app has ever applied, not just the run being reconciled.
@@ -54,14 +54,14 @@ than chased; see `ReconcileEngine.resolvePendingMoves()`'s own Javadoc for the s
 against the code.
 
 Corrupt/missing originals, and every troubleshoot report, are collected the same way. See
-`DisasterDrawer`'s own class doc (`application/service/DisasterDrawer.java`) for the filename
-format and retention rule. `troubleshooter.md` explains what decides whether this reconcile even
-runs.
+`DisasterDrawer`'s own class doc (`application/service/DisasterDrawer.java`) for the filename format
+and retention rule. [`troubleshooter.md`](troubleshooter.md) explains what decides whether this
+reconcile even runs.
 
 Destination resolution during the sweep (which folder a decision or unreviewable file would have
-been moved into) is `CullDestinations`, the same class a real apply uses. See `apply-engine.md`
-for a fuller description. Agreement between the two is what keeps an already-moved file from
-looking permanently lost.
+been moved into) is `CullDestinations`, the same class a real apply uses. See
+[`apply-engine.md`](apply-engine.md) for a fuller description. Agreement between the two is what
+keeps an already-moved file from looking permanently lost.
 
 A near-dup group's folder is resolved from the group's chosen keeper, never from the specific
 member being swept. `reconcile()` builds that group-to-keeper map once, up front, from the same
@@ -85,27 +85,28 @@ The one exception is a `choices.log` whose bytes do not decode. Its answers are 
 whatever this run does. So it is filed into the drawer too, and the report carries `choicesLost`
 so the loss is stated plainly rather than passed over. Every finding those answers had settled is
 raised again for the user to answer afresh. A fresh answer lands in a clean file, because
-appending files an undecodable one away first - see `move-ledger.md`.
+appending files an undecodable one away first - see [`move-ledger.md`](move-ledger.md).
 
 That disclosure only reaches a returned report, so it covers the lost skips whenever a reconcile
-actually runs. Lost overlap
-and corrupt-sidecar answers surface earlier and by a different route: `validate()` re-raises their
-findings, so `reconcile()` throws before any report exists. `PrepDirDoctor` reads the same
-re-raised findings, and `troubleshooter.md` explains why that keeps the throw unreachable from the
-one caller. Either way the user is re-asked. Only the skip path also gets told why.
+actually runs. Lost overlap and corrupt-sidecar answers surface earlier and by a different route:
+`validate()` re-raises their findings, so `reconcile()` throws before any report exists.
+`PrepDirDoctor` reads the same re-raised findings, and [`troubleshooter.md`](troubleshooter.md)
+explains why that keeps the throw unreachable from the one caller. Either way the user is re-asked.
+Only the skip path also gets told why.
 
 Any other read failure is not a lost answer at all. A file locked by a backup or antivirus scanner
 still holds every entry it ever did. That case propagates and fails the run, rather than filing
-intact answers away. See `move-ledger.md`.
+intact answers away. See [`move-ledger.md`](move-ledger.md).
 
 ## Related
 
-- The shard contract this reconcile validates before rebuilding anything: `apply-planner.md`.
+- The shard contract this reconcile validates before rebuilding anything:
+  [`apply-planner.md`](apply-planner.md).
 - The move-record log's own file format, and the `RECONSTRUCTED` marker this rebuild appends:
-  `move-ledger.md`.
+  [`move-ledger.md`](move-ledger.md).
 - The pipeline that carries decisions out, and the recorded moves this reconcile rebuilds when
-  they're lost: `apply-engine.md`.
+  they're lost: [`apply-engine.md`](apply-engine.md).
 - The disposition-ledger CHOICE remedies a `MissingSource` finding from this sweep can still be
-  resolved through: `prep-dir-remedies.md`.
+  resolved through: [`prep-dir-remedies.md`](prep-dir-remedies.md).
 - The single-button recovery that decides whether to call this reconcile at all:
-  `troubleshooter.md`.
+  [`troubleshooter.md`](troubleshooter.md).

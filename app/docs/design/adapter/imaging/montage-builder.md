@@ -110,9 +110,11 @@ metrics vary slightly between them.
 ## Related
 
 - `adapter/imaging/TileRenderer` - supplies the images this class composes; not called directly by
-  `MontageBuilder` itself (the caller renders tiles first, then hands the results here).
+  `MontageBuilder` itself (the caller renders tiles first, then hands the results here). See
+  [`tile-renderer.md`](tile-renderer.md).
 - `domain/cull/MontageConfig` - supplies `tileSize`/`tilesPerRow`.
 - `adapter/imaging/CullMontageRenderer` - implements `MontageRenderer` on top of this class. It
   batches photos, calls `TileRenderer` per photo, calls this class per batch, then writes the
   composed image and sidecar JSON to disk. This is also where `TileResult.unreviewable` filtering
-  happens - this class doesn't do it. See `cull-montage-renderer.md` for the full design.
+  happens - this class doesn't do it. See [`cull-montage-renderer.md`](cull-montage-renderer.md) for
+  the full design.

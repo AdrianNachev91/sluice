@@ -241,3 +241,8 @@ cheapest rather than the dearest model. A successful check replaces it with the 
 - `domain/cull/ShardValidator` - the shard contract's single source of truth.
 - `application/port/out/VisionCuller` - the port this class implements;
   `application/service/CullDispatcher` routes to it by the configured provider id.
+- [`adding-a-provider.md`](adding-a-provider.md) - what a second provider has to satisfy. It names
+  this class as the structural template, so a change to the shape here is a change to that guide.
+- [`cull-montage-renderer.md`](../imaging/cull-montage-renderer.md) - keeps a montage's reviewable
+  and unreviewable sets disjoint, which is what lets a verdict built here never name an unreviewable
+  file.

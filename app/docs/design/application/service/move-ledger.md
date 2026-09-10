@@ -87,19 +87,21 @@ escape as an unchecked exception; each drops just that one line instead.
 Each disposition has exactly one writer:
 
 - A **witnessed** move is recorded by `ApplyEngine.recordThenMove()`, right before the move it
-  guards runs. See `apply-engine.md`.
+  guards runs. See [`apply-engine.md`](apply-engine.md).
 - A **reconstructed** move is recorded by `ReconcileEngine`'s own rebuild sweep, once a group of
-  pending moves resolves unambiguously. See `reconcile-engine.md`.
+  pending moves resolves unambiguously. See [`reconcile-engine.md`](reconcile-engine.md).
 - A **skip**, an **overlap** resolution, and a **corrupt-sidecar** resolution are each recorded by
-  `PrepDirRemedies`, one CHOICE remedy per disposition. See `prep-dir-remedies.md`.
+  `PrepDirRemedies`, one CHOICE remedy per disposition. See
+  [`prep-dir-remedies.md`](prep-dir-remedies.md).
 
 ## Reading it back
 
 `ApplyPlanner.classify()` and `classifyFile()` consult `moves` and `skipped` to decide whether a
 decision or an unreviewable file is pending, already done, given up on, or unresolvable. See
-`apply-planner.md`. `ApplyPlanner.resolveOverlaps()` and `resolvedUnreviewable()` consult
-`overlaps`. `ApplyPlanner.collectMontage()` consults `corruptSidecars`; see `apply-planner.md`
-and `prep-dir-remedies.md`.
+[`apply-planner.md`](apply-planner.md). `ApplyPlanner.resolveOverlaps()` and
+`resolvedUnreviewable()` consult `overlaps`. `ApplyPlanner.collectMontage()` consults
+`corruptSidecars`; see [`apply-planner.md`](apply-planner.md) and
+[`prep-dir-remedies.md`](prep-dir-remedies.md).
 
 ## One snapshot per run, threaded through
 
@@ -111,17 +113,18 @@ read-only consumers cannot let one of them mutate what another sees.
 `reconcile()` takes its snapshot before either of its own filings. `validate()` and
 `resolvedUnreviewable()` both consume that snapshot, and the sweep reads its skips. A snapshot
 taken later would also read a filed-away choices file as merely absent, so the loss it is meant to
-disclose would go unreported. See `reconcile-engine.md`.
+disclose would go unreported. See [`reconcile-engine.md`](reconcile-engine.md).
 
-`ApplyPlanner` itself holds no ledger reference at all - see `apply-planner.md`. `PrepDirDoctor`
-holds only the read-only `LedgerReader` view, never the append-capable `MoveLedger` - see
-`prep-dir-doctor.md`.
+`ApplyPlanner` itself holds no ledger reference at all - see [`apply-planner.md`](apply-planner.md).
+`PrepDirDoctor` holds only the read-only `LedgerReader` view, never the append-capable
+`MoveLedger` - see [`prep-dir-doctor.md`](prep-dir-doctor.md).
 
 ## Related
 
-- The classification that reads `moves` and `skipped`: `apply-planner.md`.
-- The overlap-resolution consultation that reads `overlaps`: `apply-planner.md`.
+- The classification that reads `moves` and `skipped`: [`apply-planner.md`](apply-planner.md).
+- The overlap-resolution consultation that reads `overlaps`: [`apply-planner.md`](apply-planner.md).
 - The CHOICE remedies that append a skip, overlap, or corrupt-sidecar resolution:
-  `prep-dir-remedies.md`.
-- The witnessed move written before every real move: `apply-engine.md`.
-- The reconstructed move written by an offline rebuild: `reconcile-engine.md`.
+  [`prep-dir-remedies.md`](prep-dir-remedies.md).
+- The witnessed move written before every real move: [`apply-engine.md`](apply-engine.md).
+- The reconstructed move written by an offline rebuild:
+  [`reconcile-engine.md`](reconcile-engine.md).

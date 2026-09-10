@@ -2,8 +2,9 @@
 
 How `application/service/CurateEngine` sorts a scope, then culls whatever that sort just populated, as one job
 (`app/src/main/java/photos/sluice/application/service/CurateEngine.java`). `Pipeline` builds the one `CurateEngine`
-instance it needs, wiring it to the same `CullEngine` it builds for `cull()`/`resume()` itself. See `pipeline.md` for
-that facade and `cull-engine.md` for `buildFreshAndDispatch()`, the cull-stage method this class reuses.
+instance it needs, wiring it to the same `CullEngine` it builds for `cull()`/`resume()` itself. See
+[`pipeline.md`](pipeline.md) for that facade and [`cull-engine.md`](cull-engine.md) for `buildFreshAndDispatch()`, the
+cull-stage method this class reuses.
 
 ## `curate()`
 
@@ -39,15 +40,16 @@ since that's the public facade type a caller catches). Being a subtype, it keeps
 `sortSummary()`, so these paths refuse no less usefully than the pre-submit one.
 
 Only `ScopeOccupiedException` is caught, which is what keeps a genuine cull failure downstream (a misconfigured
-provider, for example) from ever being mislabeled as this conflict. A `Pipeline.ScopeUnreadableException` mid-job
-(see `cull-engine.md`) is neither this conflict nor a cull failure. It is not caught either, and propagates
+provider, for example) from ever being mislabeled as this conflict. A `Pipeline.ScopeUnreadableException` mid-job (see
+[`cull-engine.md`](cull-engine.md)) is neither this conflict nor a cull failure. It is not caught either, and propagates
 carrying no `SortSummary` - the same as any other unexpected failure this method does not name.
 
 The single stage-boundary check between sort finishing and cull starting still exists, but neither stage is coarse on
-its own anymore. `SortEngine`'s own dating and routing passes each check the signal per file (see `sort-engine.md`).
-`CullEngine`'s own `buildFreshAndDispatch()`/ `dispatchAndApply()` boundaries (see `cull-engine.md`'s Cancellation
-section) close the cull side the same way. A large sort or a long automated-provider dispatch both respond within about
-one item's worth of latency, not by waiting out the whole remaining stage.
+its own anymore. `SortEngine`'s own dating and routing passes each check the signal per file (see
+[`sort-engine.md`](sort-engine.md)). `CullEngine`'s own `buildFreshAndDispatch()`/ `dispatchAndApply()` boundaries (see
+[`cull-engine.md`](cull-engine.md)'s Cancellation section) close the cull side the same way. A large sort or a long
+automated-provider dispatch both respond within about one item's worth of latency, not by waiting out the whole
+remaining stage.
 
 ```mermaid
 flowchart TD
@@ -89,7 +91,8 @@ flowchart TD
 
 ## Related
 
-- `pipeline.md`: the `Pipeline` facade that builds this class, and the `CurateConflictException`
+- [`pipeline.md`](pipeline.md): the `Pipeline` facade that builds this class, and the `CurateConflictException`
   type it defines.
-- `cull-engine.md`: `buildFreshAndDispatch()`/`refuseIfScopeOccupied()`, both reused directly by this class's cull stage.
-- `SortEngine`: `sort-engine.md` in this same design folder.
+- [`cull-engine.md`](cull-engine.md): `buildFreshAndDispatch()`/`refuseIfScopeOccupied()`, both reused directly by this
+  class's cull stage.
+- `SortEngine`: [`sort-engine.md`](sort-engine.md) in this same design folder.

@@ -4,11 +4,12 @@ How `application/service/PrepDirDoctor` diagnoses a prep dir's health and, separ
 completed runs across the whole sift-prep root
 (`app/src/main/java/photos/sluice/application/service/PrepDirDoctor.java`).
 
-`diagnose(prepDir)` - the read-only health check every other recovery flow builds on - is
-documented in its own Javadoc rather than a flowchart here. `apply-planner.md`, `prep-dir-remedies.md`,
-and `troubleshooter.md` already walk through the shard-contract and corrupt-index/sidecar branches
-it delegates to. This page covers the two pieces of `PrepDirDoctor` that aren't about a single prep
-dir: `runs()`, which diagnoses the whole root, and `purgeCompleted()`, which sweeps it.
+`diagnose(prepDir)` - the read-only health check every other recovery flow builds on - is documented
+in its own Javadoc rather than a flowchart here. [`apply-planner.md`](apply-planner.md),
+[`prep-dir-remedies.md`](prep-dir-remedies.md), and [`troubleshooter.md`](troubleshooter.md) already
+walk through the shard-contract and corrupt-index/sidecar branches it delegates to. This page covers
+the two pieces of `PrepDirDoctor` that aren't about a single prep dir: `runs()`, which diagnoses the
+whole root, and `purgeCompleted()`, which sweeps it.
 
 ## 1. What counts as a prep dir
 
@@ -28,13 +29,14 @@ identifies the run, never a file's own deeper parent. A prep dir has subdirector
 disaster drawer among them.
 
 Two reads at two different depths, each guarded on its own. The root itself is listed shallowly for
-its immediate subdirectories; each candidate is then checked for occupancy with its own deep listing.
-One candidate's read failing costs one entry rather than every entry after it. A locked disaster
-drawer in one run must not hide every other run sitting next to it. A candidate whose own occupancy
-could not be determined is treated as occupied rather than dropped. That is the same fail-safe
-default `CullEngine.occupancyOf` uses for a scope's own occupancy check (see `cull-engine.md`) - an
-unreadable dir must never be mistaken for an empty one. Its own diagnosis, run separately by every
-caller, decides what it reports. Often that is the identical failure, landing it on `DAMAGED`.
+its immediate subdirectories; each candidate is then checked for occupancy with its own deep
+listing. One candidate's read failing costs one entry rather than every entry after it. A locked
+disaster drawer in one run must not hide every other run sitting next to it. A candidate whose own
+occupancy could not be determined is treated as occupied rather than dropped. That is the same
+fail-safe default `CullEngine.occupancyOf` uses for a scope's own occupancy check (see
+[`cull-engine.md`](cull-engine.md)) - an unreadable dir must never be mistaken for an empty one. Its
+own diagnosis, run separately by every caller, decides what it reports. Often that is the identical
+failure, landing it on `DAMAGED`.
 
 ## 2. runs()
 
@@ -146,12 +148,14 @@ is worth a graveyard trip.
 
 ## Related
 
-- `diagnose()`'s own state machine: `PrepDirDoctor.diagnose()`'s Javadoc, and `apply-planner.md`
-  for the shard-contract validation it reuses.
-- The scope-occupancy guard `runs()`'s per-dir half feeds: `cull-engine.md`, section on claiming a
-  scope. Same diagnosis, asked about one prep dir instead of all of them.
-- The corrupt-index/sidecar branches `diagnose()` reuses: `prep-dir-remedies.md`, section 2.
-- `Pipeline.purgeCompleted()`'s `JobRunner` wiring: `pipeline.md`.
-- The last-resort discard this is not: `prep-dir-remedies.md`, section 3 - `discard()` graveyards
-  a prep dir's text artifacts and deletes only its images. `purgeCompleted()` hard-deletes a
-  `COMPLETE` prep dir wholesale, with no graveyard, since nothing left in it needs salvaging.
+- `diagnose()`'s own state machine: `PrepDirDoctor.diagnose()`'s Javadoc, and
+  [`apply-planner.md`](apply-planner.md) for the shard-contract validation it reuses.
+- The scope-occupancy guard `runs()`'s per-dir half feeds: [`cull-engine.md`](cull-engine.md),
+  section on claiming a scope. Same diagnosis, asked about one prep dir instead of all of them.
+- The corrupt-index/sidecar branches `diagnose()` reuses:
+  [`prep-dir-remedies.md`](prep-dir-remedies.md), section 2.
+- `Pipeline.purgeCompleted()`'s `JobRunner` wiring: [`pipeline.md`](pipeline.md).
+- The last-resort discard this is not: [`prep-dir-remedies.md`](prep-dir-remedies.md), section 3 -
+  `discard()` graveyards a prep dir's text artifacts and deletes only its images. `purgeCompleted()`
+  hard-deletes a `COMPLETE` prep dir wholesale, with no graveyard, since nothing left in it needs
+  salvaging.

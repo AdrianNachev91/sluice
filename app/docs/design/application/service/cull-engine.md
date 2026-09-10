@@ -7,7 +7,7 @@ only while some montage still lacks a shard
 (`app/src/main/java/photos/sluice/application/service/CullEngine.java`,
 `app/src/main/java/photos/sluice/application/service/ShardTallyCalculator.java`). `Pipeline` builds
 the one `CullEngine` instance it needs and exposes `cull()`/`resume()` under its own type - see
-`pipeline.md` for that facade and for `sort()`/`commit()`/`rescue()`.
+[`pipeline.md`](pipeline.md) for that facade and for `sort()`/`commit()`/`rescue()`.
 
 The auto-resume that polls a still-waiting job for its shards to land is a separate concern, owned
 by `CullWatchers`
@@ -23,9 +23,10 @@ before writing. So starting one over an existing run destroys everything that ru
 an agent was paid to produce, a move-record log, the answers a user gave a troubleshoot screen.
 Deciding whether the scope is free to claim comes first, before anything is rendered.
 
-**A scope is occupied while any prep dir sits at its path, holding at least one file.** Presence, not
-readability - see `prep-dir-doctor.md` for why the test is deliberately that loose. Every state but
-`COMPLETE` refuses, and what differs between them is the way out, not whether a refusal happens.
+**A scope is occupied while any prep dir sits at its path, holding at least one file.** Presence,
+not readability - see [`prep-dir-doctor.md`](prep-dir-doctor.md) for why the test is deliberately
+that loose. Every state but `COMPLETE` refuses, and what differs between them is the way out, not
+whether a refusal happens.
 
 | Occupant             | Result                            | Way out                  |
 |----------------------|-----------------------------------|--------------------------|
@@ -184,8 +185,8 @@ resume against roots the app has already refused would put a folder back that th
 
 Listing what is on disk is not this class's job at all. `PrepDirDoctor.runs()` enumerates the
 sift-prep root and diagnoses each dir, and `Pipeline.cullRuns()` exposes it - see
-`prep-dir-doctor.md`. `CullEngine` reads it for two things only: the startup watch scan, and the
-one-dir occupancy question above.
+[`prep-dir-doctor.md`](prep-dir-doctor.md). `CullEngine` reads it for two things only: the startup
+watch scan, and the one-dir occupancy question above.
 
 `ShardTallyCalculator` answers two different questions, from two different places.
 
@@ -237,19 +238,19 @@ Then no `"Sifting..."` bracket is reported and no provider client is built.
 
 ### Scenarios
 
-| Scenario                                                                | Outcome                                                                                                                                                    |
-|-------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `cull()` on an external-agent scope with no shards dropped yet          | `CullJobOutcome.Waiting` with a `present=0/valid=0` tally; job slot released                                                                               |
-| `cull()` called again while that scope's run is unresolved              | `ScopeOccupiedException` thrown synchronously, before `JobRunner.submit()` - the existing prep dir (and any already-dropped shards) is left untouched      |
-| `cull()` on a scope whose own prep dir cannot be listed at all          | `ScopeUnreadableException` thrown synchronously, naming the prep dir and the read failure - nothing rebuilt, no run fabricated to blame                    |
-| `cull()` called again once that scope's run has applied                 | The old record is archived to the graveyard, named by `archivedPriorRun`, and the fresh run proceeds with no confirm                                       |
-| `resume()` once every shard is present and valid                        | `CullJobOutcome.Applied`, files moved. No culler is entered, so no `"Sifting..."` phase is bracketed                                                       |
-| `resume()` while a shard is still missing                               | Dispatch runs again; `CullJobOutcome.Waiting`, with a freshly recomputed tally                                                                             |
-| `resume()` with every shard present but apply's validation refusing     | `CullJobOutcome.Blocked` carrying the findings; nothing moved, `decisions.json` never written, no watcher armed                                            |
-| `resume(prepDir, allowPartial=true)` with a shard still missing         | Applies what it has; the missing montage's photos are left in place, untouched                                                                             |
-| A genuine `CullException` from an automated (non-MANUAL) provider       | Propagates - `JobHandle.join()` throws, never resolves to `Waiting`. A cancellation is a separate path (see Cancellation below) and never reaches this one |
-| The run stops at its own spend ceiling                                  | `CullJobOutcome.Waiting` with reason `CEILING_REACHED`. Apply is not reached, so the shards already written stay unapplied and Continue picks them up.     |
-| Apply fails on the filesystem rather than on validation                 | Propagates. The vision pass has already been billed, so what it consumed is recorded as `FAILED` before the exception leaves.                              |
+| Scenario                                                            | Outcome                                                                                                                                                    |
+|---------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `cull()` on an external-agent scope with no shards dropped yet      | `CullJobOutcome.Waiting` with a `present=0/valid=0` tally; job slot released                                                                               |
+| `cull()` called again while that scope's run is unresolved          | `ScopeOccupiedException` thrown synchronously, before `JobRunner.submit()` - the existing prep dir (and any already-dropped shards) is left untouched      |
+| `cull()` on a scope whose own prep dir cannot be listed at all      | `ScopeUnreadableException` thrown synchronously, naming the prep dir and the read failure - nothing rebuilt, no run fabricated to blame                    |
+| `cull()` called again once that scope's run has applied             | The old record is archived to the graveyard, named by `archivedPriorRun`, and the fresh run proceeds with no confirm                                       |
+| `resume()` once every shard is present and valid                    | `CullJobOutcome.Applied`, files moved. No culler is entered, so no `"Sifting..."` phase is bracketed                                                       |
+| `resume()` while a shard is still missing                           | Dispatch runs again; `CullJobOutcome.Waiting`, with a freshly recomputed tally                                                                             |
+| `resume()` with every shard present but apply's validation refusing | `CullJobOutcome.Blocked` carrying the findings; nothing moved, `decisions.json` never written, no watcher armed                                            |
+| `resume(prepDir, allowPartial=true)` with a shard still missing     | Applies what it has; the missing montage's photos are left in place, untouched                                                                             |
+| A genuine `CullException` from an automated (non-MANUAL) provider   | Propagates - `JobHandle.join()` throws, never resolves to `Waiting`. A cancellation is a separate path (see Cancellation below) and never reaches this one |
+| The run stops at its own spend ceiling                              | `CullJobOutcome.Waiting` with reason `CEILING_REACHED`. Apply is not reached, so the shards already written stay unapplied and Continue picks them up.     |
+| Apply fails on the filesystem rather than on validation             | Propagates. The vision pass has already been billed, so what it consumed is recorded as `FAILED` before the exception leaves.                              |
 
 ### Cancellation
 
@@ -294,16 +295,16 @@ resumable prep dir (and, for mid-dispatch, some shards) already exists by that p
 None of these paths ever arms a watcher: an auto-resume moments after a cancel would defy the
 cancel.
 
-| Scenario                                                                       | Outcome                                                                                |
-|--------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
-| Cancellation requested mid-render, before `index.json` is written              | `CullJobOutcome.Cancelled` - nothing resumable exists yet                              |
-| Cancellation requested mid-batch (the montage-write loop), before `index.json` | `CullJobOutcome.Cancelled`, same as mid-render - see `cull-montage-renderer.md`        |
-| Cancellation requested right after prep finishes, before dispatch starts       | `Waiting` with a `0/N` tally - dispatch never runs                                     |
-| Cancellation requested mid-dispatch (an automated provider's montage loop)     | `Waiting` with a tally reflecting however many shards the loop wrote before stopping   |
-| Cancellation requested mid-apply (either of `ApplyEngine`'s two status loops)  | `Waiting` - `decisions.json` was never written, so the prep dir still reads as waiting |
-| Cancellation requested racing the provider's pause `CullException`             | `Waiting`, same as an uncancelled pause, but no watcher is armed                       |
-| Cancellation requested after the run had already stopped at its spend ceiling  | `Waiting` with `CEILING_REACHED`, not the cancellation - the ceiling is asked first    |
-| A `Waiting` outcome on an automated (non-MANUAL) provider                      | Never arms a watcher, cancelled or not - only the external-agent provider is watched   |
+| Scenario                                                                       | Outcome                                                                                                                           |
+|--------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| Cancellation requested mid-render, before `index.json` is written              | `CullJobOutcome.Cancelled` - nothing resumable exists yet                                                                         |
+| Cancellation requested mid-batch (the montage-write loop), before `index.json` | `CullJobOutcome.Cancelled`, same as mid-render - see [`cull-montage-renderer.md`](../../adapter/imaging/cull-montage-renderer.md) |
+| Cancellation requested right after prep finishes, before dispatch starts       | `Waiting` with a `0/N` tally - dispatch never runs                                                                                |
+| Cancellation requested mid-dispatch (an automated provider's montage loop)     | `Waiting` with a tally reflecting however many shards the loop wrote before stopping                                              |
+| Cancellation requested mid-apply (either of `ApplyEngine`'s two status loops)  | `Waiting` - `decisions.json` was never written, so the prep dir still reads as waiting                                            |
+| Cancellation requested racing the provider's pause `CullException`             | `Waiting`, same as an uncancelled pause, but no watcher is armed                                                                  |
+| Cancellation requested after the run had already stopped at its spend ceiling  | `Waiting` with `CEILING_REACHED`, not the cancellation - the ceiling is asked first                                               |
+| A `Waiting` outcome on an automated (non-MANUAL) provider                      | Never arms a watcher, cancelled or not - only the external-agent provider is watched                                              |
 
 ## Watching a waiting run
 
@@ -416,15 +417,17 @@ and no file moves. No watcher ever arms for an automated provider, so nothing sp
 
 ## Related
 
-- `pipeline.md`: the `Pipeline` facade that builds this class and exposes its methods, plus
-  `sort()`/`commit()`/`rescue()`.
-- `curate-engine.md`: sorts a scope, then reuses this class's `buildFreshAndDispatch()` for the
-  cull stage.
+- [`pipeline.md`](pipeline.md): the `Pipeline` facade that builds this class and exposes its
+  methods, plus `sort()`/`commit()`/`rescue()`.
+- [`curate-engine.md`](curate-engine.md): sorts a scope, then reuses this class's
+  `buildFreshAndDispatch()` for the cull stage.
 - `JobRunner`/`JobHandle`/`JobWork` (the single-slot async executor `CullEngine` submits onto): no
   dedicated design doc yet - see the source files directly.
 - `ProgressPort` (the out-port `PhaseRunner` reports through): see the source file directly. Its
   own doc comment is the source of the "always bracket a phase" contract this page relies on.
-- `ApplyEngine`: `apply-engine.md` in this same design folder, section 3 for its own cancellation
-  behavior.
-- `CullMontageRenderer`: `cull-montage-renderer.md` in the `adapter/imaging` design folder, its own
-  Cancellation section for the render/batch checks `MontageRenderer.build()` does internally.
+- `ApplyEngine`: [`apply-engine.md`](apply-engine.md) in this same design folder, section 3 for its
+  own cancellation behavior.
+- `CullMontageRenderer`:
+  [`cull-montage-renderer.md`](../../adapter/imaging/cull-montage-renderer.md) in the
+  `adapter/imaging` design folder, its own Cancellation section for the render/batch checks
+  `MontageRenderer.build()` does internally.

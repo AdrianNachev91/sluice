@@ -29,8 +29,9 @@ same, ending in a copy rather than a move. The candidate-finding part above, wit
 is also exposed on its own as `resolveDestination`, and the final placement step as `moveTo` and
 `copyTo`. `ApplyEngine` calls them separately. It needs to know a move's exact destination before
 performing it, to durably record a decision's source hash against that destination first - see
-`apply-planner.md`'s move-record section. `moveTo` and `copyTo` trust the caller to have already
-reserved that exact path and do no collision handling of their own.
+[`apply-planner.md`](../../application/service/apply-planner.md)'s move-record section. `moveTo` and
+`copyTo` trust the caller to have already reserved that exact path and do no collision handling of
+their own.
 
 ## Placing the bytes
 
@@ -108,14 +109,19 @@ itself uses.
   contextual message, matching every other adapter in this package. The same is true of `exists`,
   `size`, and `appendLine`. `listFiles` walks a directory's whole subtree for its regular files;
   `listChildDirectories` lists only root's immediate subdirectories, non-recursive.
-- The main consumer of `move`, `delete`, `exists`, `size`, and `appendLine` is `sort-engine.md` in
-  the `application/service` design folder. `RescueEngine`'s own scope logic is in
-  `rescue-engine.md`. `listChildDirectories` is used by `PrepDirDoctor`, covered in
-  `prep-dir-doctor.md`, to shallow-list the sift-prep root so one candidate's own read failing
-  cannot cost every other one. `copy`, `resolveDestination`, `moveTo`, and `write` are used by
-  `apply-engine.md`'s `ApplyEngine` for near-dup handling and crash-safe resume.
-- `removeEmptyDirectories` is invoked as the second step of `SortEngine`'s post-run sweep; the
-  first step (which sidecars count as orphaned) is `sidecar-sweep.md` in the `domain/scan` design
-  folder.
-- `removeIfEmptyOfFiles` is used by `rescue-engine.md` (also in `application/service`) to dissolve
-  a Review folder once every file in it has been rescued.
+- The main consumer of `move`, `delete`, `exists`, `size`, and `appendLine` is
+  [`sort-engine.md`](../../application/service/sort-engine.md) in the `application/service` design
+  folder. `RescueEngine`'s own scope logic is in
+  [`rescue-engine.md`](../../application/service/rescue-engine.md). `listChildDirectories` is used
+  by `PrepDirDoctor`, covered in
+  [`prep-dir-doctor.md`](../../application/service/prep-dir-doctor.md), to shallow-list the
+  sift-prep root so one candidate's own read failing cannot cost every other one. `copy`,
+  `resolveDestination`, `moveTo`, and `write` are used by
+  [`apply-engine.md`](../../application/service/apply-engine.md)'s `ApplyEngine` for near-dup
+  handling and crash-safe resume.
+- `removeEmptyDirectories` is invoked as the second step of `SortEngine`'s post-run sweep; the first
+  step (which sidecars count as orphaned) is
+  [`sidecar-sweep.md`](../../domain/scan/sidecar-sweep.md) in the `domain/scan` design folder.
+- `removeIfEmptyOfFiles` is used by [`rescue-engine.md`](../../application/service/rescue-engine.md)
+  (also in `application/service`) to dissolve a Review folder once every file in it has been
+  rescued.

@@ -144,9 +144,9 @@ genuinely resumable `Waiting` job.
 ## Related
 
 - `adapter/imaging/TileRenderer` - renders each candidate to a tile, and is the sole source of the
-  `unreviewable` flag this class acts on.
+  `unreviewable` flag this class acts on. See [`tile-renderer.md`](tile-renderer.md).
 - `adapter/imaging/MontageBuilder` - composes each batch into a montage image; never sees the
-  `unreviewable` flag itself (see that doc's own Known limitations).
+  `unreviewable` flag itself, per [`montage-builder.md`](montage-builder.md)'s Known limitations.
 - `adapter/imaging/SidecarWriter` / `PrepIndexWriter` - JSON emission for each montage and for the
   overall `index.json`.
 - `domain/cull/CullScopeSelector` + `CullCandidate` - pure scope-resolution and ordering logic.

@@ -43,10 +43,10 @@ leaves every root exactly where it found it. It takes the `C -- yes` branch stra
 
 ## 2. Which violations refuse a save
 
-Not the same admission rule `RootsGuard` runs for every `Pipeline` entry point (see `pipeline.md`).
-A root that is set to somewhere unusable is refused, but an unset root is legal here. An install
-still choosing its three folders one picker at a time must be able to save each choice as it makes
-it.
+Not the same admission rule `RootsGuard` runs for every `Pipeline` entry point (see
+[`pipeline.md`](pipeline.md)). A root that is set to somewhere unusable is refused, but an unset
+root is legal here. An install still choosing its three folders one picker at a time must be able to
+save each choice as it makes it.
 
 ```mermaid
 flowchart TD
@@ -162,9 +162,10 @@ left to forward an `Error` to here, so a log line is the whole remedy.
 ## Related
 
 - `RootsGuard`/`PathValidationUseCase`'s other admission rule, run for every `Pipeline` entry point
-  instead of a save: `pipeline.md` in this same design folder.
+  instead of a save: [`pipeline.md`](pipeline.md) in this same design folder.
 - `PathValidationUseCase`'s own implementation, `PathValidationService`, and the domain rule it
-  defers to: `path-validation-service.md` in this same design folder.
+  defers to: [`path-validation-service.md`](path-validation-service.md) in this same design folder.
 - `JobRunner.runIfIdle`, the bounded job-slot wait this save holds shut: no dedicated design doc yet
   - see the source file directly.
-- `WorkingRootLock`, the port `acquire`/`release` claim against: see the source file directly.
+- `WorkingRootLock`, the port `acquire`/`release` claim against:
+  [`working-root-lock.md`](../../adapter/fs/working-root-lock.md) in the `adapter/fs` design folder.

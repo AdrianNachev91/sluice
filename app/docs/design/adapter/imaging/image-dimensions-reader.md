@@ -6,8 +6,8 @@ How `adapter/imaging/ImageDimensionsReader` determines a media file's pixel dime
 
 This runs at `sort` time, trusting metadata **tag values** rather than decoding real pixels wherever
 it can. That's a different, cheaper mechanism than `TileRenderer`'s montage-time real decode (see
-`tile-renderer.md`). `TileRenderer` independently re-measures actual decoded content, so it doesn't
-share this class's failure modes.
+[`tile-renderer.md`](tile-renderer.md)). `TileRenderer` independently re-measures actual decoded
+content, so it doesn't share this class's failure modes.
 
 ## Top-level routing
 
@@ -148,6 +148,7 @@ applies.
 
 - `domain/imaging/LowResGate` - the consumer this class's result feeds; `MIN_DIMENSION` (640) is
   shared with `TileRenderer`'s own judgeability check for a related but distinct question.
-- `application/service/SortEngine` - the production caller, at `sort` time.
-- `tile-renderer.md` - the montage-time real-decode counterpart, the independent second
-  measurement that provides defense in depth against this class's metadata-trust assumption.
+- `application/service/SortEngine` - the production caller, at `sort` time. See
+  [`sort-engine.md`](../../application/service/sort-engine.md).
+- [`tile-renderer.md`](tile-renderer.md) - the montage-time real-decode counterpart, the independent
+  second measurement that provides defense in depth against this class's metadata-trust assumption.

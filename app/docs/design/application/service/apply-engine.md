@@ -3,7 +3,7 @@
 How `application/service/ApplyEngine` carries a prep directory's decisions out against the
 filesystem: the resumable apply pipeline, carrying out one decision, and cancellation
 (`app/src/main/java/photos/sluice/application/service/ApplyEngine.java`). Validation and resume
-classification are `ApplyPlanner`'s own job; see `apply-planner.md`.
+classification are `ApplyPlanner`'s own job; see [`apply-planner.md`](apply-planner.md).
 
 ## 1. The apply pipeline
 
@@ -34,7 +34,7 @@ flowchart TD
 
 The move-record log is read exactly once per run, before `validate()` even starts. That single
 `Ledger` snapshot is what `validate()`, and both classification passes below, all consume. See
-`move-ledger.md` for the snapshot's own rules.
+[`move-ledger.md`](move-ledger.md) for the snapshot's own rules.
 
 Every problem source is aggregated before anything throws - a bad run is seen and fixed whole, not
 one error per re-run. Classification runs entirely before any decision or unreviewable file is
@@ -99,7 +99,7 @@ decision's file belongs in. `destinationDirFor()` covers a `Classification`, `du
 near-dup group's folder (given the group's chosen file as its anchor - see `nearDupAnchors()`),
 `unreviewableDir()` an unreviewable file. `ReconcileEngine`'s offline sweep searches the very same
 directories, so agreement between the two is what keeps an already-moved file from looking
-permanently lost on reconcile. See `reconcile-engine.md`.
+permanently lost on reconcile. See [`reconcile-engine.md`](reconcile-engine.md).
 
 A destination built out of a segment is refused unless it lands strictly inside the root it resolved
 from. That covers `duplicatesDir()`, `unreviewableDir()`, and `destinationDirFor()` for a review
@@ -127,15 +127,15 @@ What it merely reads is wider, since it opens the whole prep dir and hashes a re
 inside the library. `recordThenMove()` calls the refusal for every move, and `applyNearDupChosen()`
 calls it for the one copy that never reaches `recordThenMove()`. `ApplyPlanner` has already reported
 an outside source as a finding, which aborts the run before either call is reached (see
-`apply-planner.md`). The check stays because that argument is only as durable as the caller making
-it, and neither method can notice a future caller skipping validation.
+[`apply-planner.md`](apply-planner.md)). The check stays because that argument is only as durable as
+the caller making it, and neither method can notice a future caller skipping validation.
 
 ### Why NearDupChosen still needs its own resume guard
 
 Every other decision type is a *move*: once it genuinely runs, its source file disappearing is
-exactly what the move-record log hash-verifies against (see `apply-planner.md`). `NearDupChosen`
-is the one *copy*, its source is never removed. So that path doesn't apply to it, and it carries
-no move record at all.
+exactly what the move-record log hash-verifies against (see [`apply-planner.md`](apply-planner.md)).
+`NearDupChosen` is the one *copy*, its source is never removed. So that path doesn't apply to it,
+and it carries no move record at all.
 
 A crash between the copy and its note write leaves no trace in a move record, since none was ever
 written for it. Reprocessing it on resume would land a stray `" (2)"` duplicate in `Duplicates/`.
@@ -156,8 +156,8 @@ Either this exact decision already ran, or the same source file was chosen again
 group in an independent re-cull. That's harmless either way, since it would be the identical bytes.
 
 A source that's missing for a `NearDupChosen` decision is therefore always Unresolved (see
-`apply-planner.md`). A copy's source is never supposed to disappear, so there is no "already done"
-case for the classifier to confirm.
+[`apply-planner.md`](apply-planner.md)). A copy's source is never supposed to disappear, so there is
+no "already done" case for the classifier to confirm.
 
 ## 3. Cancellation
 
@@ -203,10 +203,12 @@ engine this project's cancellation support touches; the verdict was to leave it 
 - The shard contract itself, and the auto-heal rule: `ShardValidator`'s own doc comment
   (`domain/cull/ShardValidator.java`).
 - The validation and resume classification this pipeline runs before carrying anything out:
-  `apply-planner.md`.
+  [`apply-planner.md`](apply-planner.md).
 - The disposition-ledger CHOICE remedies, and the corrupt-index/sidecar and last-resort discard
-  repairs for a damaged prep dir: `prep-dir-remedies.md`.
-- The offline rebuild for when the move ledger itself can't be trusted: `reconcile-engine.md`.
-- The ledger files' own formats, markers, and parsing rules: `move-ledger.md`.
+  repairs for a damaged prep dir: [`prep-dir-remedies.md`](prep-dir-remedies.md).
+- The offline rebuild for when the move ledger itself can't be trusted:
+  [`reconcile-engine.md`](reconcile-engine.md).
+- The ledger files' own formats, markers, and parsing rules: [`move-ledger.md`](move-ledger.md).
 - The filesystem effects this engine relies on (`move`, `resolveDestination`, `moveTo`, `copy`,
-  `appendLine`, `readLines`): `media-store.md` in the `adapter/fs` design folder.
+  `appendLine`, `readLines`): [`media-store.md`](../../adapter/fs/media-store.md) in the
+  `adapter/fs` design folder.

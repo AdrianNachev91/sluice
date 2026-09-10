@@ -10,9 +10,10 @@ Everything it returns gets hard-deleted, with no trash and no undo. So the decis
 one-sided. Three things keep a sidecar alive, and any one of them is enough. Only a sidecar none of
 them claims is swept.
 
-This is not the same question `TakeoutSidecarPairer` answers per file (see `sort-engine.md`
-section 2 for that mechanism). A sidecar is spent here because nothing left in its directory owns
-it, whatever date source actually won for the media that has gone.
+This is not the same question `TakeoutSidecarPairer` answers per file (see
+[`sort-engine.md`](../../application/service/sort-engine.md) section 2 for that mechanism). A
+sidecar is spent here because nothing left in its directory owns it, whatever date source actually
+won for the media that has gone.
 
 ## Deciding whether one sidecar is orphaned
 
@@ -51,7 +52,7 @@ Two signals, either one enough.
 filename, so a recognized media extension sits somewhere in it. The extension can sit anywhere in
 the key, not only at its end. A sidecar with a non-standard suffix (`IMG_1234.jpg.someextra`) is a
 real sidecar the sweep is meant to reach, and demanding the extension come last would make it
-immortal. See `takeout-sidecar-pairing.md` section 3.
+immortal. See [`takeout-sidecar-pairing.md`](takeout-sidecar-pairing.md) section 3.
 
 **Or the owner key is at least 46 characters.** Google truncates a long sidecar name, and the cut
 usually takes the media extension with it. Such a name looks like nothing in particular, so length
@@ -140,10 +141,12 @@ Recorded rather than fixed, and deliberately not asserted in
 
 ## Related
 
-- Caller: `SortEngine.sweepOrphanedSidecarsAndEmptyDirectories`. It derives "what's remaining"
-  from the run's original scan minus what the run itself removed, feeds those lists in here, and
-  deletes whatever comes back. It then removes any directory left empty of all files. See
-  `sort-engine.md` section 5 in the `application/service` design folder.
+- Caller: `SortEngine.sweepOrphanedSidecarsAndEmptyDirectories`. It derives "what's remaining" from
+  the run's original scan minus what the run itself removed, feeds those lists in here, and deletes
+  whatever comes back. It then removes any directory left empty of all files. See
+  [`sort-engine.md`](../../application/service/sort-engine.md) section 5 in the
+  `application/service` design folder.
 - The owner-key derivation, the media-file shape check, and the per-directory scoping rules this
-  class reuses: `takeout-sidecar-pairing.md`, same folder.
-- The directory-removal step that follows: `media-store.md` in the `adapter/fs` design folder.
+  class reuses: [`takeout-sidecar-pairing.md`](takeout-sidecar-pairing.md), same folder.
+- The directory-removal step that follows: [`media-store.md`](../../adapter/fs/media-store.md) in
+  the `adapter/fs` design folder.

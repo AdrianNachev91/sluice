@@ -58,17 +58,19 @@ contextual message so a caller never has to know which shape triggered it.
 
 ## Related
 
-- Sidecar-matching detail (owner keys, the prefix fallback): `takeout-sidecar-pairing.md` in the
-  sibling `domain/scan` design folder.
-- Risk note: pairing is name-based only, and deletion does not close that gap by validating
-  content. Inline consumption spends only a sidecar whose parsed date actually won for its file.
-  The orphan sweep that catches every other spent sidecar decides from names alone and never
-  reads content. The sweep's safety is structural instead: it deletes only `.json` files, never
-  media, and only once nothing left in the sidecar's own directory owns it. See
-  `sidecar-sweep.md` for the rules and the one accepted residual, a long-named stray `.json`.
+- Sidecar-matching detail (owner keys, the prefix fallback):
+  [`takeout-sidecar-pairing.md`](../../domain/scan/takeout-sidecar-pairing.md) in the sibling
+  `domain/scan` design folder.
+- Risk note: pairing is name-based only, and deletion does not close that gap by validating content.
+  Inline consumption spends only a sidecar whose parsed date actually won for its file. The orphan
+  sweep that catches every other spent sidecar decides from names alone and never reads content. The
+  sweep's safety is structural instead: it deletes only `.json` files, never media, and only once
+  nothing left in the sidecar's own directory owns it. See
+  [`sidecar-sweep.md`](../../domain/scan/sidecar-sweep.md) for the rules and the one accepted
+  residual, a long-named stray `.json`.
 - `ScanResult.jsonPaths` carries every `.json` found, paired or not, and the classification here is
   by extension alone. That is deliberate: the list is meant to say what was on disk, not to judge
   it. `SortEngine` calls this scan once per `sort()` invocation and reuses the full list after
   routing, minus whatever it consumed itself, to feed `SidecarSweep`. Deciding which of those files
-  could ever have been a sidecar happens there. See `sidecar-sweep.md` in the `domain/scan` design
-  folder.
+  could ever have been a sidecar happens there. See
+  [`sidecar-sweep.md`](../../domain/scan/sidecar-sweep.md) in the `domain/scan` design folder.

@@ -167,4 +167,4 @@ preview" rather than blending in if that routing is ever skipped or incomplete a
 - `adapter/imaging/CliHeifDecoder` - the real libheif-CLI-backed implementation.
 - `domain/scan/MediaTypeDetector` - supplies the lowercase extension this class routes on.
 - `adapter/imaging/MontageBuilder` - composes this class's tiles into a montage grid and draws the
-  per-photo filename label band below each one.
+  per-photo filename label band below each one. See [`montage-builder.md`](montage-builder.md).

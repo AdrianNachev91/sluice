@@ -6,18 +6,19 @@ with progress reported through `ProgressPort` via `PhaseRunner`
 (`app/src/main/java/photos/sluice/application/service/Pipeline.java`,
 `app/src/main/java/photos/sluice/application/service/PhaseRunner.java`,
 `app/src/main/java/photos/sluice/application/service/JobRunner.java`,
-`app/src/main/java/photos/sluice/application/port/out/ProgressPort.java`).
-`cull()`/`resume()` and `curate()` are one-line delegates to `CullEngine`/`CurateEngine` - see
-`cull-engine.md`/`curate-engine.md` for how those actually work. `cullRuns()` delegates to
-`PrepDirDoctor.runs()` instead, since listing what is on disk is diagnosis rather than orchestration.
-`troubleshoot(prepDir)` and `purgeCompleted()` are each a one-line `JobRunner.submit()` delegate (to
-`Troubleshooter` and `PrepDirDoctor` respectively), with no `PhaseRunner`/`ProgressPort` bracketing.
-Neither has per-item progress worth reporting, so `JobRunner`'s one-job-at-a-time discipline is the
-whole reason either runs as a job. See `troubleshooter.md`/`prep-dir-doctor.md` for what each
+`app/src/main/java/photos/sluice/application/port/out/ProgressPort.java`). `cull()`/`resume()` and
+`curate()` are one-line delegates to `CullEngine`/`CurateEngine` - see
+[`cull-engine.md`](cull-engine.md)/[`curate-engine.md`](curate-engine.md) for how those actually
+work. `cullRuns()` delegates to `PrepDirDoctor.runs()` instead, since listing what is on disk is
+diagnosis rather than orchestration. `troubleshoot(prepDir)` and `purgeCompleted()` are each a
+one-line `JobRunner.submit()` delegate (to `Troubleshooter` and `PrepDirDoctor` respectively), with
+no `PhaseRunner`/`ProgressPort` bracketing. Neither has per-item progress worth reporting, so
+`JobRunner`'s one-job-at-a-time discipline is the whole reason either runs as a job. See
+[`troubleshooter.md`](troubleshooter.md)/[`prep-dir-doctor.md`](prep-dir-doctor.md) for what each
 actually does. `stopAllWatching()` retires every auto-resume poller at once, which is bookkeeping
-against an in-memory map rather than work - see `cull-engine.md`. Two callers need it: a save that
-moved the working root and so left them all polling outside it, and an app that is closing. A save
-moving only the library or the inbox does not come here.
+against an in-memory map rather than work - see [`cull-engine.md`](cull-engine.md). Two callers need
+it: a save that moved the working root and so left them all polling outside it, and an app that is
+closing. A save moving only the library or the inbox does not come here.
 
 `stopAcceptingJobs(timeout)` is the last delegate, and the exit path's own. It shuts `JobRunner` for
 good, asks the job in flight to stop, and waits up to `timeout` for it to. It answers whether
@@ -32,16 +33,14 @@ whose roots are unusable has to be able to close as cleanly as one whose roots a
 Every other public method opens with the same call before it resolves a single path:
 `RootsGuard.requireUsable()`. That includes `sort`, `commit`, `rescue`, `cull`, `curate`, `resume`,
 `cullRuns`, `armWatchesForResumableRuns`, `sweepExpiredDisasterDrawers`, `troubleshoot`,
-`purgeCompleted`, and `discard`.
-`RootsGuard` reads `PathValidationUseCase.violationsInForce()` and
+`purgeCompleted`, and `discard`. `RootsGuard` reads `PathValidationUseCase.violationsInForce()` and
 throws `PathsMisconfiguredException` (an `IllegalStateException`) the moment the list is non-empty:
 any of the three roots unset, unparsable, missing, unreadable, or overlapping another. A fresh
-install with
-nothing configured meets this on every one of those calls until its first run is set up.
-`CullEngine.resume` runs the identical check on its own, since a watcher's auto-resume reaches it
-without passing through `Pipeline` at all - see `cull-engine.md`. `SettingsService.save` runs a
-narrower version of the same question, admitting an unset root where these do not - see
-`settings-service.md`.
+install with nothing configured meets this on every one of those calls until its first run is set
+up. `CullEngine.resume` runs the identical check on its own, since a watcher's auto-resume reaches
+it without passing through `Pipeline` at all - see [`cull-engine.md`](cull-engine.md).
+`SettingsService.save` runs a narrower version of the same question, admitting an unset root where
+these do not - see [`settings-service.md`](settings-service.md).
 
 ## How one call works
 
@@ -89,12 +88,12 @@ interfaces. The progress-callback overloads only exist on the concrete classes, 
 
 `discard(prepDir)` follows the same `PhaseRunner`-bracketed shape as `sort`/`commit`/`rescue`
 (`"Discarding..."`, ticked once per file `PrepDirRemedies.discard()` moves or deletes - real work
-worth a progress bar, unlike `troubleshoot`/`purgeCompleted` below). It also adds two checks
-neither of those three needs. It refuses a prep dir `PrepDirDoctor.diagnose()` reports `COMPLETE`
+worth a progress bar, unlike `troubleshoot`/`purgeCompleted` below). It also adds two checks neither
+of those three needs. It refuses a prep dir `PrepDirDoctor.diagnose()` reports `COMPLETE`
 (`purgeCompleted()` is that state's own verb). And it retires any watcher polling the prep dir
 before the graveyard move starts, so an auto-resume can never fire against a run mid-discard. See
-`prep-dir-remedies.md` section 3 for what `discard()` actually moves/deletes, and `cull-engine.md`
-for the watcher it disarms.
+[`prep-dir-remedies.md`](prep-dir-remedies.md) section 3 for what `discard()` actually
+moves/deletes, and [`cull-engine.md`](cull-engine.md) for the watcher it disarms.
 
 ### Scenarios
 
@@ -107,32 +106,35 @@ for the watcher it disarms.
 | `stopAcceptingJobs(timeout)` while a settings save holds the job slot past the timeout     | Returns false without ever reading what is running. The runner is still shut, so the refusal above holds. The save finishes, having been admitted before the shut. One moving the working root takes the new root's claim as it goes. So the process exits holding that root rather than the one the exit path decided to keep. That is the safe direction, since the save is writing into the new root, and the kernel drops the claim when the process ends |
 | The engine call succeeds                                                                   | `phaseStarted` -> N ticks -> `phaseFinished`, `JobHandle.join()` returns the engine's summary                                                                                                                                                                                                                                                                                                                                                                 |
 | The engine call throws mid-run                                                             | `phaseStarted` -> `phaseFinished` still fires -> `JobHandle.join()` throws `CompletionException` wrapping the real cause                                                                                                                                                                                                                                                                                                                                      |
-| Cancellation requested via the returned `JobHandle` (`sort`)                               | `SortEngine` checks it once per file in both its dating pass (aborts cleanly, nothing moved) and its routing pass (already-moved files stay moved) - see `sort-engine.md`                                                                                                                                                                                                                                                                                     |
-| Cancellation requested via the returned `JobHandle` (`commit`/`rescue`)                    | `CommitEngine`/`RescueEngine` each check it once per file in their one move loop; already-moved/rescued files stay that way - see `rescue-engine.md` for `rescue`'s dissolve-gate interaction                                                                                                                                                                                                                                                                 |
+| Cancellation requested via the returned `JobHandle` (`sort`)                               | `SortEngine` checks it once per file in both its dating pass (aborts cleanly, nothing moved) and its routing pass (already-moved files stay moved) - see [`sort-engine.md`](sort-engine.md)                                                                                                                                                                                                                                                                   |
+| Cancellation requested via the returned `JobHandle` (`commit`/`rescue`)                    | `CommitEngine`/`RescueEngine` each check it once per file in their one move loop; already-moved/rescued files stay that way - see [`rescue-engine.md`](rescue-engine.md) for `rescue`'s dissolve-gate interaction                                                                                                                                                                                                                                             |
 | `discard(prepDir)` is called on a prep dir `PrepDirDoctor.diagnose()` reports `COMPLETE`   | `IllegalStateException` immediately - `purgeCompleted()` is that state's own verb, not `discard()`                                                                                                                                                                                                                                                                                                                                                            |
 | Cancellation requested via the returned `JobHandle` (`discard`)                            | Not checked - `discard()` has no cancellation signal; once started it runs every file to completion                                                                                                                                                                                                                                                                                                                                                           |
 
 ## Related
 
-- `RootsGuard`'s check, `PathValidationUseCase`, and its implementation: `path-validation-service.md`
-  in this same design folder.
+- `RootsGuard`'s check, `PathValidationUseCase`, and its implementation:
+  [`path-validation-service.md`](path-validation-service.md) in this same design folder.
 - `SettingsService`, the other caller of that same use case, admitting an unset root where these
-  entry points do not: `settings-service.md` in this same design folder.
-- `cull-engine.md`: `CullEngine` - `cull()`/`resume()`, scope occupancy, cancellation, and the
+  entry points do not: [`settings-service.md`](settings-service.md) in this same design folder.
+- [`cull-engine.md`](cull-engine.md): `CullEngine` - `cull()`/`resume()`, scope occupancy, cancellation, and the
   watchers that auto-resume a waiting run.
-- `prep-dir-doctor.md`: `PrepDirDoctor` - `runs()` behind `cullRuns()`, and `purgeCompleted()`.
-- `curate-engine.md`: `CurateEngine` - `curate()`, and the `Pipeline.CurateConflictException` type it throws.
+- [`prep-dir-doctor.md`](prep-dir-doctor.md): `PrepDirDoctor` - `runs()` behind `cullRuns()`, and `purgeCompleted()`.
+- [`curate-engine.md`](curate-engine.md): `CurateEngine` - `curate()`, and the `Pipeline.CurateConflictException` type
+  it throws.
 - `JobRunner`/`JobHandle`/`JobWork` (the single-slot async executor `Pipeline` submits onto): no dedicated design doc
   yet - see the source files directly.
 - `ProgressPort` (the out-port `PhaseRunner` reports through): see the source file directly. Its own doc comment is the
   source of the "always bracket a phase" contract this page relies on.
-- `SortEngine`: `sort-engine.md` in this same design folder.
-- `RescueEngine`: `rescue-engine.md` in this same design folder.
+- `SortEngine`: [`sort-engine.md`](sort-engine.md) in this same design folder.
+- `RescueEngine`: [`rescue-engine.md`](rescue-engine.md) in this same design folder.
 - `CommitEngine` has no design doc of its own (one loop, one branch - judged too thin to diagram).
-- `ApplyEngine`: `apply-engine.md` in this same design folder, section 3 for its own cancellation
+- `ApplyEngine`: [`apply-engine.md`](apply-engine.md) in this same design folder, section 3 for its own cancellation
   behavior.
-- `PrepDirRemedies`: `prep-dir-remedies.md`, section 3 for `discard()`.
-- `Troubleshooter`: `troubleshooter.md` in this same design folder.
-- `PrepDirDoctor`: `prep-dir-doctor.md` in this same design folder, for `diagnose()` and `purgeCompleted()`.
-- `CullMontageRenderer`: `cull-montage-renderer.md` in the `adapter/imaging` design folder, its own Cancellation section
-  for the render/batch checks `MontageRenderer.build()` does internally.
+- `PrepDirRemedies`: [`prep-dir-remedies.md`](prep-dir-remedies.md), section 3 for `discard()`.
+- `Troubleshooter`: [`troubleshooter.md`](troubleshooter.md) in this same design folder.
+- `PrepDirDoctor`: [`prep-dir-doctor.md`](prep-dir-doctor.md) in this same design folder, for `diagnose()` and
+  `purgeCompleted()`.
+- `CullMontageRenderer`: [`cull-montage-renderer.md`](../../adapter/imaging/cull-montage-renderer.md) in the
+  `adapter/imaging` design folder, its own Cancellation section for the render/batch checks `MontageRenderer.build()`
+  does internally.

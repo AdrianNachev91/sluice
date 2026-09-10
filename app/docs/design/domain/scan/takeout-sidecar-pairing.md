@@ -73,7 +73,7 @@ last would mistake those real sidecars for unrelated files.
 
 This lives here because the owner-key derivation above is what it rests on. Its consumer is the
 orphan sweep, which deletes what it decides is a spent sidecar. A file that was never a sidecar
-must not enter that decision at all. See `sidecar-sweep.md`.
+must not enter that decision at all. See [`sidecar-sweep.md`](sidecar-sweep.md).
 
 ## Naming examples
 
@@ -92,12 +92,13 @@ must not enter that decision at all. See `sidecar-sweep.md`.
 ## Related
 
 - How media and sidecar lists are built in the first place (the walk over the inbox tree, the
-  media/sidecar/dropped classification) is covered separately. See `inbox-scanning.md` in the
-  sibling `adapter/fs` design folder.
+  media/sidecar/dropped classification) is covered separately. See
+  [`inbox-scanning.md`](../../adapter/fs/inbox-scanning.md) in the sibling `adapter/fs` design
+  folder.
 - Risk note: a name-only pairing can't tell a real Takeout sidecar from an unrelated `.json` that
-  happens to share a filename prefix. Deletion does not close that gap by validating content.
-  Inline consumption spends only a sidecar whose parsed date actually won for its file, but the
-  orphan sweep decides from names alone. The sweep's safety is structural instead: it deletes only
-  `.json` files, never media, and only once nothing left in the sidecar's own directory owns it.
-  See `sidecar-sweep.md` for the rules, and its section 2 for the accepted residual, a long-named
-  stray `.json`.
+  happens to share a filename prefix. Deletion does not close that gap by validating content. Inline
+  consumption spends only a sidecar whose parsed date actually won for its file, but the orphan
+  sweep decides from names alone. The sweep's safety is structural instead: it deletes only `.json`
+  files, never media, and only once nothing left in the sidecar's own directory owns it. See
+  [`sidecar-sweep.md`](sidecar-sweep.md) for the rules, and its section 2 for the accepted residual,
+  a long-named stray `.json`.

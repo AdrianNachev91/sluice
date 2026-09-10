@@ -131,3 +131,8 @@ action kind, each requiring what that kind needs. Copy that shape too.
 Still check a copy against `ShardValidator` rather than against the template. The moment your
 provider's rules differ from Sluice's, the template stops being the authority and the validator
 starts. The defect that prompted this page was exactly that gap going unnoticed.
+
+## Related
+
+- The template itself, in full: [`anthropic-culler.md`](anthropic-culler.md), same folder. Its
+  request loop, credential check and response validation are the shape this page tells you to copy.

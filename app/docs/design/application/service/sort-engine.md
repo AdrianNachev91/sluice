@@ -110,8 +110,9 @@ toward it.
 The pairing goes in because the sweep deletes, and the question it is deciding is one the scan
 already answered. Working out again which media a sidecar belongs to would put a second derivation
 behind a delete, free to disagree with the first. It also cannot see everything the pairing does,
-such as an `-edited` copy borrowing its original's sidecar. `sidecar-sweep.md` in the `domain/scan`
-design folder covers what the sweep does with all three inputs.
+such as an `-edited` copy borrowing its original's sidecar.
+[`sidecar-sweep.md`](../../domain/scan/sidecar-sweep.md) in the `domain/scan` design folder covers
+what the sweep does with all three inputs.
 
 "Remaining" is derived from step 1's original scan, not observed directly. `dedup.plan`'s three
 buckets (section 1) are a total partition of every in-scope file, and each bucket is either moved
@@ -154,7 +155,8 @@ while the file itself still sits in the Inbox awaiting a future run.
 
 The dedup-deletion step in section 1 ("delete redundant and duplicate files") has no cancellation
 check of its own. A cancellation requested during it is only observed once routing's own per-file
-check runs next. See `cull-engine.md`'s Cancellation section for the cross-engine picture.
+check runs next. See [`cull-engine.md`](cull-engine.md)'s Cancellation section for the cross-engine
+picture.
 
 This is a deliberate omission, not a gap that slipped through review. The two dedup buckets are
 only the actual duplicates found within one scope, a small subset of the batch. Each iteration is
@@ -191,10 +193,12 @@ every engine this project's cancellation support touches; the verdict was to lea
 
 ## Related
 
-- How a caller invokes this engine asynchronously with progress reporting: `pipeline.md` in this
-  same design folder.
+- How a caller invokes this engine asynchronously with progress reporting:
+  [`pipeline.md`](pipeline.md) in this same design folder.
 - The filesystem effects this pipeline uses (collision-safe move/copy, existence/size checks,
-  appending a reason line): `media-store.md` in the `adapter/fs` design folder.
+  appending a reason line): [`media-store.md`](../../adapter/fs/media-store.md) in the `adapter/fs`
+  design folder.
 - Scope selection itself (`Year`/`OldestN`/`OldestYear`) is delegated to
   `domain/dating/ScopeSelector` and not diagrammed here - see that class directly.
-- The sweep's orphan decision itself: `sidecar-sweep.md` in the `domain/scan` design folder.
+- The sweep's orphan decision itself: [`sidecar-sweep.md`](../../domain/scan/sidecar-sweep.md) in
+  the `domain/scan` design folder.

@@ -82,10 +82,10 @@ drive, or the permission. The failure itself is logged at the point it was caugh
 
 ## Related
 
-- `RootsGuard`, the caller that refuses every `Pipeline` entry point on a non-empty result: `pipeline.md`
-  in this same design folder.
+- `RootsGuard`, the caller that refuses every `Pipeline` entry point on a non-empty result:
+  [`pipeline.md`](pipeline.md) in this same design folder.
 - `SettingsService`, the caller that refuses a save whose move would land on a violation:
-  `settings-service.md` in this same design folder.
+  [`settings-service.md`](settings-service.md) in this same design folder.
 - `StartupSequence.run()`, the caller that skips the claim and the housekeeping sweep on a non-empty
   result: see the source file directly, no dedicated design doc yet.
 - `RootLayout` and `PathViolation`, the domain types this service resolves into and defers to: pure

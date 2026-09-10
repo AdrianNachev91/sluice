@@ -131,3 +131,8 @@ verb whose dependencies cannot be satisfied stops the whole surface rather than 
 **`app` is registered but opens nothing.** The window is opened in `main`, before this surface exists.
 The class is declared so that picocli lists the verb in the help, which it cannot do for a name it
 does not know. It is reached only when the verb carried something else, and that is what it refuses.
+
+## Related
+
+- The facade both surfaces are adapters over:
+  [`pipeline.md`](../../application/service/pipeline.md) in the `application/service` design folder.

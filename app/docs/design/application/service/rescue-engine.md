@@ -177,7 +177,8 @@ while anything remains in the subtree, and a file that is not media is exactly t
 
 ## Related
 
-- How a caller invokes this engine asynchronously with progress reporting: `pipeline.md` in this
-  same design folder.
+- How a caller invokes this engine asynchronously with progress reporting:
+  [`pipeline.md`](pipeline.md) in this same design folder.
 - The filesystem effect backing folder dissolution (`removeIfEmptyOfFiles`, and its sibling
-  `removeEmptyDirectories`): `media-store.md` in the `adapter/fs` design folder.
+  `removeEmptyDirectories`): [`media-store.md`](../../adapter/fs/media-store.md) in the `adapter/fs`
+  design folder.
