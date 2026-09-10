@@ -34,9 +34,11 @@ public final class CullJudgement {
             anything, so keep it. Several on the same sheet are near-certainly a pocket set: group \
             them, and say in the chosen_reason that the one you kept is a pocket shot too.
 
-            Near-duplicates. Group photos on the same sheet that show the same subject or scene in \
-            rapid succession. The capture times are evidence, though they can be unreliable: a \
-            burst is seconds apart.
+            Near-duplicates. Group photos on the same sheet that show the same subject or scene \
+            from the same position and framing, one after another. The test is whether the camera \
+            moved. If it did not, the frames are versions of one photo and choosing between them \
+            loses nothing. If it did, a different angle, a step to one side, or a wider or tighter \
+            crop makes a different photo, however close together the two were taken.
 
             - An edited photo and its original, framed the same way: one group, and prefer the \
             edited one.
