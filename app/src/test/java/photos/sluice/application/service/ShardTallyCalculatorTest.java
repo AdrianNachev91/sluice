@@ -151,6 +151,24 @@ class ShardTallyCalculatorTest {
         assertThat(calculator.poll(prepDir).readyToResume()).isFalse();
     }
 
+    // The shard is well-formed and rules on the photo the sidecar would have listed. So the only
+    // thing between this and a valid montage is the sidecar nobody can parse.
+    @Test
+    void aSidecarNobodyCanParseStillReportsATallyRatherThanThrowing(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(prepDir, 1, List.of(photo), List.of("montage-001"));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        writeFile(prepDir.resolve("montage-001.json"), "{ \"photos\": [ { \"src\": ");
+
+        final ShardTally tally = shardTallyCalculator(root).tally(readIndex(prepDir));
+
+        // Present, because the shard is there and parses. Not valid, because the montage's own
+        // sheet came back empty, so the file the shard rules on is not one this sheet covers.
+        assertThat(tally).isEqualTo(new ShardTally(1, 0, 1));
+    }
+
     @Test
     void aFailedLedgerReadStillReportsATallyRatherThanThrowing(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
