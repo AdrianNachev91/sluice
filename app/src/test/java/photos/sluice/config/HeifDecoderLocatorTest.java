@@ -1,11 +1,14 @@
 package photos.sluice.config;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -81,6 +84,24 @@ class HeifDecoderLocatorTest {
         assertThat(HeifDecoderLocator.command(configured, installation.toString())).isEqualTo(configured);
     }
 
+    // A packaging fault that loses the executable bit leaves a file the machine will not run.
+    // Windows has no such bit, so this asserts nothing there.
+    @Test
+    @EnabledIf("posixPermissionsAreReal")
+    void aDecoderTheMachineWillNotRunIsNotTakenForOne(@TempDir final Path installation) throws IOException {
+        final Path directory = Files.createDirectories(installation.resolve("heif/bin"));
+        final Path installed = Files.createFile(directory.resolve("heif-convert"));
+        Files.setPosixFilePermissions(installed, PosixFilePermissions.fromString("rw-r--r--"));
+
+        assertThat(HeifDecoderLocator.command("heif-convert", installation.toString()))
+                .isEqualTo("heif-convert");
+    }
+
+    @SuppressWarnings("unused")
+    static boolean posixPermissionsAreReal() {
+        return FileSystems.getDefault().supportedFileAttributeViews().contains("posix");
+    }
+
     @Test
     void aDirectoryWithTheDecodersNameIsNotTakenForIt(@TempDir final Path installation) throws IOException {
         Files.createDirectories(installation.resolve("heif/bin/heif-convert"));
@@ -89,9 +110,19 @@ class HeifDecoderLocatorTest {
                 .isEqualTo("heif-convert");
     }
 
+    // The installer ships an executable, and a new file is 644 where permissions are real. Without
+    // the bit set here the lookup finds nothing on Linux and everything on Windows, where any
+    // readable file answers to isExecutable.
     private static Path decoder(final Path installation, final String name) throws IOException {
         final Path directory = installation.resolve("heif/bin");
         Files.createDirectories(directory);
-        return Files.createFile(directory.resolve(name));
+        return runnable(Files.createFile(directory.resolve(name)));
+    }
+
+    static Path runnable(final Path file) throws IOException {
+        if (file.getFileSystem().supportedFileAttributeViews().contains("posix")) {
+            Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("rwxr-xr-x"));
+        }
+        return file;
     }
 }

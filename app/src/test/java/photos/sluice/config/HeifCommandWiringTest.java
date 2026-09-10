@@ -35,7 +35,7 @@ class HeifCommandWiringTest {
     @Test
     void theInstalledDecoderReachesTheBean(@TempDir final Path installation) throws IOException {
         final Path directory = Files.createDirectories(installation.resolve("heif/bin"));
-        final Path installed = Files.createFile(directory.resolve("heif-convert"));
+        final Path installed = HeifDecoderLocatorTest.runnable(Files.createFile(directory.resolve("heif-convert")));
         System.setProperty(INSTALLATION_DIRECTORY, installation.toString());
 
         assertThat(AppConfig.heifCommand(new ImagingConfig("heif-convert")))
