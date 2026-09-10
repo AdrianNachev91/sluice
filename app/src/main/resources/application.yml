@@ -32,6 +32,6 @@ sluice:
         description: >-
           Memes and genuinely funny screenshots, including received ones.
   imaging:
-    # A bare command name, resolved against PATH - not a machine-specific path. Override with a
-    # full path via the standard env-var/user-config-file precedence if it isn't on PATH.
+    # The command that decodes HEIF and HEIC photos, resolved on PATH. Bare rather than a path,
+    # which is what lets an installed build answer it with the decoder it carries under that name.
     heif-decoder-command: heif-convert

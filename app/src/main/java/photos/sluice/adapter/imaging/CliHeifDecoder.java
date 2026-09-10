@@ -19,9 +19,8 @@ import java.util.concurrent.TimeUnit;
  * what both Ubuntu's stock {@code libheif-examples} package and upstream's own compatibility alias
  * still guarantee across versions. That avoids a cross-platform version-skew mismatch.
  *
- * <p>The command is looked up on {@code PATH} by default (see {@code ImagingConfig}). A missing or
- * failing binary degrades to {@link Optional#empty()} rather than throwing, matching this port's
- * own contract.
+ * <p>A missing or failing binary degrades to {@link Optional#empty()} rather than throwing,
+ * matching this port's own contract.
  */
 public class CliHeifDecoder implements HeifDecoder {
 

@@ -47,8 +47,7 @@ public class AppConfig {
     }
 
     /**
-     * Same reasoning as dateResolver() above: concrete adapter types so Spring can tell the two
-     * DateSource positions apart.
+     * Concrete adapter types so Spring can tell the two DateSource positions apart.
      *
      * @param exifSource {@link ExifSource} EXIF metadata date source
      * @param filenameSource {@link FilenameSource} filename-pattern date source
@@ -60,22 +59,33 @@ public class AppConfig {
     }
 
     /**
-     * Builds the HEIF decoder bean that shells out to the configured CLI command.
+     * Builds the HEIF decoder bean that shells out to a CLI decoder.
      *
      * @param imagingConfig {@link ImagingConfig} imaging configuration properties
      * @return {@link CliHeifDecoder} the CLI HEIF decoder bean
      */
     @Bean
     public CliHeifDecoder cliHeifDecoder(final ImagingConfig imagingConfig) {
-        return new CliHeifDecoder(imagingConfig.heifDecoderCommand());
+        return new CliHeifDecoder(heifCommand(imagingConfig));
+    }
+
+    /**
+     * Which decoder command the bean above is built on.
+     *
+     * <p>Conveyor's launcher sets {@code app.dir}, and a build run has it unset.
+     *
+     * @param imagingConfig {@link ImagingConfig} imaging configuration properties
+     * @return {@link String} the command to run
+     */
+    static String heifCommand(final ImagingConfig imagingConfig) {
+        return HeifDecoderLocator.command(imagingConfig.heifDecoderCommand(), System.getProperty("app.dir"));
     }
 
     /**
      * Writes settings back to the user's config file. Its location is worked out here the same way
      * it is at launch, through one method, so neither side can name a file the other does not.
      *
-     * <p>An explicit config-import argument on the command line is read but not written back to. A
-     * launcher passes none, so only someone starting the app by hand reaches that.
+     * <p>An explicit config-import argument on the command line is read but not written back to.
      *
      * @return {@link SettingsStore} the settings store bean
      */
@@ -99,9 +109,7 @@ public class AppConfig {
     }
 
     /**
-     * Composes the store, taking as arguments what the bean above reads off the machine. Kept apart
-     * from the bean so a caller can supply both rather than reach a real keyring and a real
-     * directory.
+     * Composes the store over an OS name and a fallback directory supplied by the caller.
      *
      * @param osName {@link String} the operating system's name, which picks the keyring
      * @param secretsDir {@link Path} where the fallback writes, on a machine offering no keyring

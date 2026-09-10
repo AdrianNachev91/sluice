@@ -93,9 +93,10 @@ sluice:
     tiles-per-row: 5
 
   imaging:
-    # The external command line used to decode HEIF and HEIC images. Left at its default unless
-    # the decoder is installed somewhere this app cannot find on its own. The name varies by
-    # package: some distributions ship this command as heif-dec instead.
+    # Which decoder reads HEIF and HEIC photos, the format iPhones take. An installed Sluice
+    # carries its own and looks there first, so this normally needs no change. Give a full path to
+    # run a decoder of your own instead. A bare name is looked up on your PATH, and only when the
+    # installed copy is not there.
     heif-decoder-command: heif-convert
 
   ui:
