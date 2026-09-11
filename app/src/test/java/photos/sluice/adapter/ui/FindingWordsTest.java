@@ -16,13 +16,15 @@ class FindingWordsTest {
 
     private static final Path PHOTO = Path.of("D:", "Sorted", "Photos", "2019", "06", "a.jpg");
 
-    // One of every variant of the sealed type. A variant added later fails to compile in
-    // FindingWords itself, and this is what then holds its wording to the same bar as the rest.
+    // One of every variant of the sealed type, hand-maintained. The compiler forces a new variant
+    // into FindingWords' own switch and not into this list. So one missing here silently skips
+    // every check below rather than failing one.
     private static final List<Finding> EVERY_KIND = List.of(
             new Finding.MissingMontageField("montage-001"),
             new Finding.MontageFieldMismatch("montage-001", "montage-009"),
             new Finding.InvalidCategory("montage-001", 3, "sunsets", "allowed: keep, junk"),
             new Finding.MissingReason("montage-001", 3),
+            new Finding.FillerReason("montage-001", 3, "placeholder"),
             new Finding.MissingGroup("montage-001", 3),
             new Finding.MissingChosenReason("montage-001", 3),
             new Finding.WrongChosenCount("montage-001", "beach-run", 2),

@@ -99,6 +99,7 @@ public final class LaunchPrompt {
             case final Finding.MontageFieldMismatch f -> f.montage();
             case final Finding.InvalidCategory f -> f.montage();
             case final Finding.MissingReason f -> f.montage();
+            case final Finding.FillerReason f -> f.montage();
             case final Finding.MissingGroup f -> f.montage();
             case final Finding.MissingChosenReason f -> f.montage();
             case final Finding.WrongChosenCount f -> f.montage();
@@ -200,6 +201,10 @@ public final class LaunchPrompt {
                 refused.
                 - Each reason is about the photo it is written for. The reasons in the example are \
                 there to show the shape.
+                - A reason that is only a filler word is refused, and its sheet comes back to be \
+                written again. These are refused when one of them is the whole reason: %s. The \
+                same word inside a real description is fine, so "unknown person, back to camera" \
+                passes.
                 - A near-duplicate group is one group name shared by exactly one keeper and its \
                 rejects. A group name belongs to a single sheet. Two photos you cannot choose \
                 between are two ordinary keeps rather than a group.
@@ -220,8 +225,8 @@ public final class LaunchPrompt {
                 Where none of these fits a photo, it is a keeper.
 
                 %s
-                """.formatted(categoryNames(prep.categories()), ShardValidator.GROUP_SLUG_MAX_LENGTH,
-                CullJudgement.TEXT, categories(prep.categories()));
+                """.formatted(categoryNames(prep.categories()), String.join(", ", ShardValidator.fillerWords()),
+                ShardValidator.GROUP_SLUG_MAX_LENGTH, CullJudgement.TEXT, categories(prep.categories()));
     }
 
     /**

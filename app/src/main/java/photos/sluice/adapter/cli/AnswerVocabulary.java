@@ -89,7 +89,7 @@ final class AnswerVocabulary {
             // Listed rather than a default arm, so a new Finding variant forces a choice here
             // instead of compiling silently unanswerable.
             case Finding.MissingMontageField _, Finding.MontageFieldMismatch _, Finding.InvalidCategory _,
-                 Finding.MissingReason _, Finding.MissingGroup _, Finding.MissingChosenReason _,
+                 Finding.MissingReason _, Finding.FillerReason _, Finding.MissingGroup _, Finding.MissingChosenReason _,
                  Finding.WrongChosenCount _, Finding.TooFewRejects _, Finding.InvalidGroupSlug _,
                  Finding.DuplicateFileReference _, Finding.GroupSpansMultipleMontages _, Finding.MissingFile _,
                  Finding.PhotosNotJudged _, Finding.PhotoFromAnotherSheet _, Finding.FileOutOfScope _,

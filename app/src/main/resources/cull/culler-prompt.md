@@ -23,6 +23,13 @@ unsure, keep" applies.
 
 {{categories}}
 
+## Reasons
+
+A `reason` and a `chosen_reason` say what you saw. A whole reason that is only a filler word is
+refused, and the sheet comes back for a full rewrite. These are refused when one of them is the
+entire reason: {{fillerWords}}. The same word inside a real description is fine, so
+`unknown person, back to camera` passes.
+
 ## Near-duplicate shape
 
 Each group: exactly one `near-dup-chosen` (with `chosen_reason`) and one or more `near-dup-reject`

@@ -6,6 +6,7 @@ import photos.sluice.domain.cull.Decision.NearDupReject;
 import photos.sluice.domain.cull.Finding.VerdictUnreviewableOverlap;
 import photos.sluice.domain.cull.Finding.DuplicateFileReference;
 import photos.sluice.domain.cull.Finding.FileOutOfScope;
+import photos.sluice.domain.cull.Finding.FillerReason;
 import photos.sluice.domain.cull.Finding.GroupSpansMultipleMontages;
 import photos.sluice.domain.cull.Finding.InvalidCategory;
 import photos.sluice.domain.cull.Finding.InvalidGroupSlug;
@@ -27,6 +28,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -61,7 +63,7 @@ import java.util.regex.Pattern;
  *       implies.
  *   <li>A classification's category must be one of the prep dir's own categories, matched exactly.
  *   <li>Each decision carries its required reasons ({@code reason}, or {@code chosen_reason} for a
- *       near-dup keeper).
+ *       near-dup keeper), and no reason is a bare filler word.
  *   <li>Each near-dup group has exactly one chosen keeper and at least one reject, and belongs to a
  *       single montage - a group id reused across shards is rejected.
  *   <li>A group id is a slug: lowercase {@code a-z0-9} runs joined by single hyphens, at most 24
@@ -75,15 +77,36 @@ public final class ShardValidator {
 
     static final int GROUP_SLUG_MAX_LENGTH = 24;
 
+    // Matched against the entire stripped value, case-insensitively, never as a substring. "na" is
+    // filler alone and also sits inside banana, signage and personal, so a substring rule would
+    // refuse most real reasons.
+    //
+    // Eight words that could be a real verdict are deliberately held back: none, other, misc,
+    // various, generic, default, sample, example. A bland scenery shot really can be generic.
+    // Admitting one needs data showing it occurring as filler and never as a reason.
+    private static final Set<String> FILLER_WORDS = Set.of(
+            "placeholder", "unknown", "unspecified", "undefined", "n/a",
+            "na", "null", "tbd", "dummy", "filler");
+
     /**
-     * How long a near-duplicate group name may be, for the prompts that ask an agent for one. A
-     * prompt naming a limit this class does not hold buys its own refusal, once the answer has
-     * already been paid for.
+     * How long a near-duplicate group name may be, for the prompts that ask an agent for one.
      *
      * @return int the longest group name this accepts
      */
     public static int groupSlugMaxLength() {
         return GROUP_SLUG_MAX_LENGTH;
+    }
+
+    /**
+     * The words this refuses as a whole reason, for the prompts that ask an agent to write one.
+     *
+     * <p>Sorted, so a rendered prompt reads the same on every run. {@link Set#of} randomises its
+     * iteration order per JVM.
+     *
+     * @return a {@link List} of {@link String} the refused words, sorted
+     */
+    public static List<String> fillerWords() {
+        return FILLER_WORDS.stream().sorted().toList();
     }
 
     /**
@@ -368,6 +391,8 @@ public final class ShardValidator {
                 }
                 if (c.reason().isBlank()) {
                     problems.add(new MissingReason(montage, index));
+                } else if (isFiller(c.reason())) {
+                    problems.add(new FillerReason(montage, index, c.reason().strip()));
                 }
             }
             case final NearDupChosen c -> {
@@ -378,6 +403,8 @@ public final class ShardValidator {
                 }
                 if (c.chosenReason().isBlank()) {
                     problems.add(new MissingChosenReason(montage, index));
+                } else if (isFiller(c.chosenReason())) {
+                    problems.add(new FillerReason(montage, index, c.chosenReason().strip()));
                 }
             }
             case final NearDupReject reject -> {
@@ -388,6 +415,8 @@ public final class ShardValidator {
                 }
                 if (reject.reason().isBlank()) {
                     problems.add(new MissingReason(montage, index));
+                } else if (isFiller(reject.reason())) {
+                    problems.add(new FillerReason(montage, index, reject.reason().strip()));
                 }
             }
         }
@@ -427,6 +456,10 @@ public final class ShardValidator {
         }
         problems.add(new FileOutOfScope(montage, index, fileValue));
         return verdict;
+    }
+
+    private static boolean isFiller(final String reason) {
+        return FILLER_WORDS.contains(reason.strip().toLowerCase(Locale.ROOT));
     }
 
     /**

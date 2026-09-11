@@ -95,6 +95,23 @@ public sealed interface Finding {
     }
 
     /**
+     * A reason is present but is a single filler word standing in for one, so it records nothing
+     * about why the vision step made that call. Covers a {@code reason} and a
+     * {@code chosen_reason} alike.
+     *
+     * <p>Distinct from {@link MissingReason}: a blank reason raises that one, never this.
+     */
+    record FillerReason(String montage, int index, String reason) implements Finding {
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public String describe() {
+            return locationPrefix(this.montage, this.index) + ": reason '" + this.reason + "' is not a description";
+        }
+    }
+
+    /**
      * A {@link Decision.NearDupChosen} or {@link Decision.NearDupReject} is missing its
      * {@code group} id, so it cannot be tied to any near-duplicate group.
      */

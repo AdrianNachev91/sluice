@@ -19,6 +19,14 @@ class LaunchPromptTest {
     }
 
     @Test
+    void theInstructionsNameEveryWordTheValidatorRefusesAsAReason() {
+        final String prompt = LaunchPrompt.forRun(prep(junk()));
+
+        assertThat(ShardValidator.fillerWords()).isNotEmpty();
+        assertThat(prompt).contains(ShardValidator.fillerWords());
+    }
+
+    @Test
     void everyCategoryTheRunWasPreppedWithIsExplained() {
         final String prompt = LaunchPrompt.forRun(prep(junk(), scenery()));
 
@@ -176,6 +184,7 @@ class LaunchPromptTest {
                 new Finding.MontageFieldMismatch("montage-003", "montage-004"),
                 new Finding.InvalidCategory("montage-003", 1, "pets", "allowed: junk"),
                 new Finding.MissingReason("montage-003", 2),
+                new Finding.FillerReason("montage-003", 8, "placeholder"),
                 new Finding.MissingGroup("montage-003", 3),
                 new Finding.MissingChosenReason("montage-003", 4),
                 new Finding.WrongChosenCount("montage-003", "beach", 2),

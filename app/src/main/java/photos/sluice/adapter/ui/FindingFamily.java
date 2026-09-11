@@ -52,7 +52,7 @@ enum FindingFamily {
         return switch (finding) {
             case Finding.PhotosNotJudged _ -> COVERAGE;
             case Finding.MissingMontageField _, Finding.MontageFieldMismatch _,
-                 Finding.InvalidCategory _, Finding.MissingReason _, Finding.MissingGroup _,
+                 Finding.InvalidCategory _, Finding.MissingReason _, Finding.FillerReason _, Finding.MissingGroup _,
                  Finding.MissingChosenReason _, Finding.WrongChosenCount _, Finding.TooFewRejects _,
                  Finding.InvalidGroupSlug _, Finding.DuplicateFileReference _,
                  Finding.VerdictUnreviewableOverlap _, Finding.GroupSpansMultipleMontages _,

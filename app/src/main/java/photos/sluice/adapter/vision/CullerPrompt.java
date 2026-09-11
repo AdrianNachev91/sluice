@@ -33,6 +33,7 @@ class CullerPrompt {
     static final String CATEGORIES_PLACEHOLDER = "{{categories}}";
     static final String JUDGEMENT_PLACEHOLDER = "{{judgement}}";
     static final String GROUP_SLUG_MAX_PLACEHOLDER = "{{groupSlugMax}}";
+    static final String FILLER_WORDS_PLACEHOLDER = "{{fillerWords}}";
     private static final String TEMPLATE_RESOURCE = "/cull/culler-prompt.md";
 
     private final CullSettings settings;
@@ -145,6 +146,7 @@ class CullerPrompt {
         requirePlaceholder(template, CATEGORIES_PLACEHOLDER);
         requirePlaceholder(template, JUDGEMENT_PLACEHOLDER);
         requirePlaceholder(template, GROUP_SLUG_MAX_PLACEHOLDER);
+        requirePlaceholder(template, FILLER_WORDS_PLACEHOLDER);
         final String cards = categories.stream()
                 .map(CullerPrompt::card)
                 .collect(Collectors.joining("\n\n"));
@@ -153,7 +155,10 @@ class CullerPrompt {
         // allows buys its refusal once the model has already been paid.
         return template.replace(CATEGORIES_PLACEHOLDER, cards)
                 .replace(JUDGEMENT_PLACEHOLDER, CullJudgement.TEXT)
-                .replace(GROUP_SLUG_MAX_PLACEHOLDER, String.valueOf(ShardValidator.groupSlugMaxLength()));
+                .replace(GROUP_SLUG_MAX_PLACEHOLDER, String.valueOf(ShardValidator.groupSlugMaxLength()))
+                .replace(FILLER_WORDS_PLACEHOLDER, ShardValidator.fillerWords().stream()
+                        .map(word -> "`" + word + "`")
+                        .collect(Collectors.joining(", ")));
     }
 
     /**

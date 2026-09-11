@@ -57,6 +57,8 @@ public record FindingPayload(String type, Finding.Remedy remedy, SequencedMap<St
             case final Finding.InvalidCategory f -> Fields.of("montage", f.montage(), "index", f.index(),
                     "category", f.category(), "allowed", f.allowedClause());
             case final Finding.MissingReason f -> Fields.of("montage", f.montage(), "index", f.index());
+            case final Finding.FillerReason f -> Fields.of("montage", f.montage(), "index", f.index(),
+                    "reason", f.reason());
             case final Finding.MissingGroup f -> Fields.of("montage", f.montage(), "index", f.index());
             case final Finding.MissingChosenReason f -> Fields.of("montage", f.montage(), "index", f.index());
             case final Finding.WrongChosenCount f -> Fields.of("montage", f.montage(), "group", f.group(),

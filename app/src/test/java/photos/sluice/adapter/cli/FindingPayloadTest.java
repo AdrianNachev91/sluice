@@ -93,6 +93,8 @@ class FindingPayloadTest {
                                 "allowed", "one of junk, scenery")),
                 new Kind(new Finding.MissingReason("montage-001", 3),
                         Fields.of("montage", "montage-001", "index", 3)),
+                new Kind(new Finding.FillerReason("montage-001", 7, "placeholder"),
+                        Fields.of("montage", "montage-001", "index", 7, "reason", "placeholder")),
                 new Kind(new Finding.MissingGroup("montage-002", 4),
                         Fields.of("montage", "montage-002", "index", 4)),
                 new Kind(new Finding.MissingChosenReason("montage-003", 5),

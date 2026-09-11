@@ -161,6 +161,10 @@ final class FindingWords {
                     "One photo was judged with no reason given.",
                     "{} photos were judged with no reason given.",
                     photoOn(missing.montage(), missing.index()), List.of());
+            case final Finding.FillerReason filler -> new Statement(
+                    "One photo was judged with a filler word in place of a reason.",
+                    "{} photos were judged with a filler word in place of a reason.",
+                    photoOn(filler.montage(), filler.index()) + ", reason " + filler.reason(), List.of());
             case final Finding.MissingGroup missing -> new Statement(
                     "One photo was called a near-duplicate without saying which group it is in.",
                     "{} photos were called near-duplicates without saying which group they are in.",

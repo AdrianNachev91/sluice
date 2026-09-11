@@ -5,6 +5,7 @@ import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 
 import java.nio.file.Path;
@@ -104,6 +105,16 @@ class CullerPromptTest {
         assertThatThrownBy(() -> CullerPrompt.render("a template with no slot", CARDS))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(CullerPrompt.CATEGORIES_PLACEHOLDER);
+    }
+
+    @Test
+    void systemPromptNamesEveryWordTheValidatorRefusesAsAReason() {
+        final var prompt = cullerPrompt().systemPrompt(CARDS);
+
+        assertThat(ShardValidator.fillerWords()).isNotEmpty();
+        assertThat(prompt)
+                .doesNotContain(CullerPrompt.FILLER_WORDS_PLACEHOLDER)
+                .contains(ShardValidator.fillerWords().stream().map(word -> "`" + word + "`").toList());
     }
 
     @Test

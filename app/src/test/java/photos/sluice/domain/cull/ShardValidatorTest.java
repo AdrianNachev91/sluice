@@ -7,6 +7,7 @@ import photos.sluice.domain.cull.Decision.NearDupReject;
 import photos.sluice.domain.cull.Finding.VerdictUnreviewableOverlap;
 import photos.sluice.domain.cull.Finding.DuplicateFileReference;
 import photos.sluice.domain.cull.Finding.FileOutOfScope;
+import photos.sluice.domain.cull.Finding.FillerReason;
 import photos.sluice.domain.cull.Finding.GroupSpansMultipleMontages;
 import photos.sluice.domain.cull.Finding.InvalidCategory;
 import photos.sluice.domain.cull.Finding.InvalidGroupSlug;
@@ -217,6 +218,62 @@ class ShardValidatorTest {
         assertThat(report.findings()).contains(
                 new MissingGroup("montage-001", 1),
                 new MissingReason("montage-001", 1));
+    }
+
+    @Test
+    void aFillerWordStandingInForAClassificationReasonIsReported() {
+        final var report = this.validate(this.shardFile("montage-001",
+                new Classification(A, "junk", "placeholder")));
+
+        assertThat(report.findings()).contains(new FillerReason("montage-001", 1, "placeholder"));
+    }
+
+    @Test
+    void aFillerWordStandingInForANearDupReasonIsReported() {
+        final var report = this.validate(this.shardFile("montage-001",
+                new NearDupChosen(A, "beach", "n/a"),
+                new NearDupReject(B, "beach", "tbd")));
+
+        assertThat(report.findings()).contains(
+                new FillerReason("montage-001", 1, "n/a"),
+                new FillerReason("montage-001", 2, "tbd"));
+    }
+
+    @Test
+    void aFillerWordIsRecognisedWhateverItsCaseAndSurroundingSpace() {
+        final var report = this.validate(this.shardFile("montage-001",
+                new Classification(A, "junk", "  UNKNOWN  ")));
+
+        assertThat(report.findings()).contains(new FillerReason("montage-001", 1, "UNKNOWN"));
+    }
+
+    @Test
+    void aRealReasonContainingAFillerWordIsAccepted() {
+        final var report = this.validate(this.shardFile("montage-001",
+                new Classification(A, "junk", "banana on the counter, nothing else in frame"),
+                new Classification(B, "junk", "unknown person, back to camera"),
+                new Classification(C, "junk", "signage only, no subject")));
+
+        assertThat(report.findings()).noneMatch(FillerReason.class::isInstance);
+        assertThat(report.findings()).isEmpty();
+    }
+
+    @Test
+    void aWordThatCouldBeARealVerdictIsAccepted() {
+        final var report = this.validate(this.shardFile("montage-001",
+                new Classification(A, "junk", "generic"),
+                new Classification(B, "junk", "various")));
+
+        assertThat(report.findings()).noneMatch(FillerReason.class::isInstance);
+    }
+
+    @Test
+    void aBlankReasonIsStillReportedAsMissingRatherThanAsFiller() {
+        final var report = this.validate(this.shardFile("montage-001",
+                new Classification(A, "junk", "   ")));
+
+        assertThat(report.findings()).contains(new MissingReason("montage-001", 1));
+        assertThat(report.findings()).noneMatch(FillerReason.class::isInstance);
     }
 
     @Test
