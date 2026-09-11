@@ -431,3 +431,6 @@ and no file moves. No watcher ever arms for an automated provider, so nothing sp
   [`cull-montage-renderer.md`](../../adapter/imaging/cull-montage-renderer.md) in the
   `adapter/imaging` design folder, its own Cancellation section for the render/batch checks
   `MontageRenderer.build()` does internally.
+- `VisionCuller` (the port `CullDispatcher.cull` routes to): see
+  [`adding-a-provider.md`](../../adapter/vision/adding-a-provider.md) in the `adapter/vision`
+  design folder for what a provider has to satisfy.

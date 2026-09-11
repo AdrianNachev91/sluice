@@ -54,7 +54,8 @@ than chased; see `ReconcileEngine.resolvePendingMoves()`'s own Javadoc for the s
 against the code.
 
 Corrupt/missing originals, and every troubleshoot report, are collected the same way. See
-`DisasterDrawer`'s own class doc (`application/service/DisasterDrawer.java`) for the filename format
+`DisasterDrawer`'s own class doc
+(`app/src/main/java/photos/sluice/application/service/DisasterDrawer.java`) for the filename format
 and retention rule. [`troubleshooter.md`](troubleshooter.md) explains what decides whether this
 reconcile even runs.
 

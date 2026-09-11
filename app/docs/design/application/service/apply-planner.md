@@ -217,7 +217,7 @@ trusted on its own.
 ## Related
 
 - The shard contract itself, and the auto-heal rule: `ShardValidator`'s own doc comment
-  (`domain/cull/ShardValidator.java`).
+  (`app/src/main/java/photos/sluice/domain/cull/ShardValidator.java`).
 - The pipeline that calls `validate()` then classifies every decision, and carries the
   Pending/Done results out: [`apply-engine.md`](apply-engine.md).
 - The move-record log's own file format, markers, and parsing rules:

@@ -219,7 +219,7 @@ question either caller asks is whether the run being filed away is finished.
 ## Related
 
 - The shard contract itself, and the auto-heal rule: `ShardValidator`'s own doc comment
-  (`domain/cull/ShardValidator.java`).
+  (`app/src/main/java/photos/sluice/domain/cull/ShardValidator.java`).
 - The validation and classification that surface every finding resolved here, and that consult
   the ledger entries these remedies write: [`apply-planner.md`](apply-planner.md).
 - The move-record log's own file format, markers, and parsing rules:
@@ -233,4 +233,5 @@ question either caller asks is whether the run being filed away is finished.
 - The single-button recovery that runs `rebuildIndex()`, `autoRepairStrayShard()`, and (via a
   separate reconcile call) resolves a lost move ledger: [`troubleshooter.md`](troubleshooter.md).
 - Where a repaired decision's file ends up once applied: `CullDestinations`
-  (`application/service/CullDestinations.java`), described in [`apply-engine.md`](apply-engine.md).
+  (`app/src/main/java/photos/sluice/application/service/CullDestinations.java`), described in
+  [`apply-engine.md`](apply-engine.md).

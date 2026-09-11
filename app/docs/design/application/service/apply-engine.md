@@ -94,7 +94,7 @@ keeper. A near-dup group's chosen note is built from every decision the group ev
 ones a prior, crashed run already carried out. A resumed run's note still lists every reject.
 
 Every destination above is resolved by `CullDestinations`
-(`application/service/CullDestinations.java`), the one class that decides which folder a
+(`app/src/main/java/photos/sluice/application/service/CullDestinations.java`), the one class that decides which folder a
 decision's file belongs in. `destinationDirFor()` covers a `Classification`, `duplicatesDir()` a
 near-dup group's folder (given the group's chosen file as its anchor - see `nearDupAnchors()`),
 `unreviewableDir()` an unreviewable file. `ReconcileEngine`'s offline sweep searches the very same
@@ -201,7 +201,7 @@ engine this project's cancellation support touches; the verdict was to leave it 
 ## Related
 
 - The shard contract itself, and the auto-heal rule: `ShardValidator`'s own doc comment
-  (`domain/cull/ShardValidator.java`).
+  (`app/src/main/java/photos/sluice/domain/cull/ShardValidator.java`).
 - The validation and resume classification this pipeline runs before carrying anything out:
   [`apply-planner.md`](apply-planner.md).
 - The disposition-ledger CHOICE remedies, and the corrupt-index/sidecar and last-resort discard

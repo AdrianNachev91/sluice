@@ -87,6 +87,6 @@ language on top of this structured data. See [`apply-planner.md`](apply-planner.
 - The shard-contract validation `PrepDirDoctor` relies on before reporting `MissingSource`:
   [`apply-planner.md`](apply-planner.md).
 - The diagnosis this reads before and after repair: `PrepDirDoctor.diagnose()`'s own doc comment
-  (`application/service/PrepDirDoctor.java`).
+  (`app/src/main/java/photos/sluice/application/service/PrepDirDoctor.java`).
 - The drawer entry the rendered report is filed as: `DisasterDrawer`'s own class doc
-  (`application/service/DisasterDrawer.java`).
+  (`app/src/main/java/photos/sluice/application/service/DisasterDrawer.java`).
