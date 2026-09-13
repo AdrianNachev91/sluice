@@ -1,6 +1,6 @@
 package photos.sluice.application.port.in;
 
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 
@@ -17,7 +17,7 @@ public interface VisionProviderCatalog {
      * Every registered provider, in a stable order so a dropdown does not reshuffle between
      * launches.
      *
-     * @return a {@link List} of {@link VisionProviderDescriptor} what this install can cull with
+     * @return a {@link List} of {@link VisionProviderDescriptor} what this install can sift with
      */
     List<VisionProviderDescriptor> providers();
 
@@ -35,7 +35,7 @@ public interface VisionProviderCatalog {
      * can run.
      *
      * <p>The check lives here rather than on the provider itself. Handing out the provider would
-     * hand out its culling too, and a configuration surface has no business starting a run.
+     * hand out its sifting too, and a configuration surface has no business starting a run.
      *
      * <p>May take as long as a network call to a service outside this machine.
      *
@@ -50,9 +50,9 @@ public interface VisionProviderCatalog {
      * stored. For a surface trying a connection setting before it is saved.
      *
      * @param id {@link String} the provider id to ask, as {@link #providers()} spells it
-     * @param candidate {@link CullProviderSettings} the connection settings to check
+     * @param candidate {@link SiftProviderSettings} the connection settings to check
      * @return {@link ProviderCheck} what that provider said
      * @throws IllegalArgumentException if nothing is registered under that id
      */
-    ProviderCheck check(String id, CullProviderSettings candidate);
+    ProviderCheck check(String id, SiftProviderSettings candidate);
 }

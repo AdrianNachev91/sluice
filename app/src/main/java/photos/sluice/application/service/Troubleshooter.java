@@ -3,11 +3,11 @@ package photos.sluice.application.service;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.ApplyException;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PrepDirHealth.State;
-import photos.sluice.domain.cull.ReconcileReport;
-import photos.sluice.domain.cull.TroubleshootReport;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PrepDirHealth.State;
+import photos.sluice.domain.sift.ReconcileReport;
+import photos.sluice.domain.sift.TroubleshootReport;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -93,8 +93,8 @@ public class Troubleshooter {
 
     /**
      * Attempts autoRepairStrayShard() for every StrayShard finding diagnosis currently reports. A
-     * StrayShard finding can surface either while WAITING (other montages still being culled) or
-     * BLOCKED (culling finished, something else needs a remedy). Unlike a MissingSource finding,
+     * StrayShard finding can surface either while WAITING (other montages still being sifted) or
+     * BLOCKED (sifting finished, something else needs a remedy). Unlike a MissingSource finding,
      * PrepDirDoctor never gates it on the shard contract being otherwise complete - so this repair
      * isn't gated on overall state either. Each attempt re-reads current disk state. So an earlier
      * repair in this same pass can make a later one possible, or moot. autoRepairStrayShard()

@@ -5,9 +5,9 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.application.service.MoveLedger.Ledger;
 import photos.sluice.application.service.MoveLedger.MoveRecord;
-import photos.sluice.domain.cull.AnswerSource;
-import photos.sluice.domain.cull.CorruptSidecarResolution;
-import photos.sluice.domain.cull.OverlapResolution;
+import photos.sluice.domain.sift.AnswerSource;
+import photos.sluice.domain.sift.CorruptSidecarResolution;
+import photos.sluice.domain.sift.OverlapResolution;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.entry;
 import static org.assertj.core.api.InstanceOfAssertFactories.PATH;
-import static photos.sluice.application.service.CullPrepTestSupport.writeUndecodable;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeUndecodable;
 
 // The ledger's own file layout, asserted from both sides: which file each kind of entry lands in,
 // and what one read() makes of the pair. Everything goes through the real store against a @TempDir,

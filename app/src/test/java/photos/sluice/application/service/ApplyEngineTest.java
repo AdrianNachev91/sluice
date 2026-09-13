@@ -12,9 +12,9 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.TransferAbandonedException;
 import photos.sluice.application.port.out.TransferProgress;
 import photos.sluice.config.SettingsFixture;
-import photos.sluice.domain.cull.ApplyReport;
-import photos.sluice.domain.cull.Finding.MissingShard;
-import photos.sluice.domain.cull.Finding.StrayShard;
+import photos.sluice.domain.sift.ApplyReport;
+import photos.sluice.domain.sift.Finding.MissingShard;
+import photos.sluice.domain.sift.Finding.StrayShard;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.IndexEntry;
@@ -34,20 +34,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static java.util.Map.entry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static photos.sluice.application.service.CullPrepTestSupport.applyEngine;
-import static photos.sluice.application.service.CullPrepTestSupport.classificationJson;
-import static photos.sluice.application.service.CullPrepTestSupport.hashIndex;
-import static photos.sluice.application.service.CullPrepTestSupport.keepJson;
-import static photos.sluice.application.service.CullPrepTestSupport.nearDupChosenJson;
-import static photos.sluice.application.service.CullPrepTestSupport.nearDupRejectJson;
-import static photos.sluice.application.service.CullPrepTestSupport.prepDir;
-import static photos.sluice.application.service.CullPrepTestSupport.sidecarEntry;
-import static photos.sluice.application.service.CullPrepTestSupport.writeFile;
-import static photos.sluice.application.service.CullPrepTestSupport.writeIndex;
-import static photos.sluice.application.service.CullPrepTestSupport.writeMoveRecord;
-import static photos.sluice.application.service.CullPrepTestSupport.writeShard;
-import static photos.sluice.application.service.CullPrepTestSupport.writeSidecar;
-import static photos.sluice.application.service.CullPrepTestSupport.writeUndecodable;
+import static photos.sluice.application.service.SiftPrepTestSupport.applyEngine;
+import static photos.sluice.application.service.SiftPrepTestSupport.classificationJson;
+import static photos.sluice.application.service.SiftPrepTestSupport.hashIndex;
+import static photos.sluice.application.service.SiftPrepTestSupport.keepJson;
+import static photos.sluice.application.service.SiftPrepTestSupport.nearDupChosenJson;
+import static photos.sluice.application.service.SiftPrepTestSupport.nearDupRejectJson;
+import static photos.sluice.application.service.SiftPrepTestSupport.prepDir;
+import static photos.sluice.application.service.SiftPrepTestSupport.sidecarEntry;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeFile;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeIndex;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeMoveRecord;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeShard;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeSidecar;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeUndecodable;
 
 // Carrying decisions out against a real filesystem. It covers the moves, copies and secondary
 // writes each decision type produces, plus resuming a crashed run, cancellation and the
@@ -109,7 +109,7 @@ class ApplyEngineTest {
         final Path prepDir = prepDir(root);
         final Path first = root.resolve("Sorted/Photos/2019/06/IMG_1.jpg");
         final Path second = root.resolve("Sorted/Photos/2019/06/IMG_2.jpg");
-        // Culled in the same batch, then put back in Sorted afterwards. The one source still on
+        // Sifted in the same batch, then put back in Sorted afterwards. The one source still on
         // disk for the second run, so the only thing a wrongly-permissive run could move.
         final Path still = root.resolve("Sorted/Photos/2019/06/IMG_3.jpg");
         writeFile(first, "junk");
@@ -334,7 +334,7 @@ class ApplyEngineTest {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
         final Path actual = root.resolve("Sorted/Photos/2019/08/a.jpg");
-        final Path retyped = root.resolve("Sorted/Photos/2019/09/a.jpg"); // culler wrote the wrong month segment
+        final Path retyped = root.resolve("Sorted/Photos/2019/09/a.jpg"); // sieve wrote the wrong month segment
         writeFile(actual, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(actual));

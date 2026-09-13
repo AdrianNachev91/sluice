@@ -7,7 +7,7 @@ import org.springframework.core.env.PropertySource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.env.MutablePropertySources;
 import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -31,7 +31,7 @@ class ConfigExampleFileTest {
     // Every @ConfigurationProperties class this app binds, matching AppConfig's own
     // @EnableConfigurationProperties list.
     private static final List<Class<?>> PROPERTIES_CLASSES =
-            List.of(PathsProperties.class, MontageProperties.class, CullConfig.class, ImagingConfig.class,
+            List.of(PathsProperties.class, MontageProperties.class, SiftConfig.class, ImagingConfig.class,
                     UiProperties.class);
 
     @Test
@@ -49,7 +49,7 @@ class ConfigExampleFileTest {
     // assertion because the file documents it by leaving it blank, which is what unset looks like.
     @Test
     void documentsAWholeProviderSettingsBlock() {
-        final CullProviderSettings anthropic = boundCullConfig().providerSettings().get("anthropic");
+        final SiftProviderSettings anthropic = boundSiftConfig().providerSettings().get("anthropic");
 
         assertThat(anthropic).as("the anthropic block in config.example.yml").isNotNull();
         assertThat(anthropic.model()).isNotBlank();
@@ -59,9 +59,9 @@ class ConfigExampleFileTest {
     /**
      * Binds the example file the way this app binds a user's own config file.
      *
-     * @return {@link CullConfig} the cull settings the example file carries
+     * @return {@link SiftConfig} the sift settings the example file carries
      */
-    private static CullConfig boundCullConfig() {
+    private static SiftConfig boundSiftConfig() {
         final List<PropertySource<?>> sources;
         try {
             sources = new YamlPropertySourceLoader()
@@ -72,7 +72,7 @@ class ConfigExampleFileTest {
         final var propertySources = new MutablePropertySources();
         sources.forEach(propertySources::addLast);
         return new Binder(ConfigurationPropertySources.from(propertySources))
-                .bind("sluice.sift", CullConfig.class)
+                .bind("sluice.sift", SiftConfig.class)
                 .orElseThrow(() -> new AssertionError("config.example.yml carries no sluice.sift block"));
     }
 
@@ -83,7 +83,7 @@ class ConfigExampleFileTest {
      * <p>YAML nests rather than dots its keys, so what the file actually shows is the leaf name
      * alone.
      *
-     * <p>A {@link List}-typed component (the cull categories) is skipped. It names a set of
+     * <p>A {@link List}-typed component (the sift categories) is skipped. It names a set of
      * user-typed cards rather than a fixed key, and the example file documents it in prose instead.
      * A {@link Map}-typed one (the per-provider settings) is skipped for the same reason.
      *

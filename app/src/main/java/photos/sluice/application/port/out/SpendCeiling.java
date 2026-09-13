@@ -1,7 +1,7 @@
 package photos.sluice.application.port.out;
 
 /**
- * The bound a cull run may not spend past, handed to the provider that does the spending.
+ * The bound a sift run may not spend past, handed to the provider that does the spending.
  *
  * <p>Two arms, because they fail differently. {@code maxCalls} is a property of the run rather than
  * a setting. Prep writes the montage index before anything is sent, so the amount of work is finite

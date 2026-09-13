@@ -10,7 +10,7 @@ import photos.sluice.application.port.out.SpendForecast;
 import photos.sluice.application.port.out.SpendLedgerEntry;
 import photos.sluice.application.port.out.SpendLedgerPort;
 import photos.sluice.config.SettingsFixture;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -218,10 +218,10 @@ class SpendEstimatorTest {
         assertThat(estimate.historicOutput()).isTrue();
     }
 
-    private static SpendLedgerEntry recordedRun(final int montagesCulled, final int apiCalls,
+    private static SpendLedgerEntry recordedRun(final int montagesSifted, final int apiCalls,
                                                 final long outputTokens) {
         return new SpendLedgerEntry(Instant.parse("2026-08-22T10:00:00Z"), "2018", "anthropic", MODEL,
-                SHIPPED.tileSize(), SHIPPED.tilesPerRow(), montagesCulled, 0, apiCalls, 50_000, outputTokens,
+                SHIPPED.tileSize(), SHIPPED.tilesPerRow(), montagesSifted, 0, apiCalls, 50_000, outputTokens,
                 RunEnding.APPLIED);
     }
 

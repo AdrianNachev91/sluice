@@ -12,7 +12,7 @@ import photos.sluice.adapter.ui.FxProgressPort;
 import photos.sluice.application.port.in.VisionProviderCatalog;
 import photos.sluice.application.port.out.FolderRootsChangeListener;
 import photos.sluice.application.port.out.ProgressPort;
-import photos.sluice.application.port.out.VisionCuller;
+import photos.sluice.application.port.out.VisionSieve;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 
 import java.nio.file.Path;
@@ -80,18 +80,18 @@ class SmokeTest {
                         provider -> Objects.requireNonNull(provider.setupGuide())));
     }
 
-    // The catalog's own tests hand it cullers directly, so wiring that collected nothing would pass
+    // The catalog's own tests hand it sieves directly, so wiring that collected nothing would pass
     // all of them. An empty catalog draws an empty dropdown rather than failing.
     @Test
-    void everyRegisteredCullerReachesTheProviderCatalog() {
-        final List<String> cullerIds = this.context.getBeansOfType(VisionCuller.class).values().stream()
-                .map(culler -> culler.describe().id())
+    void everyRegisteredSieveReachesTheProviderCatalog() {
+        final List<String> sieveIds = this.context.getBeansOfType(VisionSieve.class).values().stream()
+                .map(sieve -> sieve.describe().id())
                 .toList();
         // Both sides being empty would satisfy the comparison below without proving anything.
-        assertThat(cullerIds).isNotEmpty();
+        assertThat(sieveIds).isNotEmpty();
 
         assertThat(this.context.getBean(VisionProviderCatalog.class).providers())
                 .extracting(VisionProviderDescriptor::id)
-                .containsExactlyInAnyOrderElementsOf(cullerIds);
+                .containsExactlyInAnyOrderElementsOf(sieveIds);
     }
 }

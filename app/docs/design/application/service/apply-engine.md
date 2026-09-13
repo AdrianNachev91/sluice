@@ -55,7 +55,7 @@ decisions array, not as one more decision type, and has no shard, no category, n
 Pending/Done/Unresolved logic, minus the `NearDupChosen` copy exception (an unreviewable file is
 always a move). Carrying one out reuses `recordThenMove()` exactly as `Classification`/
 `NearDupReject` do, just with a different destination (`Unreviewable/<yyyy>/<mm>/`, resolved by
-`CullDestinations.unreviewableDir()`). Its one secondary write is the `_reasons.txt` line, and a
+`SiftDestinations.unreviewableDir()`). Its one secondary write is the `_reasons.txt` line, and a
 Done unreviewable file has that line backfilled the way a Done classification does. Every line in
 one of these folders says the same thing. An unreviewable file arrives as a bare path, with no
 per-file reason to write.
@@ -93,8 +93,8 @@ folder, chosen and rejects alike, even when a reject sits in a different Sorted 
 keeper. A near-dup group's chosen note is built from every decision the group ever had, including
 ones a prior, crashed run already carried out. A resumed run's note still lists every reject.
 
-Every destination above is resolved by `CullDestinations`
-(`app/src/main/java/photos/sluice/application/service/CullDestinations.java`), the one class that decides which folder a
+Every destination above is resolved by `SiftDestinations`
+(`app/src/main/java/photos/sluice/application/service/SiftDestinations.java`), the one class that decides which folder a
 decision's file belongs in. `destinationDirFor()` covers a `Classification`, `duplicatesDir()` a
 near-dup group's folder (given the group's chosen file as its anchor - see `nearDupAnchors()`),
 `unreviewableDir()` an unreviewable file. `ReconcileEngine`'s offline sweep searches the very same
@@ -153,7 +153,7 @@ runs. The real guarantee is a filesystem one: the destination path encodes the s
 `<yyyy>/<MM>/<basename>` plus the group id. A `Sorted` `<yyyy>/<MM>/` directory can never hold
 two files with the same basename. So `exists(dest)` being true means one of two things happened.
 Either this exact decision already ran, or the same source file was chosen again under the same
-group in an independent re-cull. That's harmless either way, since it would be the identical bytes.
+group in an independent re-sift. That's harmless either way, since it would be the identical bytes.
 
 A source that's missing for a `NearDupChosen` decision is therefore always Unresolved (see
 [`apply-planner.md`](apply-planner.md)). A copy's source is never supposed to disappear, so there is
@@ -173,8 +173,8 @@ Checked once per item, at the top of both loops. That way an in-flight decision 
 file is never interrupted, and everything already carried out before the request stays carried out.
 On cancel, `apply()` returns `null` instead of an `ApplyReport`, and deliberately skips both
 finalizers: writing the merged `decisions.json` and deleting the montage/tile intermediates. With
-no `decisions.json` written, the prep dir still reads exactly like an unresolved cull job.
-`Pipeline` maps a `null` return straight to `CullJobOutcome.Waiting`, the same outcome a genuinely
+no `decisions.json` written, the prep dir still reads exactly like an unresolved sift job.
+`Pipeline` maps a `null` return straight to `SiftJobOutcome.Waiting`, the same outcome a genuinely
 incomplete shard set would produce. The engine's `null` return is the sole authority on whether the
 run was cancelled; a caller never re-checks disk state to decide.
 
@@ -201,7 +201,7 @@ engine this project's cancellation support touches; the verdict was to leave it 
 ## Related
 
 - The shard contract itself, and the auto-heal rule: `ShardValidator`'s own doc comment
-  (`app/src/main/java/photos/sluice/domain/cull/ShardValidator.java`).
+  (`app/src/main/java/photos/sluice/domain/sift/ShardValidator.java`).
 - The validation and resume classification this pipeline runs before carrying anything out:
   [`apply-planner.md`](apply-planner.md).
 - The disposition-ledger CHOICE remedies, and the corrupt-index/sidecar and last-resort discard

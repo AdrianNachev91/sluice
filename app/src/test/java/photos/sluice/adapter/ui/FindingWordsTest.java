@@ -2,9 +2,9 @@ package photos.sluice.adapter.ui;
 
 import org.junit.jupiter.api.Test;
 import photos.sluice.adapter.ui.TroubleshootView.Answer;
-import photos.sluice.domain.cull.Decision;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.Verdict;
+import photos.sluice.domain.sift.Decision;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.Verdict;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -75,17 +75,17 @@ class FindingWordsTest {
                         .isInstanceOfAny(Finding.CorruptIndex.class, Finding.UnreadablePrepDir.class));
     }
 
-    // The engine's own words for these are montage, shard and cull.
+    // The engine's own words for these are montage and shard.
     @Test
     void noProblemSentenceUsesTheEnginesOwnVocabulary() {
         assertThat(EVERY_KIND).allSatisfy(finding -> {
             final FindingWords.Statement statement = FindingWords.of(finding);
             assertThat(statement.problem().toLowerCase())
-                    .doesNotContain("montage").doesNotContain("shard").doesNotContain("cull");
+                    .doesNotContain("montage").doesNotContain("shard");
             final String forSeveral = statement.forSeveral();
             if (forSeveral != null) {
                 assertThat(forSeveral.toLowerCase())
-                        .doesNotContain("montage").doesNotContain("shard").doesNotContain("cull");
+                        .doesNotContain("montage").doesNotContain("shard");
             }
         });
     }

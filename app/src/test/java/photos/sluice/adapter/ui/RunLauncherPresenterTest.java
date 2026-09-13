@@ -7,14 +7,14 @@ import org.mockito.ArgumentCaptor;
 import photos.sluice.adapter.ui.RunLauncherView.ModeChoice;
 import photos.sluice.adapter.ui.RunResultView.CardAction;
 import photos.sluice.domain.job.ShardTally;
-import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.SiftJobOutcome;
 import photos.sluice.application.port.in.WaitingReason;
-import photos.sluice.application.port.out.CullException;
-import photos.sluice.application.port.out.CullReport;
-import photos.sluice.domain.cull.ApplyReport;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.job.WaitingCullJob;
+import photos.sluice.application.port.out.SiftException;
+import photos.sluice.application.port.out.SiftReport;
+import photos.sluice.domain.sift.ApplyReport;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.job.WaitingSiftJob;
 import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.RescueRoot;
@@ -35,7 +35,7 @@ import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.model.SortSummary.LowConfidenceCounts;
 import photos.sluice.domain.commit.LibraryBucket;
 import photos.sluice.domain.commit.CommitSummary;
-import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.sift.SiftScope;
 import photos.sluice.domain.imports.ImportKind;
 import photos.sluice.domain.imports.ImportSummary;
 import photos.sluice.domain.model.MonthRange;
@@ -149,21 +149,21 @@ class RunLauncherPresenterTest {
     void aGappedMonthListIsTakenAsItIsForASift() {
         this.chooseAndStart(RunMode.SIFT, "2019 6,7,11");
 
-        verify(this.pipeline).cull(new CullScope.Year(2019, List.of(6, 7, 11)));
+        verify(this.pipeline).sift(new SiftScope.Year(2019, List.of(6, 7, 11)));
     }
 
     @Test
     void aRunOfMonthsIsExpandedIntoEveryMonthItCoversForASift() {
         this.chooseAndStart(RunMode.SIFT, "2019 6-7");
 
-        verify(this.pipeline).cull(new CullScope.Year(2019, List.of(6, 7)));
+        verify(this.pipeline).sift(new SiftScope.Year(2019, List.of(6, 7)));
     }
 
     @Test
     void aSiftOverAWholeYearNamesNoMonthsAtAll() {
         this.chooseAndStart(RunMode.SIFT, "2019");
 
-        verify(this.pipeline).cull(new CullScope.Year(2019, null));
+        verify(this.pipeline).sift(new SiftScope.Year(2019, null));
     }
 
     @Test
@@ -363,10 +363,10 @@ class RunLauncherPresenterTest {
     void aSiftTheProviderGaveUpOnIsNotReportedAsABugInSluice() {
         this.choose(RunMode.SIFT, "2019");
         final JobHandle<Object> handle = mock(JobHandle.class);
-        when(handle.onComplete()).thenReturn(CompletableFuture.failedFuture(new CullException(
+        when(handle.onComplete()).thenReturn(CompletableFuture.failedFuture(new SiftException(
                 "The sifting for 2019 failed at sheet montage-003",
-                new CullReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false))));
-        when(this.pipeline.cull(any())).thenReturn(retyped(handle));
+                new SiftReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false))));
+        when(this.pipeline.sift(any())).thenReturn(retyped(handle));
 
         this.presenter.start();
 
@@ -620,7 +620,7 @@ class RunLauncherPresenterTest {
     @Test
     void aSiftThatAppliedItsDecisionsIsTheOneThatSaysItFinished() {
         this.choose(RunMode.SIFT, "2019");
-        this.siftEndsWith(new CullJobOutcome.Applied(CullReport.nothingSpent("anthropic", 0),
+        this.siftEndsWith(new SiftJobOutcome.Applied(SiftReport.nothingSpent("anthropic", 0),
                 new ApplyReport(25, Map.of("Keep", 20), 0, 1, 3, List.of()), null, null));
 
         this.presenter.start();
@@ -833,7 +833,7 @@ class RunLauncherPresenterTest {
     @Test
     void aTimeframeAlreadyHoldingAnUnfinishedSiftIsRefusedInWordsRatherThanAsABug() {
         this.choose(RunMode.SIFT, "2019");
-        doThrow(new Pipeline.ScopeOccupiedException(occupantOf2019())).when(this.pipeline).cull(any());
+        doThrow(new Pipeline.ScopeOccupiedException(occupantOf2019())).when(this.pipeline).sift(any());
 
         this.presenter.start();
 
@@ -881,7 +881,7 @@ class RunLauncherPresenterTest {
     void aTimeframeWhoseFolderCannotBeReadSaysSoRatherThanReportingABug() {
         this.choose(RunMode.SIFT, "2019");
         doThrow(new Pipeline.ScopeUnreadableException(Path.of("logs", "sift-prep", "2019"), new RuntimeException()))
-                .when(this.pipeline).cull(any());
+                .when(this.pipeline).sift(any());
 
         this.presenter.start();
 
@@ -895,7 +895,7 @@ class RunLauncherPresenterTest {
         // The path is rendered rather than spelled out, since its separator is the platform's.
         final Path outside = Path.of("D:", "old", "sift-prep", "2019");
         this.choose(RunMode.SIFT, "2019");
-        doThrow(new Pipeline.RunOutsideWorkingRootException(outside)).when(this.pipeline).cull(any());
+        doThrow(new Pipeline.RunOutsideWorkingRootException(outside)).when(this.pipeline).sift(any());
 
         this.presenter.start();
 
@@ -968,7 +968,7 @@ class RunLauncherPresenterTest {
 
         this.presenter.siftNow(offerOf(2019), AGREED);
 
-        verify(this.pipeline).cull(new CullScope.Year(2019, null));
+        verify(this.pipeline).sift(new SiftScope.Year(2019, null));
     }
 
     // The one line between a card press and somebody's provider balance. Every other test here
@@ -980,7 +980,7 @@ class RunLauncherPresenterTest {
 
         this.presenter.siftNow(offerOf(2019), _ -> false);
 
-        verify(this.pipeline, never()).cull(any());
+        verify(this.pipeline, never()).sift(any());
     }
 
     @Test
@@ -1010,7 +1010,7 @@ class RunLauncherPresenterTest {
         });
 
         assertThat(asked.get()).isOne();
-        verify(this.pipeline).cull(new CullScope.Year(2019, null));
+        verify(this.pipeline).sift(new SiftScope.Year(2019, null));
     }
 
     @Test
@@ -1027,7 +1027,7 @@ class RunLauncherPresenterTest {
         });
 
         assertThat(asked.get()).isZero();
-        verify(this.pipeline, never()).cull(any());
+        verify(this.pipeline, never()).sift(any());
         assertThat(this.reportedOnTheCard().text())
                 .isEqualTo("No photos are sorted for 2021, so there is nothing to sift.");
     }
@@ -1036,7 +1036,7 @@ class RunLauncherPresenterTest {
     void aSiftRefusedFromTheCardIsReportedOnTheCard() {
         this.aFinishedSortShowing();
         doThrow(new JobInProgressException("Sluice is already running a job."))
-                .when(this.pipeline).cull(any());
+                .when(this.pipeline).sift(any());
 
         this.presenter.siftNow(offerOf(2019), AGREED);
 
@@ -1054,7 +1054,7 @@ class RunLauncherPresenterTest {
 
         this.presenter.siftNow(offerOf(2019), AGREED);
 
-        verify(this.pipeline, never()).cull(any());
+        verify(this.pipeline, never()).sift(any());
         assertThat(this.reportedOnTheCard().text())
                 .isEqualTo("Your folders could not be read.");
         assertThat(this.reportedOnTheCard().location()).isEqualTo(Location.SETTINGS);
@@ -1064,7 +1064,7 @@ class RunLauncherPresenterTest {
     void dismissingTheCardTakesItsRefusalWithIt() {
         this.aFinishedSortShowing();
         doThrow(new JobInProgressException("Sluice is already running a job."))
-                .when(this.pipeline).cull(any());
+                .when(this.pipeline).sift(any());
         this.presenter.siftNow(offerOf(2019), AGREED);
 
         this.presenter.dismissResult();
@@ -1076,9 +1076,9 @@ class RunLauncherPresenterTest {
     @Test
     void aSiftStoppedWhileItMovedPhotosCountsWhatItMovedAndSaysItHadStarted() {
         this.choose(RunMode.SIFT, "2019");
-        this.siftEndsWith(new CullJobOutcome.Waiting(
-                new WaitingCullJob("2019", PREP_DIR, new ShardTally(4, 4, 4), Instant.EPOCH),
-                WaitingReason.CANCELLED, CullReport.nothingSpent("anthropic", 4), null,
+        this.siftEndsWith(new SiftJobOutcome.Waiting(
+                new WaitingSiftJob("2019", PREP_DIR, new ShardTally(4, 4, 4), Instant.EPOCH),
+                WaitingReason.CANCELLED, SiftReport.nothingSpent("anthropic", 4), null,
                 new ApplyReport(120, Map.of("junk", 31, "scenery", 4), 0, 0, 0, List.of())));
 
         this.presenter.start();
@@ -1092,9 +1092,9 @@ class RunLauncherPresenterTest {
     @Test
     void theSheetsRowNamesThePhotosWhereTheRowsBelowItCountPhotos() {
         this.choose(RunMode.SIFT, "2019");
-        this.siftEndsWith(new CullJobOutcome.Waiting(
-                new WaitingCullJob("2019", PREP_DIR, new ShardTally(4, 4, 4), Instant.EPOCH),
-                WaitingReason.CANCELLED, CullReport.nothingSpent("anthropic", 4), null,
+        this.siftEndsWith(new SiftJobOutcome.Waiting(
+                new WaitingSiftJob("2019", PREP_DIR, new ShardTally(4, 4, 4), Instant.EPOCH),
+                WaitingReason.CANCELLED, SiftReport.nothingSpent("anthropic", 4), null,
                 new ApplyReport(120, Map.of("junk", 31), 0, 0, 0, List.of())));
 
         this.presenter.start();
@@ -1110,9 +1110,9 @@ class RunLauncherPresenterTest {
     @Test
     void theTotalCountsEveryPhotoThatLeftSortedAndNoGroupWhoseKeeperStayed() {
         this.choose(RunMode.SIFT, "2019");
-        this.siftEndsWith(new CullJobOutcome.Waiting(
-                new WaitingCullJob("2019", PREP_DIR, new ShardTally(4, 4, 4), Instant.EPOCH),
-                WaitingReason.CANCELLED, CullReport.nothingSpent("anthropic", 4), null,
+        this.siftEndsWith(new SiftJobOutcome.Waiting(
+                new WaitingSiftJob("2019", PREP_DIR, new ShardTally(4, 4, 4), Instant.EPOCH),
+                WaitingReason.CANCELLED, SiftReport.nothingSpent("anthropic", 4), null,
                 new ApplyReport(120, Map.of("junk", 31, "scenery", 4), 3, 7, 8, List.of())));
 
         this.presenter.start();
@@ -1133,9 +1133,9 @@ class RunLauncherPresenterTest {
     @Test
     void theSheetsRowNamesNoPhotosWhereNothingBelowItCountsAny() {
         this.choose(RunMode.SIFT, "2019");
-        this.siftEndsWith(new CullJobOutcome.Waiting(
-                new WaitingCullJob("2019", PREP_DIR, new ShardTally(4, 4, 4), Instant.EPOCH),
-                WaitingReason.CANCELLED, CullReport.nothingSpent("anthropic", 4), null,
+        this.siftEndsWith(new SiftJobOutcome.Waiting(
+                new WaitingSiftJob("2019", PREP_DIR, new ShardTally(4, 4, 4), Instant.EPOCH),
+                WaitingReason.CANCELLED, SiftReport.nothingSpent("anthropic", 4), null,
                 new ApplyReport(120, Map.of(), 0, 0, 0, List.of())));
 
         this.presenter.start();
@@ -1150,9 +1150,9 @@ class RunLauncherPresenterTest {
     @Test
     void aSiftThatOnlyResolvedNearDuplicateGroupsClaimsNothingLeftSorted() {
         this.choose(RunMode.SIFT, "2019");
-        this.siftEndsWith(new CullJobOutcome.Waiting(
-                new WaitingCullJob("2019", PREP_DIR, new ShardTally(4, 4, 4), Instant.EPOCH),
-                WaitingReason.CANCELLED, CullReport.nothingSpent("anthropic", 4), null,
+        this.siftEndsWith(new SiftJobOutcome.Waiting(
+                new WaitingSiftJob("2019", PREP_DIR, new ShardTally(4, 4, 4), Instant.EPOCH),
+                WaitingReason.CANCELLED, SiftReport.nothingSpent("anthropic", 4), null,
                 new ApplyReport(120, Map.of(), 0, 1, 0, List.of())));
 
         this.presenter.start();
@@ -1308,10 +1308,10 @@ class RunLauncherPresenterTest {
         this.presenter.start();
     }
 
-    private static CullJobOutcome waitingBecause(final WaitingReason reason) {
-        return new CullJobOutcome.Waiting(
-                new WaitingCullJob("2019", PREP_DIR, new ShardTally(0, 0, 4), Instant.EPOCH),
-                reason, CullReport.nothingSpent("anthropic", 4), null);
+    private static SiftJobOutcome waitingBecause(final WaitingReason reason) {
+        return new SiftJobOutcome.Waiting(
+                new WaitingSiftJob("2019", PREP_DIR, new ShardTally(0, 0, 4), Instant.EPOCH),
+                reason, SiftReport.nothingSpent("anthropic", 4), null);
     }
 
     private void choose(final RunMode mode, final String scope) {
@@ -1334,16 +1334,16 @@ class RunLauncherPresenterTest {
     // Each handle is built before the call that returns it is stubbed. Building one inside the
     // argument to when() would stub a second mock while the first stubbing is still open, which
     // Mockito reads as an unfinished one.
-    private void siftEndsWith(final CullJobOutcome outcome) {
+    private void siftEndsWith(final SiftJobOutcome outcome) {
         final JobHandle<Object> handle = finished();
         when(handle.onComplete()).thenReturn(CompletableFuture.completedFuture(outcome));
-        when(this.pipeline.cull(any())).thenReturn(retyped(handle));
+        when(this.pipeline.sift(any())).thenReturn(retyped(handle));
     }
 
     private void siftFailsWith(final RuntimeException thrown) {
         final JobHandle<Object> handle = finished();
         when(handle.onComplete()).thenReturn(CompletableFuture.failedFuture(thrown));
-        when(this.pipeline.cull(any())).thenReturn(retyped(handle));
+        when(this.pipeline.sift(any())).thenReturn(retyped(handle));
     }
 
     private void sortEndsWith(final SortSummary summary) {
@@ -1367,7 +1367,7 @@ class RunLauncherPresenterTest {
         final JobHandle<Object> sifted = finished();
         final JobHandle<Object> moved = finished();
         when(this.pipeline.sort(any())).thenReturn(retyped(sorted));
-        when(this.pipeline.cull(any())).thenReturn(retyped(sifted));
+        when(this.pipeline.sift(any())).thenReturn(retyped(sifted));
         when(this.pipeline.commit(any())).thenReturn(retyped(moved));
     }
 
@@ -1385,7 +1385,7 @@ class RunLauncherPresenterTest {
     private void aSiftStillRunning() {
         final JobHandle<Object> handle = mock(JobHandle.class);
         when(handle.onComplete()).thenReturn(new CompletableFuture<>());
-        when(this.pipeline.cull(any())).thenReturn(retyped(handle));
+        when(this.pipeline.sift(any())).thenReturn(retyped(handle));
         this.held = handle;
     }
 
@@ -1404,8 +1404,8 @@ class RunLauncherPresenterTest {
         return (JobHandle<T>) handle;
     }
 
-    private static CullRunSummary occupantOf2019() {
-        return new CullRunSummary("2019", Path.of("logs", "sift-prep", "2019"),
+    private static SiftRunSummary occupantOf2019() {
+        return new SiftRunSummary("2019", Path.of("logs", "sift-prep", "2019"),
                 new PrepDirHealth(PrepDirHealth.State.WAITING, List.of()),
                 new ShardTally(0, 0, 4), Instant.EPOCH);
     }

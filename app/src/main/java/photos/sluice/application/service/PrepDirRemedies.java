@@ -1,22 +1,22 @@
 package photos.sluice.application.service;
 
 import org.springframework.stereotype.Component;
-import photos.sluice.application.port.out.CullPrepPort;
-import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.application.port.out.SiftPrepPort;
+import photos.sluice.application.port.out.SiftSettings;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.TransferProgress;
-import photos.sluice.domain.cull.AnswerSource;
-import photos.sluice.domain.cull.CorruptSidecarResolution;
-import photos.sluice.domain.cull.DecisionShard;
-import photos.sluice.domain.cull.DiscardReport;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.MontageNaming;
-import photos.sluice.domain.cull.OverlapResolution;
-import photos.sluice.domain.cull.PrepDir;
-import photos.sluice.domain.cull.SidecarPhotoEntry;
-import photos.sluice.domain.cull.Verdict;
+import photos.sluice.domain.sift.AnswerSource;
+import photos.sluice.domain.sift.CorruptSidecarResolution;
+import photos.sluice.domain.sift.DecisionShard;
+import photos.sluice.domain.sift.DiscardReport;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.MontageNaming;
+import photos.sluice.domain.sift.OverlapResolution;
+import photos.sluice.domain.sift.PrepDir;
+import photos.sluice.domain.sift.SidecarPhotoEntry;
+import photos.sluice.domain.sift.Verdict;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 
@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
  * money, or an audit trail - so it only ever runs on an explicit decision.
  *
  * <p>Every CHOICE remedy records itself as a disposition-ledger entry, and a CHOICE remedy never
- * edits a shard or index.json. Mutating a culler's own output would destroy the record of what it
+ * edits a shard or index.json. Mutating a sieve's own output would destroy the record of what it
  * actually said, which is exactly what these repairs exist to reason about. An AUTO remedy is the
  * exception: renaming a stray shard or rebuilding index.json is the repair itself.
  *
@@ -49,9 +49,9 @@ public class PrepDirRemedies {
     private static final String INDEX_FILE = "index.json";
 
     private final MediaStore mediaStore;
-    private final CullPrepPort cullPrepPort;
+    private final SiftPrepPort siftPrepPort;
     private final PathsPort pathsPort;
-    private final CullSettings cullSettings;
+    private final SiftSettings siftSettings;
     private final DisasterDrawer disasterDrawer;
     private final MoveLedger moveLedger;
 
@@ -59,19 +59,19 @@ public class PrepDirRemedies {
      * Creates the remedies wired to their ports.
      *
      * @param mediaStore {@link MediaStore} moves, deletes and lists prep-dir files
-     * @param cullPrepPort {@link CullPrepPort} reads and writes prep-dir index, sidecars and shards
+     * @param siftPrepPort {@link SiftPrepPort} reads and writes prep-dir index, sidecars and shards
      * @param pathsPort {@link PathsPort} resolves the logs root holding the global graveyard
-     * @param cullSettings {@link CullSettings} supplies the category set a rebuilt index falls back to
+     * @param siftSettings {@link SiftSettings} supplies the category set a rebuilt index falls back to
      * @param disasterDrawer {@link DisasterDrawer} files unsalvageable artifacts instead of deleting them
      * @param moveLedger {@link MoveLedger} records every CHOICE resolution
      */
-    public PrepDirRemedies(final MediaStore mediaStore, final CullPrepPort cullPrepPort, final PathsPort pathsPort,
-                           final CullSettings cullSettings, final DisasterDrawer disasterDrawer,
+    public PrepDirRemedies(final MediaStore mediaStore, final SiftPrepPort siftPrepPort, final PathsPort pathsPort,
+                           final SiftSettings siftSettings, final DisasterDrawer disasterDrawer,
                            final MoveLedger moveLedger) {
         this.mediaStore = mediaStore;
-        this.cullPrepPort = cullPrepPort;
+        this.siftPrepPort = siftPrepPort;
         this.pathsPort = pathsPort;
-        this.cullSettings = cullSettings;
+        this.siftSettings = siftSettings;
         this.disasterDrawer = disasterDrawer;
         this.moveLedger = moveLedger;
     }
@@ -81,7 +81,7 @@ public class PrepDirRemedies {
      * file, which needs no engine call at all (just a re-diagnose). Records a terminal skip
      * disposition. Classifying then treats source as resolved: no move or write is carried out for
      * it, and it stops surfacing as a MissingSource finding. source itself is never touched. If it
-     * ever reappears in Sorted, a future cull of that scope sees it fresh.
+     * ever reappears in Sorted, a future sift of that scope sees it fresh.
      *
      * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
      * @param source {@link Path} the missing file's original source path, as named by the MissingSource finding
@@ -148,9 +148,9 @@ public class PrepDirRemedies {
      * the repair could not run unambiguously
      */
     public Optional<String> autoRepairStrayShard(final Path prepDirPath, final Finding.StrayShard strayShard) {
-        final PrepDir prepDir = this.cullPrepPort.readIndex(prepDirPath);
+        final PrepDir prepDir = this.siftPrepPort.readIndex(prepDirPath);
         final List<String> unclaimed = prepDir.entries().stream()
-                .filter(montage -> !this.cullPrepPort.hasShard(prepDirPath, montage))
+                .filter(montage -> !this.siftPrepPort.hasShard(prepDirPath, montage))
                 .toList();
         if (unclaimed.size() != 1) {
             return Optional.empty();
@@ -159,11 +159,11 @@ public class PrepDirRemedies {
         final Path strayPath = prepDirPath.resolve(strayShard.shardFile());
         final DecisionShard content;
         try {
-            content = this.cullPrepPort.readShardFile(strayPath);
+            content = this.siftPrepPort.readShardFile(strayPath);
         } catch (final MalformedPrepJsonException e) {
             return Optional.empty();
         }
-        final Set<Path> candidateSidecarFiles = this.cullPrepPort.readSidecar(prepDirPath, candidate).stream()
+        final Set<Path> candidateSidecarFiles = this.siftPrepPort.readSidecar(prepDirPath, candidate).stream()
                 .map(SidecarPhotoEntry::src)
                 .collect(Collectors.toSet());
         final boolean unambiguous = content.verdicts().stream()
@@ -181,7 +181,7 @@ public class PrepDirRemedies {
     /**
      * A StrayShard finding's CHOICE fallback when {@link #autoRepairStrayShard} cannot resolve it
      * unambiguously. Files the stray shard's own file into prepDir's disaster drawer, never a true
-     * delete, so the culler can redo that montage from a clean slate.
+     * delete, so the sieve can redo that montage from a clean slate.
      *
      * @param prepDirPath {@link Path} the prep directory holding the stray shard
      * @param strayShard {@link Finding.StrayShard} the finding naming the stray shard file
@@ -241,7 +241,7 @@ public class PrepDirRemedies {
      *
      * <p>The category set is unrecoverable the same way, and it does not degrade as harmlessly. A
      * sidecar carries only {@code src}, {@code name}, {@code time} and {@code received}, so nothing
-     * on disk remembers what this run was culled under. The configured set is substituted instead.
+     * on disk remembers what this run was sifted under. The configured set is substituted instead.
      * That means a run repaired after a category edit is judged against today's rules, which is how
      * every run behaved before the set was recorded at all. So the repair path is no worse than what
      * it replaces, while the happy path stops drifting. This is the one place the substitution is
@@ -280,7 +280,7 @@ public class PrepDirRemedies {
 
         final var allSrcs = new ArrayList<Path>();
         for (final String montage : entries) {
-            final Optional<List<Path>> srcs = Sidecars.srcsOf(this.cullPrepPort, prepDirPath, montage);
+            final Optional<List<Path>> srcs = Sidecars.srcsOf(this.siftPrepPort, prepDirPath, montage);
             if (srcs.isEmpty()) {
                 return Optional.empty();
             }
@@ -292,9 +292,9 @@ public class PrepDirRemedies {
             this.disasterDrawer.file(prepDirPath, indexPath, "index-json");
         }
         final var rebuilt = new PrepDir(prepDirPath.getFileName().toString(),
-                this.cullSettings.categoriesForRepair(),
+                this.siftSettings.categoriesForRepair(),
                 commonParent(allSrcs), allSrcs.size(), List.of(), entries.size(), prepDirPath, entries);
-        this.cullPrepPort.writeIndex(prepDirPath, rebuilt);
+        this.siftPrepPort.writeIndex(prepDirPath, rebuilt);
         return Optional.of(rebuilt);
     }
 
@@ -304,7 +304,7 @@ public class PrepDirRemedies {
      * layout. That covers shards, sidecars, index.json, the move ledger, and any disaster drawer.
      * The graveyard gets the same 30-day retention window every other disaster-drawer artifact does.
      * Only the montage and tile contact-sheet images are truly deleted, since they cost cents to
-     * re-render on a fresh cull of the same scope. Library media is never touched - this only ever
+     * re-render on a fresh sift of the same scope. Library media is never touched - this only ever
      * reaches into the prep dir itself.
      *
      * <p>scope is read straight off the prep dir's own folder name, never index.json. One caller
@@ -313,7 +313,7 @@ public class PrepDirRemedies {
      * <p>This is the raw mechanism, ungated, and its two callers gate it in opposite directions.
      * {@code Pipeline.discard()} is the last-resort CHOICE remedy for a run mangled beyond every
      * other repair. It refuses a COMPLETE one, since {@code purgeCompleted()} is that state's own
-     * verb. The cull engine's own scope claim requires COMPLETE: starting a fresh run over a
+     * verb. The sift engine's own scope claim requires COMPLETE: starting a fresh run over a
      * finished one archives that record rather than letting prep overwrite it. Same file moves,
      * opposite preconditions, because the question is only ever whether the run being filed away is
      * finished.

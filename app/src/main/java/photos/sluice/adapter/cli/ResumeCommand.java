@@ -3,7 +3,7 @@ package photos.sluice.adapter.cli;
 import org.jspecify.annotations.Nullable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
-import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.SiftJobOutcome;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
@@ -77,7 +77,7 @@ public class ResumeCommand implements Callable<Integer> {
         final CommandSpec running = Objects.requireNonNull(this.spec,
                 "the parser fills this in before it runs a command");
         return this.reports.report(running, VERB, this::folder, this::submit, _ -> false,
-                finished -> CullOutcomeReport.of(finished.answer(), this.paths.duplicates(),
+                finished -> SiftOutcomeReport.of(finished.answer(), this.paths.duplicates(),
                         this.pipeline::launchPromptFor));
     }
 
@@ -95,9 +95,9 @@ public class ResumeCommand implements Callable<Integer> {
      * Starts the resume job.
      *
      * @param prepDir {@link Path} the run's own folder
-     * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running job
+     * @return a {@link JobHandle} of {@link SiftJobOutcome} a handle to the running job
      */
-    private JobHandle<CullJobOutcome> submit(final Path prepDir) {
+    private JobHandle<SiftJobOutcome> submit(final Path prepDir) {
         return this.pipeline.resume(prepDir, this.allowPartial);
     }
 }

@@ -2,7 +2,7 @@ package photos.sluice.application.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.SiftJobOutcome;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -41,9 +41,9 @@ public final class AutoResumedSifts {
      * Broadcasts to every listener that a sift has continued on its own.
      *
      * @param scope {@link String} what that sift covers, as its own run is named
-     * @param job a {@link JobHandle} of {@link CullJobOutcome} the job now running
+     * @param job a {@link JobHandle} of {@link SiftJobOutcome} the job now running
      */
-    void resumed(final String scope, final JobHandle<CullJobOutcome> job) {
+    void resumed(final String scope, final JobHandle<SiftJobOutcome> job) {
         this.listeners.forEach(listener -> announce(listener, scope, job));
     }
 
@@ -52,10 +52,10 @@ public final class AutoResumedSifts {
      *
      * @param listener {@link Listener} the listener to announce to
      * @param scope {@link String} what that sift covers
-     * @param job a {@link JobHandle} of {@link CullJobOutcome} the job now running
+     * @param job a {@link JobHandle} of {@link SiftJobOutcome} the job now running
      */
     private static void announce(final Listener listener, final String scope,
-                                 final JobHandle<CullJobOutcome> job) {
+                                 final JobHandle<SiftJobOutcome> job) {
         try {
             listener.resumed(scope, job);
         } catch (final RuntimeException e) {
@@ -73,8 +73,8 @@ public final class AutoResumedSifts {
          * Takes one such sift.
          *
          * @param scope {@link String} what it covers, as its own run is named
-         * @param job a {@link JobHandle} of {@link CullJobOutcome} the job now running
+         * @param job a {@link JobHandle} of {@link SiftJobOutcome} the job now running
          */
-        void resumed(String scope, JobHandle<CullJobOutcome> job);
+        void resumed(String scope, JobHandle<SiftJobOutcome> job);
     }
 }

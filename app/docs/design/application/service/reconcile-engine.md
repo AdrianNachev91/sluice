@@ -60,7 +60,7 @@ and retention rule. [`troubleshooter.md`](troubleshooter.md) explains what decid
 reconcile even runs.
 
 Destination resolution during the sweep (which folder a decision or unreviewable file would have
-been moved into) is `CullDestinations`, the same class a real apply uses. See
+been moved into) is `SiftDestinations`, the same class a real apply uses. See
 [`apply-engine.md`](apply-engine.md) for a fuller description. Agreement between the two is what
 keeps an already-moved file from looking permanently lost.
 

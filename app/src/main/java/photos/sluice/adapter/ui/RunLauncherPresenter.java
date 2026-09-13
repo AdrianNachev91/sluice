@@ -8,9 +8,9 @@ import org.springframework.stereotype.Component;
 import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.adapter.ui.RunLauncherView.StartAction;
 import photos.sluice.adapter.ui.RunResultView.CardAction;
-import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.SiftJobOutcome;
 import photos.sluice.application.port.in.RescueRoot;
-import photos.sluice.application.port.out.CullException;
+import photos.sluice.application.port.out.SiftException;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.imports.ImportKind;
@@ -427,7 +427,7 @@ public class RunLauncherPresenter {
     private void startSift(final int year) {
         final RunScope scope = new RunScope.OfYear(year, List.of());
         this.begin(RunMode.SIFT, RunScope.describe(RunMode.SIFT, scope), null, null,
-                () -> this.pipeline.cull(RunScope.asCull(scope)));
+                () -> this.pipeline.sift(RunScope.asSift(scope)));
     }
 
     /**
@@ -455,9 +455,9 @@ public class RunLauncherPresenter {
      * announced.
      *
      * @param scope {@link String} what this sift covers, as its own run is named
-     * @param job a {@link JobHandle} of {@link CullJobOutcome} the sift now running
+     * @param job a {@link JobHandle} of {@link SiftJobOutcome} the sift now running
      */
-    private void adopt(final String scope, final JobHandle<CullJobOutcome> job) {
+    private void adopt(final String scope, final JobHandle<SiftJobOutcome> job) {
         this.report(null);
         this.startedMode = RunMode.SIFT;
         this.scopeOfTheRun = scope;
@@ -594,7 +594,7 @@ public class RunLauncherPresenter {
      * @return {@link RunResultView} the card
      */
     private static RunResultView cardFor(final RunMode ran, final Throwable failure) {
-        if (failure instanceof final CullException incomplete) {
+        if (failure instanceof final SiftException incomplete) {
             return RunResults.incompleteResult(ran, incomplete);
         }
         return RunResults.failedResult(ran, RunRefusals.refusalOf(failure));
@@ -610,7 +610,7 @@ public class RunLauncherPresenter {
     private JobHandle<?> submit(final RunMode ran, final RunScope scope) {
         return switch (ran) {
             case SORT -> this.pipeline.sort(RunScope.asSort(scope));
-            case SIFT -> this.pipeline.cull(RunScope.asCull(scope));
+            case SIFT -> this.pipeline.sift(RunScope.asSift(scope));
             case MOVE_TO_LIBRARY -> this.pipeline.commit(RunScope.asCommit(scope));
             case RESCUE -> throw new IllegalStateException("A rescue is not started from a scope");
             case IMPORT -> throw new IllegalStateException("An import is not started from a scope");

@@ -7,9 +7,9 @@ import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.SortedTally;
 import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.PrepDirHealth.State;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -42,7 +42,7 @@ class FolderCounts {
     private volatile @Nullable InboxTally inbox;
     private volatile @Nullable SortedTally sorted;
     private volatile boolean unreadable;
-    private volatile List<CullRunSummary> unfinished = List.of();
+    private volatile List<SiftRunSummary> unfinished = List.of();
 
     // How many asked-for reads are somewhere between being asked for and finishing their walk. A
     // count rather than a flag, because two of them can overlap. A boolean the first cleared on its
@@ -138,10 +138,10 @@ class FolderCounts {
     /**
      * Every run on disk that still owes somebody something.
      *
-     * @return a {@link List} of {@link CullRunSummary} the unfinished ones, empty where the runs
+     * @return a {@link List} of {@link SiftRunSummary} the unfinished ones, empty where the runs
      *     folder could not be read
      */
-    List<CullRunSummary> unfinished() {
+    List<SiftRunSummary> unfinished() {
         return this.unfinished;
     }
 
@@ -247,12 +247,12 @@ class FolderCounts {
     /**
      * Every run on disk that still owes somebody something.
      *
-     * @return a {@link List} of {@link CullRunSummary} the unfinished ones, empty where the folder
+     * @return a {@link List} of {@link SiftRunSummary} the unfinished ones, empty where the folder
      *     could not be read
      */
-    private List<CullRunSummary> unfinishedRunsOrNone() {
+    private List<SiftRunSummary> unfinishedRunsOrNone() {
         try {
-            return this.pipeline.cullRuns() instanceof CullRuns.Listed(final List<CullRunSummary> listed)
+            return this.pipeline.siftRuns() instanceof SiftRuns.Listed(final List<SiftRunSummary> listed)
                     ? listed.stream().filter(run -> run.health().state() != State.COMPLETE).toList()
                     : List.of();
         } catch (final RuntimeException e) {

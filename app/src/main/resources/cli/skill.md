@@ -1,6 +1,6 @@
 ---
 name: sluice
-description: Drive Sluice, a desktop photo and video organiser, from its command line. Use this to sort a camera dump or a Google Takeout export into folders by year, to sift sorted photos for junk and near-duplicates with a vision model, to move keepers into the user's Library, to import files into their Inbox, and to recover a sift that stopped part-way. Also use it to set Sluice up for the first time, or to work out why a sluice command refused. Triggers include sluice, sort my photos, organise my photos, cull my photos, deduplicate photos, tidy my camera roll, and file a Takeout export.
+description: Drive Sluice, a desktop photo and video organiser, from its command line. Use this to sort a camera dump or a Google Takeout export into folders by year, to sift sorted photos for junk and near-duplicates with a vision model, to move keepers into the user's Library, to import files into their Inbox, and to recover a sift that stopped part-way. Also use it to set Sluice up for the first time, or to work out why a sluice command refused. Triggers include sluice, sort my photos, organise my photos, sift my photos, deduplicate photos, tidy my camera roll, and file a Takeout export.
 ---
 
 # Driving Sluice from the command line

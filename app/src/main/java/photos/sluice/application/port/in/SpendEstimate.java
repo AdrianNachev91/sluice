@@ -1,7 +1,7 @@
 package photos.sluice.application.port.in;
 
 /**
- * What a cull run is expected to consume, worked out before any call is made.
+ * What a sift run is expected to consume, worked out before any call is made.
  *
  * <p>It says which half it knows, because the two halves are knowable to very different degrees.
  * The input half can be counted exactly and for free against the request that would be sent. The

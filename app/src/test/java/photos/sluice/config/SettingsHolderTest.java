@@ -6,12 +6,12 @@ import org.springframework.boot.test.context.ConfigDataApplicationContextInitial
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
-import photos.sluice.domain.cull.CullCategory;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.SiftCategory;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.util.List;
 import java.util.Map;
@@ -28,7 +28,7 @@ class SettingsHolderTest {
     @Test
     void theBoundGridMapsFieldsByNameNotPosition() {
         final Settings settings = SettingsHolder.boundSettings(new PathsProperties("repo", "library", "inbox"),
-                cullConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
+                siftConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
 
         assertThat(settings.montage().tileSize()).isEqualTo(224);
         assertThat(settings.montage().tilesPerRow()).isEqualTo(5);
@@ -37,56 +37,56 @@ class SettingsHolderTest {
     @Test
     void theBoundValuesAreWhatTheAppStartsOn() {
         final var holder = new SettingsHolder(new PathsProperties("repo", "library", "inbox"),
-                cullConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
+                siftConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
 
         assertThat(holder.current().paths()).isEqualTo(PATHS);
         assertThat(holder.provider()).isEqualTo("external-agent");
-        assertThat(holder.categories()).containsExactly(CullCategory.of("scenery", "scenery description"));
+        assertThat(holder.categories()).containsExactly(SiftCategory.of("scenery", "scenery description"));
         assertThat(holder.providerSettings().model()).isNull();
     }
 
     @Test
     void theActiveSetLeavesOutTheCardsSwitchedOffAndTheWholeSetKeepsThem() {
         final var holder = new SettingsHolder(new PathsProperties("repo", "library", "inbox"),
-                cullConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
+                siftConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
 
         holder.apply(new Settings(PATHS, "anthropic", Map.of(),
-                List.of(CullCategory.of("scenery", "scenery description"),
-                        new CullCategory("food", "food description", List.of(), Boolean.FALSE),
-                        CullCategory.of("funny", "funny description")),
+                List.of(SiftCategory.of("scenery", "scenery description"),
+                        new SiftCategory("food", "food description", List.of(), Boolean.FALSE),
+                        SiftCategory.of("funny", "funny description")),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM));
 
-        assertThat(holder.activeCategories()).extracting(CullCategory::name)
+        assertThat(holder.activeCategories()).extracting(SiftCategory::name)
                 .containsExactly("scenery", "funny", "junk");
-        assertThat(holder.categories()).extracting(CullCategory::name)
+        assertThat(holder.categories()).extracting(SiftCategory::name)
                 .containsExactly("scenery", "food", "funny");
     }
 
     @Test
     void junkJoinsTheActiveSetLastAndNeverTheConfiguredOne() {
         final var holder = new SettingsHolder(new PathsProperties("repo", "library", "inbox"),
-                cullConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
+                siftConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
 
         holder.apply(new Settings(PATHS, "anthropic", Map.of(), List.of(),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM));
 
-        assertThat(holder.activeCategories()).extracting(CullCategory::name).containsExactly("junk");
-        assertThat(holder.categoriesForRepair()).extracting(CullCategory::name).containsExactly("junk");
+        assertThat(holder.activeCategories()).extracting(SiftCategory::name).containsExactly("junk");
+        assertThat(holder.categoriesForRepair()).extracting(SiftCategory::name).containsExactly("junk");
         assertThat(holder.categories()).isEmpty();
     }
 
     @Test
     void everyValueItServesComesFromTheLastSave() {
         final var holder = new SettingsHolder(new PathsProperties("repo", "library", "inbox"),
-                cullConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
+                siftConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
 
-        holder.apply(new Settings(PATHS, "anthropic", Map.of("anthropic", new CullProviderSettings("claude-sonnet-5", null, null)),
-                List.of(CullCategory.of("food", "food description")),
+        holder.apply(new Settings(PATHS, "anthropic", Map.of("anthropic", new SiftProviderSettings("claude-sonnet-5", null, null)),
+                List.of(SiftCategory.of("food", "food description")),
                 new MontageConfig(96, 7), ThemeChoice.DARK));
 
         assertThat(holder.provider()).isEqualTo("anthropic");
         assertThat(holder.providerSettings().model()).isEqualTo("claude-sonnet-5");
-        assertThat(holder.categories()).containsExactly(CullCategory.of("food", "food description"));
+        assertThat(holder.categories()).containsExactly(SiftCategory.of("food", "food description"));
         assertThat(holder.montage()).isEqualTo(new MontageConfig(96, 7));
     }
 
@@ -94,19 +94,19 @@ class SettingsHolderTest {
     // is the step that reads it.
     @Test
     void refusesTwoCategoryCardsSharingAName() {
-        final var cull = new CullConfig("external-agent", Map.of(),
-                List.of(CullCategory.of("receipts", "paper receipts"),
-                        CullCategory.of("receipts", "till slips")));
+        final var sift = new SiftConfig("external-agent", Map.of(),
+                List.of(SiftCategory.of("receipts", "paper receipts"),
+                        SiftCategory.of("receipts", "till slips")));
 
         assertThatThrownBy(() -> SettingsHolder.boundSettings(new PathsProperties("repo", "library", "inbox"),
-                cull, new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM)))
+                sift, new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("receipts");
     }
 
     // Two cards under one name are refused when the bound list is read, and that read happens while
     // the context comes up. So a config file naming one category twice stops the app rather than
-    // letting it half-cull.
+    // letting it half-sift.
     @Test
     void aConfigFileNamingOneCategoryTwiceStopsTheAppStarting() {
         new ApplicationContextRunner()
@@ -122,15 +122,15 @@ class SettingsHolderTest {
                         .hasMessageContaining("receipts"));
     }
 
-    private static CullConfig cullConfig() {
-        return new CullConfig("external-agent", Map.of(),
-                List.of(CullCategory.of("scenery", "scenery description")));
+    private static SiftConfig siftConfig() {
+        return new SiftConfig("external-agent", Map.of(),
+                List.of(SiftCategory.of("scenery", "scenery description")));
     }
 
     // Every properties class SettingsHolder takes. One missing makes the context fail to build, and
     // a test asserting that it failed then passes without ever reaching what it meant to check.
     @Configuration
-    @EnableConfigurationProperties({PathsProperties.class, CullConfig.class, MontageProperties.class,
+    @EnableConfigurationProperties({PathsProperties.class, SiftConfig.class, MontageProperties.class,
             UiProperties.class})
     @Import(SettingsHolder.class)
     static class SettingsContext {

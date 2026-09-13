@@ -1,6 +1,6 @@
 package photos.sluice.adapter.cli;
 
-import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.sift.Finding;
 
 import java.nio.file.Path;
 import java.util.Collections;

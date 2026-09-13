@@ -1,0 +1,321 @@
+package photos.sluice.adapter.cli;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import org.jspecify.annotations.Nullable;
+import photos.sluice.application.port.in.SiftJobOutcome;
+import photos.sluice.application.port.in.SpendEstimate;
+import photos.sluice.application.port.in.WaitingReason;
+import photos.sluice.application.port.out.SiftReport;
+import photos.sluice.application.port.out.TokenSpend;
+import photos.sluice.domain.sift.ApplyReport;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.job.ShardTally;
+import photos.sluice.domain.job.WaitingSiftJob;
+
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+/**
+ * The wire shapes for everything a sift produces, and the readings that build them.
+ *
+ * <p>One class, because they are one contract. A caller reads a run against a run that produced it,
+ * and both name the same scope, the same prep dir and the same spend.
+ *
+ * <p>Every reading below is a switch or a field read over a type the core already settled. Nothing
+ * here parses a message or invents a value. So a caller acts on what the engine decided, rather
+ * than on how this surface happened to word it.
+ *
+ * <p>A path leaves as text and an instant leaves in the format the rest of the world writes them
+ * in. Both are what a caller needs to hand back, so neither may depend on how a library happens to
+ * be configured.
+ */
+public final class SiftPayloads {
+
+    /**
+     * Prevents instantiation of this static utility class.
+     */
+    private SiftPayloads() {
+    }
+
+    /**
+     * One sift run as it currently sits on disk.
+     *
+     * @param scope {@link String} the scope tag, which is also how a command addresses this run
+     * @param prepDir {@link String} the run's own folder
+     * @param state {@link PrepDirHealth.State} how far along, or how badly off, the run is
+     * @param findings a {@link List} of {@link FindingPayload} every problem still open on it
+     * @param shards {@link ShardsPayload} how many shards are in, or null when nothing could count them
+     * @param since {@link String} when the run was last written to
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record RunPayload(String scope, String prepDir, PrepDirHealth.State state,
+                             List<FindingPayload> findings, @Nullable ShardsPayload shards, String since) {
+    }
+
+    /**
+     * How many of a run's shards are in.
+     *
+     * @param present int shard files found, whether or not they parse
+     * @param valid int those of them that also pass validation
+     * @param total int how many the run expects altogether
+     */
+    public record ShardsPayload(int present, int valid, int total) {
+    }
+
+    /**
+     * What one sift consumed, and who consumed it.
+     *
+     * @param inputTokens long input tokens consumed
+     * @param outputTokens long output tokens consumed
+     * @param providerId {@link String} the provider that ran
+     * @param modelId {@link String} the model that ran, or null for a provider calling none
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record SpendPayload(long inputTokens, long outputTokens, String providerId, @Nullable String modelId) {
+    }
+
+    /**
+     * What one sift judged and what it cost.
+     *
+     * @param montagesSifted int sheets this run got fresh judgement for
+     * @param montagesSkipped int sheets it got none for
+     * @param apiCalls int calls made against the provider's model
+     * @param spend {@link SpendPayload} what those calls consumed
+     * @param stoppedAtCeiling boolean whether the run's own spend ceiling ended it
+     */
+    public record ReportPayload(int montagesSifted, int montagesSkipped, int apiCalls, SpendPayload spend,
+                                boolean stoppedAtCeiling) {
+    }
+
+    /**
+     * What a sift is expected to consume, before it starts.
+     *
+     * <p>Both flags ride along because a bare pair of numbers cannot be told apart from a measured
+     * one. A caller budgeting against a seeded figure is budgeting against a guess, and nothing
+     * else on this record says so.
+     *
+     * @param inputTokens long input tokens expected
+     * @param outputTokens long output tokens expected
+     * @param exactInput boolean whether the input figure was counted against the real request
+     * @param historicOutput boolean whether the output figure came from runs on this install
+     */
+    public record EstimatePayload(long inputTokens, long outputTokens, boolean exactInput, boolean historicOutput) {
+    }
+
+    /**
+     * What applying a sift's decisions actually moved.
+     *
+     * @param reviewed int photos in the run's own scope
+     * @param byCategory a {@link Map} of {@link String} to {@link Integer} files routed per category
+     * @param unreviewable int photos left unjudged
+     * @param nearDupGroups int near-duplicate groups resolved
+     * @param nearDupRejects int near-duplicate rejects moved
+     * @param heals a {@link List} of {@link String} paths corrected against a unique sheet basename
+     */
+    public record ApplyPayload(int reviewed, Map<String, Integer> byCategory, int unreviewable, int nearDupGroups,
+                               int nearDupRejects, List<String> heals) {
+    }
+
+    /**
+     * How one sift ended, and everything that ending carries.
+     *
+     * <p>One shape for every ending, so a caller reads {@code outcome} and then only the fields
+     * that ending fills in. The report is on all of them: a run that was cancelled or stopped by
+     * its ceiling was still billed for what it had already sent.
+     *
+     * @param outcome {@link String} which ending this was
+     * @param report {@link ReportPayload} what the run judged and consumed
+     * @param scope {@link String} the run's scope tag, or null when no run reached disk
+     * @param prepDir {@link String} the run's own folder, or null when no run reached disk
+     * @param shards {@link ShardsPayload} how many shards are in, or null when there is no run to count
+     * @param reason {@link WaitingReason} why it paused, or null when it did not
+     * @param findings a {@link List} of {@link FindingPayload} what refused the apply, or null when
+     *        nothing did
+     * @param applied {@link ApplyPayload} what was moved, or null when nothing was
+     * @param archivedPriorRun {@link String} where a previous run of this scope was set aside, or null
+     * @param instructions {@link String} what to hand an agent to judge the sheets, or null on an
+     *        ending that is not waiting for them
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record OutcomePayload(String outcome, ReportPayload report, @Nullable String scope,
+                                 @Nullable String prepDir, @Nullable ShardsPayload shards,
+                                 @Nullable WaitingReason reason, @Nullable List<FindingPayload> findings,
+                                 @Nullable ApplyPayload applied, @Nullable String archivedPriorRun,
+                                 @Nullable String instructions) {
+    }
+
+    /**
+     * A sift the provider raised out of rather than returning from.
+     *
+     * <p>No scope or prep dir. The provider raises this without them, and inventing either would
+     * hand a caller an address to act on that nothing produced.
+     *
+     * @param problems {@link String} the provider's own account of what it could not do
+     * @param report {@link ReportPayload} what it judged and consumed first, or null where the
+     *        provider counts nothing
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record IncompletePayload(String problems, @Nullable ReportPayload report) {
+    }
+
+    /**
+     * Reads one run onto the wire.
+     *
+     * @param run {@link SiftRunSummary} the run as it sits on disk
+     * @return {@link RunPayload} its machine-readable shape
+     */
+    public static RunPayload run(final SiftRunSummary run) {
+        return new RunPayload(run.scope(), text(run.prepDir()), run.health().state(),
+                findings(run.health().findings()), shards(run.shards()), text(run.since()));
+    }
+
+    /**
+     * Reads how one sift ended onto the wire.
+     *
+     * @param outcome {@link SiftJobOutcome} how the run ended
+     * @return {@link OutcomePayload} its machine-readable shape
+     */
+    public static OutcomePayload outcome(final SiftJobOutcome outcome) {
+        return outcome(outcome, null);
+    }
+
+    /**
+     * Reads how a sift ended onto the wire, carrying the instructions where there are any.
+     *
+     * @param outcome {@link SiftJobOutcome} how the run ended
+     * @param instructions {@link String} what to hand an agent, or null where nothing is waiting
+     *        on one
+     * @return {@link OutcomePayload} its machine-readable shape
+     */
+    public static OutcomePayload outcome(final SiftJobOutcome outcome, final @Nullable String instructions) {
+        final ReportPayload report = report(outcome.siftReport());
+        final String archived = text(outcome.archivedPriorRun());
+        return switch (outcome) {
+            case final SiftJobOutcome.Applied done -> new OutcomePayload("Applied", report, null, null, null,
+                    null, null, applied(done.applyReport()), archived, null);
+            case final SiftJobOutcome.Waiting waiting -> waiting(waiting, report, archived, instructions);
+            case final SiftJobOutcome.Blocked blocked -> new OutcomePayload("Blocked", report,
+                    blocked.job().scope(), text(blocked.job().prepDir()), shards(blocked.job().shards()),
+                    null, findings(blocked.findings()), null, archived, null);
+            case final SiftJobOutcome.Cancelled ignored -> new OutcomePayload("Cancelled", report, null, null,
+                    null, null, null, null, archived, null);
+        };
+    }
+
+    /**
+     * Reads a paused run onto the wire, naming the job it paused in the middle of.
+     *
+     * @param waiting {@link SiftJobOutcome.Waiting} the paused run
+     * @param report {@link ReportPayload} what it consumed before pausing
+     * @param archived {@link String} where a previous run of this scope was set aside, or null
+     * @param instructions {@link String} what to hand an agent, or null where nothing is waiting on one
+     * @return {@link OutcomePayload} its machine-readable shape
+     */
+    private static OutcomePayload waiting(final SiftJobOutcome.Waiting waiting, final ReportPayload report,
+                                          final @Nullable String archived,
+                                          final @Nullable String instructions) {
+        final WaitingSiftJob job = waiting.job();
+        final ApplyReport moved = waiting.movedBeforeItPaused();
+        return new OutcomePayload("Waiting", report, job.scope(), text(job.prepDir()), shards(job.shards()),
+                waiting.reason(), null, moved == null ? null : applied(moved), archived, instructions);
+    }
+
+    /**
+     * Reads what a run judged and consumed onto the wire.
+     *
+     * @param report {@link SiftReport} the run's own report
+     * @return {@link ReportPayload} its machine-readable shape
+     */
+    public static ReportPayload report(final SiftReport report) {
+        return new ReportPayload(report.montagesSifted(), report.montagesSkipped(), report.apiCalls(),
+                spend(report.spend()), report.stoppedAtCeiling());
+    }
+
+    /**
+     * Reads a spend onto the wire.
+     *
+     * @param spend {@link TokenSpend} what was consumed
+     * @return {@link SpendPayload} its machine-readable shape
+     */
+    public static SpendPayload spend(final TokenSpend spend) {
+        return new SpendPayload(spend.inputTokens(), spend.outputTokens(), spend.providerId(), spend.modelId());
+    }
+
+    /**
+     * Reads an expectation onto the wire.
+     *
+     * @param estimate {@link SpendEstimate} what a run is expected to consume
+     * @return {@link EstimatePayload} its machine-readable shape
+     */
+    public static EstimatePayload estimate(final SpendEstimate estimate) {
+        return new EstimatePayload(estimate.inputTokens(), estimate.outputTokens(), estimate.exactInput(),
+                estimate.historicOutput());
+    }
+
+    /**
+     * Reads what an apply moved onto the wire.
+     *
+     * @param report {@link ApplyReport} what the apply did
+     * @return {@link ApplyPayload} its machine-readable shape
+     */
+    public static ApplyPayload applied(final ApplyReport report) {
+        return new ApplyPayload(report.reviewed(), new TreeMap<>(report.byCategory()), report.unreviewable(),
+                report.nearDupGroups(), report.nearDupRejects(), report.heals());
+    }
+
+    /**
+     * Reads a sift the provider could not finish onto the wire.
+     *
+     * @param problems {@link String} the provider's own account of what it could not do
+     * @param report {@link SiftReport} what the abandoned run judged and consumed, or null
+     * @return {@link IncompletePayload} its machine-readable shape
+     */
+    public static IncompletePayload incomplete(final @Nullable String problems, final @Nullable SiftReport report) {
+        return new IncompletePayload(String.valueOf(problems), report == null ? null : report(report));
+    }
+
+    /**
+     * Reads a list of problems onto the wire.
+     *
+     * @param findings a {@link List} of {@link Finding} the problems
+     * @return a {@link List} of {@link FindingPayload} their machine-readable shapes
+     */
+    private static List<FindingPayload> findings(final List<Finding> findings) {
+        return findings.stream().map(FindingPayload::of).toList();
+    }
+
+    /**
+     * Reads a shard count onto the wire.
+     *
+     * @param shards {@link ShardTally} the count, or null when nothing could compute one
+     * @return {@link ShardsPayload} its machine-readable shape, or null
+     */
+    private static @Nullable ShardsPayload shards(final @Nullable ShardTally shards) {
+        return shards == null ? null : new ShardsPayload(shards.present(), shards.valid(), shards.total());
+    }
+
+    /**
+     * Writes a path the way this machine spells it.
+     *
+     * @param path {@link Path} the path, or null
+     * @return {@link String} the path as text, or null
+     */
+    private static @Nullable String text(final @Nullable Path path) {
+        return path == null ? null : path.toString();
+    }
+
+    /**
+     * Writes an instant the way the rest of the world writes them.
+     *
+     * @param instant {@link Instant} the moment
+     * @return {@link String} it, in the format everything else reads
+     */
+    private static String text(final Instant instant) {
+        return instant.toString();
+    }
+}

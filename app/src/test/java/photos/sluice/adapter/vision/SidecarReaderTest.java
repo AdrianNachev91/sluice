@@ -5,7 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
-import photos.sluice.domain.cull.SidecarPhotoEntry;
+import photos.sluice.domain.sift.SidecarPhotoEntry;
 import tools.jackson.core.exc.JacksonIOException;
 import tools.jackson.databind.json.JsonMapper;
 

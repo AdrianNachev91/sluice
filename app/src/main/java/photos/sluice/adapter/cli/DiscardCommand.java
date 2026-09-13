@@ -4,7 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.DiscardReport;
+import photos.sluice.domain.sift.DiscardReport;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;

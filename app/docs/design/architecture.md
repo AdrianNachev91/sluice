@@ -81,7 +81,7 @@ flowchart TB
     end
 
     subgraph modes[" one package per mode "]
-        CULL["domain/cull<br/>31 types"]
+        SIFT["domain/sift<br/>31 types"]
         COMMIT["domain/commit<br/>4 types"]
         RESCUE["domain/rescue<br/>1 type"]
         IMPORTS["domain/imports<br/>2 types"]
@@ -91,7 +91,7 @@ flowchart TB
 ```
 
 - `domain/model`: the shared values. `MediaFile`, `HashedMedia`, `DatedMedia`, `SortScope`.
-- `domain/job`: `ProgressCallback`, `CancellationSignal`, `WaitingCullJob`, `ShardTally`.
+- `domain/job`: `ProgressCallback`, `CancellationSignal`, `WaitingSiftJob`, `ShardTally`.
 - `domain/dating`: `DateResolver` walks sidecar, EXIF, filename, mtime. `DatePlausibility` refuses
   a pre-2000 or future date.
 - `domain/dedup`: `ByteIdenticalDedup` splits a hashed batch into keepers and duplicates.
@@ -101,7 +101,7 @@ flowchart TB
 - `domain/paths`: the folder-root rules. `RootLayout`, `Containment`, `ReservedDeviceNames`,
   `PathViolation`.
 - `domain/imaging`: `LowResGate` decides what counts as low resolution.
-- `domain/cull`: the vocabulary of a sift. `ShardValidator` is the authority on a well-formed one.
+- `domain/sift`: the vocabulary of a sift. `ShardValidator` is the authority on a well-formed one.
 - `domain/commit`: `CommitScope`, `CommitScopeSelector`, `LibraryBucket`, `CommitSummary`.
 - `domain/rescue`, `domain/imports`, `domain/copy`: outcome counters for those modes.
 - `domain/review`: `ReasonNotes`, the note left beside set-aside photos.
@@ -114,7 +114,7 @@ what was refused. Both surfaces reach the same use cases through these.
 ```mermaid
 flowchart TB
     subgraph verbs[" what can be asked for "]
-        V["SortUseCase<br/>CommitUseCase<br/>RescueUseCase<br/>CullUseCase<br/>CurateUseCase"]
+        V["SortUseCase<br/>CommitUseCase<br/>RescueUseCase<br/>SiftUseCase<br/>CurateUseCase"]
     end
 
     subgraph conf[" what can be configured "]
@@ -122,7 +122,7 @@ flowchart TB
     end
 
     subgraph back[" what comes back "]
-        OUTCOMES["CullJobOutcome<br/>CurateOutcome<br/>SpendEstimate<br/>InboxTally<br/>SortedTally<br/>ReviewListing"]
+        OUTCOMES["SiftJobOutcome<br/>CurateOutcome<br/>SpendEstimate<br/>InboxTally<br/>SortedTally<br/>ReviewListing"]
         REFUSALS["JobInProgressException<br/>ShuttingDownException<br/>PathsMisconfiguredException<br/>UnfinishedRunsException<br/>RunsUnreadableException<br/>ImportSourceException"]
     end
 
@@ -133,8 +133,8 @@ flowchart TB
 - `SortUseCase`: date, de-duplicate and move Inbox files into staging.
 - `CommitUseCase`: promote staged media into the library.
 - `RescueUseCase`: move a waiting folder's leftovers back into Sorted.
-- `CullUseCase`: the vision pass, including waiting on and resuming a paused run.
-- `CurateUseCase`: a sort, then a cull over what it populated.
+- `SiftUseCase`: the vision pass, including waiting on and resuming a paused run.
+- `CurateUseCase`: a sort, then a sift over what it populated.
 - `SettingsUseCase`: read and change settings.
 - `PathValidationUseCase`: check the three folder roots.
 - `LibraryRootUseCase`: move the library root, which a plain save cannot do.
@@ -142,9 +142,12 @@ flowchart TB
 
 ## Services
 
-The use cases. Each implements an inbound port and reaches the filesystem only through an outbound
-one. `Pipeline` is the facade a driving adapter holds, and it hands back a `JobHandle` rather than
-blocking. Fourteen of the 41 classes have a design doc, more than any other layer.
+The use cases, reaching the filesystem only through an outbound port. `Pipeline` is the facade a
+driving adapter holds, and it hands back a `JobHandle` rather than blocking. Fourteen of the 41
+classes have a design doc, more than any other layer.
+
+Six of the eight inbound ports have an implementation here. `SiftUseCase` and `CurateUseCase` have
+none: `Pipeline` declares no interface at all, and callers hold the class.
 
 ```mermaid
 flowchart TB
@@ -155,10 +158,10 @@ flowchart TB
     end
 
     subgraph sift[" the vision run "]
-        CULLE["CullEngine"]
+        SIFTE["SiftEngine"]
         CURATEE["CurateEngine"]
-        DISPATCH["CullDispatcher"]
-        WATCH["CullWatchers<br/>CullWatcher"]
+        DISPATCH["SiftDispatcher"]
+        WATCH["SiftWatchers<br/>SiftWatcher"]
         APPLYE["ApplyEngine"]
         APPLYP["ApplyPlanner"]
         LEDGER["MoveLedger"]
@@ -185,9 +188,9 @@ flowchart TB
     PIPE --> sift
     PIPE --> recovery
     PIPE --> plumbing
-    CULLE --> DISPATCH
-    CULLE --> WATCH
-    CULLE --> APPLYE
+    SIFTE --> DISPATCH
+    SIFTE --> WATCH
+    SIFTE --> APPLYE
     APPLYE --> APPLYP
     APPLYE --> LEDGER
     RECONCILE --> LEDGER
@@ -203,8 +206,8 @@ flowchart TB
 - A waiting folder's leftovers back into Sorted:
   [`rescue-engine.md`](application/service/rescue-engine.md).
 - A whole vision run: prep, dispatch, apply:
-  [`cull-engine.md`](application/service/cull-engine.md).
-- A sort and then a cull, as one job: [`curate-engine.md`](application/service/curate-engine.md).
+  [`sift-engine.md`](application/service/sift-engine.md).
+- A sort and then a sift, as one job: [`curate-engine.md`](application/service/curate-engine.md).
 - Carrying the decisions out against the filesystem:
   [`apply-engine.md`](application/service/apply-engine.md).
 - What a run still has left to do: [`apply-planner.md`](application/service/apply-planner.md).
@@ -220,8 +223,8 @@ flowchart TB
   [`path-validation-service.md`](application/service/path-validation-service.md).
 - `CommitEngine` moves staged files into the library. One loop, one branch, too thin to diagram.
 - `ImportEngine` brings photos into the Inbox, `CopyEngine` copies one tree into another.
-- `CullDispatcher` routes to the provider whose id matches the configured one.
-- `CullWatchers` owns the watch lifecycle, `CullWatcher` polls one waiting run.
+- `SiftDispatcher` routes to the provider whose id matches the configured one.
+- `SiftWatchers` owns the watch lifecycle, `SiftWatcher` polls one waiting run.
 - `JobRunner` runs one job at a time, `PhaseRunner` brackets each phase it reports.
 - `RootsGuard` refuses work whose folder roots are unusable.
 - `SpendEstimator` forecasts a run's cost, `SpendRate` what a sheet has actually cost here.
@@ -243,11 +246,11 @@ flowchart TB
     end
 
     subgraph vision[" the vision run "]
-        V["VisionCuller<br/>CullPrepPort<br/>ModelCatalog<br/>SpendLedgerPort"]
+        V["VisionSieve<br/>SiftPrepPort<br/>ModelCatalog<br/>SpendLedgerPort"]
     end
 
     subgraph conf[" settings "]
-        C["Settings<br/>SettingsStore<br/>SettingsSources<br/>LiveSettings<br/>PathsPort<br/>CullSettings<br/>ConfigFileRepairPort"]
+        C["Settings<br/>SettingsStore<br/>SettingsSources<br/>LiveSettings<br/>PathsPort<br/>SiftSettings<br/>ConfigFileRepairPort"]
     end
 
     subgraph telling[" reporting back "]
@@ -261,11 +264,11 @@ flowchart TB
 - `WorkingRootLock` claims a root before anything mutates inside it.
 - `MontageRenderer` turns a scope into the prep directory a provider judges.
 - `ImageDimensionsPort` reads dimensions without decoding, `HeifDecoder` handles what Java cannot.
-- `VisionCuller` turns a prepared directory into decision shards.
-- `CullPrepPort` reads and writes that directory's JSON, `SpendLedgerPort` records what a run cost.
+- `VisionSieve` turns a prepared directory into decision shards.
+- `SiftPrepPort` reads and writes that directory's JSON, `SpendLedgerPort` records what a run cost.
 - `Settings` is every value a user can change, `SettingsStore` where they survive a restart.
 - `LiveSettings` is the seam that replaces the values in force. No adapter may name it.
-- `PathsPort` and `CullSettings` keep the config record out of the layers that read from it.
+- `PathsPort` and `SiftSettings` keep the config record out of the layers that read from it.
 - `ProgressPort` reports a running job without being polled.
 
 ## Adapters
@@ -353,7 +356,7 @@ flowchart TB
     ROOT["SluiceCli"]
 
     subgraph verbs[" one class per verb "]
-        WORK["SortCommand<br/>CommitCommand<br/>RescueCommand<br/>ImportCommand<br/>CullCommand<br/>ResumeCommand"]
+        WORK["SortCommand<br/>CommitCommand<br/>RescueCommand<br/>ImportCommand<br/>SiftCommand<br/>ResumeCommand"]
         LOOK["RunsCommand<br/>TroubleshootCommand<br/>AnswerCommand"]
         GONE["DiscardCommand<br/>PurgeCommand<br/>RedoCommand"]
         MISC["AppCommand<br/>SkillCommand"]
@@ -362,7 +365,7 @@ flowchart TB
     subgraph shape[" what it produces "]
         OUTCOME["CommandOutcome<br/>CommandStatus"]
         DOC["ResultDocument<br/>Fields<br/>ResultLines"]
-        PAYLOAD["SortPayloads<br/>CommitPayloads<br/>CullPayloads<br/>RescuePayloads<br/>ImportPayloads<br/>RecoveryPayloads<br/>TroubleshootPayloads"]
+        PAYLOAD["SortPayloads<br/>CommitPayloads<br/>SiftPayloads<br/>RescuePayloads<br/>ImportPayloads<br/>RecoveryPayloads<br/>TroubleshootPayloads"]
     end
 
     subgraph refuse[" when it will not run "]
@@ -407,7 +410,7 @@ flowchart TB
 - Claiming a root with an OS lock on a marker file:
   [`working-root-lock.md`](adapter/fs/working-root-lock.md).
 - `Sha256Hasher` streams in fixed-size chunks, so a large video costs no more memory than a photo.
-- `CsvLibraryHashIndex` is two columns per hashed file, `CsvSpendLedger` twelve per cull run.
+- `CsvLibraryHashIndex` is two columns per hashed file, `CsvSpendLedger` twelve per sift run.
 - `YamlConfigFile` is the config file as a document. Both the save and the repair go through it.
 
 ### Metadata
@@ -430,7 +433,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    RENDER["CullMontageRenderer<br/>MontageRenderer"]
+    RENDER["SiftMontageRenderer<br/>MontageRenderer"]
     TILE["TileRenderer"]
     BUILD["MontageBuilder"]
     SIDE["SidecarWriter"]
@@ -452,7 +455,7 @@ flowchart TB
 ```
 
 - Wiring the other four together:
-  [`cull-montage-renderer.md`](adapter/imaging/cull-montage-renderer.md).
+  [`sift-montage-renderer.md`](adapter/imaging/sift-montage-renderer.md).
 - One fixed-size preview per file: [`tile-renderer.md`](adapter/imaging/tile-renderer.md).
 - A batch of tiles into one captioned grid:
   [`montage-builder.md`](adapter/imaging/montage-builder.md).
@@ -464,15 +467,15 @@ flowchart TB
 
 ### Vision
 
-A provider is one `@Component` implementing `VisionCuller`. `CullDispatcher` takes them by list
+A provider is one `@Component` implementing `VisionSieve`. `SiftDispatcher` takes them by list
 injection, so adding one needs no wiring beyond its own class.
 
 ```mermaid
 flowchart TB
-    ANTH["AnthropicCuller<br/>VisionCuller"]
-    EXT["ExternalAgentCuller<br/>VisionCuller"]
-    PROMPT["CullerPrompt"]
-    STORE["JsonCullPrepStore<br/>CullPrepPort"]
+    ANTH["AnthropicSieve<br/>VisionSieve"]
+    EXT["ExternalAgentSieve<br/>VisionSieve"]
+    PROMPT["SievePrompt"]
+    STORE["JsonSiftPrepStore<br/>SiftPrepPort"]
     SHARD["ShardCodec"]
     SIDE["SidecarReader"]
     ATOMIC["AtomicJsonWrite"]
@@ -486,12 +489,12 @@ flowchart TB
 ```
 
 - The provider that calls a model from inside the app:
-  [`anthropic-culler.md`](adapter/vision/anthropic-culler.md).
+  [`anthropic-sieve.md`](adapter/vision/anthropic-sieve.md).
 - What a new provider has to satisfy:
   [`adding-a-provider.md`](adapter/vision/adding-a-provider.md).
-- `ExternalAgentCuller` reads the shards an agent outside the app has already written. It waits for
+- `ExternalAgentSieve` reads the shards an agent outside the app has already written. It waits for
   nothing and spends nothing.
-- `CullerPrompt` renders the request from the prep dir's own recorded categories, so the prompt and
+- `SievePrompt` renders the request from the prep dir's own recorded categories, so the prompt and
   the validation cannot judge different rule sets.
 - `ShardCodec` reads and writes one `decisions-NNN.json`, `SidecarReader` the montage sidecar.
 
@@ -504,11 +507,11 @@ itself, because Spring's property binding is what holds those values.
 ```mermaid
 flowchart TB
     subgraph bind[" binding sluice.* "]
-        B["PathsProperties<br/>MontageProperties<br/>ImagingConfig<br/>CullConfig<br/>UiProperties"]
+        B["PathsProperties<br/>MontageProperties<br/>ImagingConfig<br/>SiftConfig<br/>UiProperties"]
     end
 
     subgraph serve[" answering for the values "]
-        HOLDER["SettingsHolder<br/>LiveSettings, CullSettings"]
+        HOLDER["SettingsHolder<br/>LiveSettings, SiftSettings"]
         PATHSC["PathsConfig<br/>PathsPort"]
         ENVS["EnvironmentSettingsSources<br/>SettingsSources"]
     end

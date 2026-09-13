@@ -1,0 +1,1690 @@
+package photos.sluice.adapter.vision;
+
+import com.anthropic.client.AnthropicClient;
+import com.anthropic.core.JsonValue;
+import com.anthropic.core.ObjectMappers;
+import com.anthropic.core.http.Headers;
+import com.anthropic.errors.AnthropicIoException;
+import com.anthropic.errors.PermissionDeniedException;
+import com.anthropic.errors.UnauthorizedException;
+import com.anthropic.models.messages.CacheCreation;
+import com.anthropic.models.messages.ContentBlock;
+import com.anthropic.models.messages.ContentBlockParam;
+import com.anthropic.models.messages.Message;
+import com.anthropic.models.messages.MessageCountTokensParams;
+import com.anthropic.models.messages.MessageCreateParams;
+import com.anthropic.models.messages.MessageParam;
+import com.anthropic.models.messages.MessageTokensCount;
+import com.anthropic.models.messages.StopReason;
+import com.anthropic.models.messages.TextBlock;
+import com.anthropic.models.messages.Usage;
+import com.anthropic.models.models.ModelInfo;
+import com.anthropic.models.models.ModelListPage;
+import com.anthropic.models.models.ModelListPageResponse;
+import com.anthropic.models.models.ModelListParams;
+import com.anthropic.services.blocking.MessageService;
+import com.anthropic.services.blocking.ModelService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.networknt.schema.InputFormat;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SpecificationVersion;
+import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
+import photos.sluice.application.port.out.SiftException;
+import photos.sluice.application.port.out.SiftOptions;
+import photos.sluice.application.port.out.SiftProviderSettings;
+import photos.sluice.application.port.out.SiftReport;
+import photos.sluice.application.port.out.SiftSettings;
+import photos.sluice.application.port.out.MissingCredentialException;
+import photos.sluice.application.port.out.ModelCatalog;
+import photos.sluice.application.port.out.ModelOption;
+import photos.sluice.application.port.out.ProviderCheck;
+import photos.sluice.application.port.out.ProviderType;
+import photos.sluice.application.port.out.SpendCeiling;
+import photos.sluice.application.port.out.SpendForecast;
+import photos.sluice.application.port.out.TokenSpend;
+import photos.sluice.domain.sift.SiftCategory;
+import photos.sluice.domain.sift.Decision.Classification;
+import photos.sluice.domain.sift.Decision.NearDupChosen;
+import photos.sluice.domain.sift.Decision.NearDupReject;
+import photos.sluice.domain.sift.DecisionShard;
+import photos.sluice.domain.sift.MontageConfig;
+import photos.sluice.domain.sift.PrepDir;
+import photos.sluice.domain.sift.Verdict.Keep;
+import photos.sluice.domain.job.CancellationSignal;
+import photos.sluice.domain.job.ProgressCallback;
+import photos.sluice.secrets.SecretHolding;
+import photos.sluice.secrets.SecretId;
+import photos.sluice.secrets.SecretStatus;
+import photos.sluice.secrets.SecretStore;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class AnthropicSieveTest {
+
+    private static final List<SiftCategory> CARDS = List.of(
+            SiftCategory.of("junk", "Objectively worthless photos."),
+            SiftCategory.of("scenery", "Unremarkable scenery."));
+    private static final SiftOptions OPTIONS = SiftOptions.unbounded(false);
+    private static final String MODEL = "claude-sonnet-5";
+
+    @TempDir
+    Path prepDir;
+
+    private final AnthropicClient client = mock();
+    private final MessageService messages = mock();
+    private final ModelService modelService = mock();
+
+    @Test
+    void reservesTheAnthropicProviderId() {
+        assertThat(this.sieve().describe().id()).isEqualTo("anthropic");
+    }
+
+    // Typed MANUAL instead, a model that genuinely could not answer would be filed as a run still
+    // waiting for shards.
+    @Test
+    void callsAModelRatherThanWaitingForAPerson() {
+        assertThat(this.sieve().type()).isEqualTo(ProviderType.API);
+    }
+
+    @Test
+    void writesAValidatedShardAndReportsTokenTotals() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg", "IMG_0002.jpg", "IMG_0003.jpg", "IMG_0004.jpg");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "keep" },
+                    { "index": 2, "name": "IMG_0002.jpg", "action": "junk", "reason": "photo of a screen" },
+                    { "index": 3, "name": "IMG_0003.jpg", "action": "near-dup-chosen", "group": "beach",
+                      "chosen_reason": "sharpest of the burst" },
+                    { "index": 4, "name": "IMG_0004.jpg", "action": "near-dup-reject", "group": "beach",
+                      "reason": "blurrier than IMG_0003.jpg" }
+                  ]
+                }
+                """, 1200, 340));
+
+        final SiftReport report = this.sieve().sift(prep, OPTIONS);
+
+        final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
+        assertThat(shard.montage()).isEqualTo("montage-001");
+        assertThat(shard.verdicts()).containsExactly(
+                new Keep(this.src("IMG_0001.jpg")),
+                new Classification(this.src("IMG_0002.jpg"), "junk", "photo of a screen"),
+                new NearDupChosen(this.src("IMG_0003.jpg"), "beach", "sharpest of the burst"),
+                new NearDupReject(this.src("IMG_0004.jpg"), "beach", "blurrier than IMG_0003.jpg"));
+        assertThat(report).isEqualTo(report(1, 0, 1, 1200, 340));
+    }
+
+    @Test
+    void anAllKeepsResponseWritesAKeepPerPhoto() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg", "IMG_0002.jpg");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "keep" },
+                    { "index": 2, "name": "IMG_0002.jpg", "action": "keep" }
+                  ]
+                }
+                """, 800, 90));
+
+        this.sieve().sift(prep, OPTIONS);
+
+        final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
+        assertThat(shard.verdicts()).containsExactly(
+                new Keep(this.src("IMG_0001.jpg")), new Keep(this.src("IMG_0002.jpg")));
+    }
+
+    @Test
+    void siftsEveryMontageSumsTokensAndClosesTheClient() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.respondWith(
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "screenshot" }
+                          ]
+                        }
+                        """, 1000, 100),
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0002.jpg", "action": "keep" }
+                          ]
+                        }
+                        """, 1100, 40));
+
+        final SiftReport report = this.sieve().sift(this.prep("montage-001", "montage-002"), OPTIONS);
+
+        assertThat(this.prepDir.resolve("decisions-001.json")).exists();
+        assertThat(this.prepDir.resolve("decisions-002.json")).exists();
+        assertThat(report).isEqualTo(report(2, 0, 2, 2100, 140));
+        verify(this.client).close();
+    }
+
+    @Test
+    void forecastCountsTheRequestItWouldHaveSentWithoutSendingIt() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        when(this.messages.countTokens(any(MessageCountTokensParams.class)))
+                .thenReturn(MessageTokensCount.builder().inputTokens(5_790).build());
+
+        assertThat(this.sieve().forecast(prep)).isEqualTo(new SpendForecast.Counted(5_790));
+
+        verify(this.messages, never()).create(any(MessageCreateParams.class));
+    }
+
+    @Test
+    void theCountedRequestCarriesTheSchemaAndSystemPromptTheRealCallWould() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        when(this.messages.countTokens(any(MessageCountTokensParams.class)))
+                .thenReturn(MessageTokensCount.builder().inputTokens(1).build());
+
+        this.sieve().forecast(prep);
+
+        final var captor = ArgumentCaptor.forClass(MessageCountTokensParams.class);
+        verify(this.messages).countTokens(captor.capture());
+        assertThat(captor.getValue().outputConfig()).isPresent();
+        assertThat(captor.getValue().system().orElseThrow().asString()).contains("junk");
+    }
+
+    @Test
+    void forecastAnswersThatItCouldNotCountRatherThanRaisingWhatStoppedIt() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        when(this.messages.countTokens(any(MessageCountTokensParams.class)))
+                .thenThrow(new AnthropicIoException("connect timed out", null));
+
+        assertThat(this.sieve().forecast(prep))
+                .isEqualTo(new SpendForecast.Unknown("connect timed out"));
+    }
+
+    @Test
+    void forecastAnswersThatItCouldNotCountWhenTheMontagesSidecarIsUnreadable() throws IOException {
+        Files.writeString(this.prepDir.resolve("montage-001.json"), "{ not json");
+
+        assertThat(this.sieve().forecast(this.prep("montage-001")))
+                .isInstanceOf(SpendForecast.Unknown.class);
+    }
+
+    @Test
+    void forecastCountsNothingForAPrepDirectoryWithNoMontages() {
+        assertThat(this.sieve().forecast(this.prep())).isEqualTo(new SpendForecast.Counted(0));
+    }
+
+    @Test
+    void forecastClosesTheClientItBuilt() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        when(this.messages.countTokens(any(MessageCountTokensParams.class)))
+                .thenReturn(MessageTokensCount.builder().inputTokens(1).build());
+
+        this.sieve().forecast(prep);
+
+        verify(this.client).close();
+    }
+
+    @Test
+    void aRunStopsOnceItHasSpentPastWhatTheMontagesItJudgedAllow() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.respondWith(keeping("IMG_0001.jpg", 1_000, 100), keeping("IMG_0002.jpg", 10, 1));
+
+        final List<String> ticks = new ArrayList<>();
+        final SiftReport report = this.sieve().sift(this.prep("montage-001", "montage-002"),
+                bounded(new SpendCeiling(10, 100, 1)),
+                (current, total) -> ticks.add(current + "/" + total));
+
+        assertThat(report.stoppedAtCeiling()).isTrue();
+        assertThat(report.apiCalls()).isEqualTo(1);
+        assertThat(this.prepDir.resolve("decisions-001.json")).exists();
+        assertThat(this.prepDir.resolve("decisions-002.json")).doesNotExist();
+        assertThat(ticks).containsExactly("1/2");
+    }
+
+    @Test
+    void anExpensiveFirstMontageDoesNotStopARunWhileTheBoundIsStillWarmingUp() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.respondWith(keeping("IMG_0001.jpg", 1_000, 100), keeping("IMG_0002.jpg", 10, 1));
+
+        final SiftReport report = this.sieve().sift(this.prep("montage-001", "montage-002"),
+                bounded(new SpendCeiling(10, 100, 3)));
+
+        assertThat(report.stoppedAtCeiling()).isFalse();
+        assertThat(this.prepDir.resolve("decisions-002.json")).exists();
+    }
+
+    @Test
+    void theCallBoundStopsTheRunBeforeAMontagesFirstCallRatherThanOnlyBeforeItsRetry() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.respondWith(keeping("IMG_0001.jpg", 10, 1), keeping("IMG_0002.jpg", 10, 1));
+
+        final SiftReport report = this.sieve().sift(this.prep("montage-001", "montage-002"),
+                bounded(new SpendCeiling(1, 1_000_000, 0)));
+
+        assertThat(report.stoppedAtCeiling()).isTrue();
+        assertThat(report.apiCalls()).isEqualTo(1);
+        assertThat(this.prepDir.resolve("decisions-002.json")).doesNotExist();
+        verify(this.messages, times(1)).create(any(MessageCreateParams.class));
+    }
+
+    @Test
+    void aRunWhereEveryMontageNeedsItsCorrectionStillDoesNotReachTheCallBound() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.writeMontage("montage-003", "IMG_0003.jpg");
+        this.respondWith(misnamed(100, 10), keeping("IMG_0001.jpg", 100, 10),
+                misnamed(100, 10), keeping("IMG_0002.jpg", 100, 10),
+                misnamed(100, 10), keeping("IMG_0003.jpg", 100, 10));
+
+        final SiftReport report = this.sieve().sift(this.prep("montage-001", "montage-002", "montage-003"),
+                bounded(new SpendCeiling(6, Long.MAX_VALUE / 2, 0)));
+
+        assertThat(report.stoppedAtCeiling()).isFalse();
+        assertThat(report.apiCalls()).isEqualTo(6);
+        assertThat(report.montagesSifted()).isEqualTo(3);
+        assertThat(this.prepDir.resolve("decisions-003.json")).exists();
+    }
+
+    // Needs the third montage. The token arm is asked before a montage spends, so over two it reads
+    // zero tokens and cannot tell the two counts apart.
+    @Test
+    void aMontageResumedFromItsShardDoesNotCountTowardTheBoundsWarmUp() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.writeMontage("montage-003", "IMG_0003.jpg");
+        new ShardCodec().write(this.prepDir.resolve("decisions-001.json"),
+                new DecisionShard("montage-001", List.of(new Keep(this.src("IMG_0001.jpg")))));
+        this.respondWith(keeping("IMG_0002.jpg", 100, 50), keeping("IMG_0003.jpg", 10, 10));
+
+        final SiftReport report = this.sieve().sift(this.prep("montage-001", "montage-002", "montage-003"),
+                bounded(new SpendCeiling(10, 100, 1)));
+
+        assertThat(report.stoppedAtCeiling()).isTrue();
+        assertThat(report.apiCalls()).isEqualTo(1);
+        assertThat(report.montagesSkipped()).isEqualTo(1);
+        assertThat(this.prepDir.resolve("decisions-002.json")).exists();
+        assertThat(this.prepDir.resolve("decisions-003.json")).doesNotExist();
+    }
+
+    @Test
+    void aMontageSkippedForAnUnreadableSidecarBuysTheRunNoAllowance() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.writeMontage("montage-003", "IMG_0003.jpg");
+        Files.delete(this.prepDir.resolve("montage-001.json"));
+        this.respondWith(keeping("IMG_0002.jpg", 100, 50), keeping("IMG_0003.jpg", 10, 10));
+
+        final SiftReport report = this.sieve().sift(this.prep("montage-001", "montage-002", "montage-003"),
+                bounded(new SpendCeiling(10, 100, 1)));
+
+        assertThat(report.stoppedAtCeiling()).isTrue();
+        assertThat(report.montagesSkipped()).isEqualTo(1);
+        assertThat(this.prepDir.resolve("decisions-003.json")).doesNotExist();
+    }
+
+    @Test
+    void aRunInsideItsCeilingIsNotReportedAsStopped() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(keeping("IMG_0001.jpg", 10, 1));
+
+        assertThat(this.sieve().sift(prep, bounded(new SpendCeiling(10, 1_000_000, 0))).stoppedAtCeiling())
+                .isFalse();
+    }
+
+    @Test
+    void aCorrectionPastTheCallBoundIsRefusedAndEndsTheRun() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(keeping("WRONG.jpg", 100, 10));
+
+        final List<String> ticks = new ArrayList<>();
+        final SiftReport report = this.sieve().sift(prep, bounded(new SpendCeiling(1, 1_000_000, 0)),
+                (current, total) -> ticks.add(current + "/" + total));
+
+        assertThat(report.stoppedAtCeiling()).isTrue();
+        assertThat(report.apiCalls()).isEqualTo(1);
+        assertThat(report.montagesSifted()).isZero();
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
+        verify(this.messages, times(1)).create(any(MessageCreateParams.class));
+        assertThat(ticks).isEmpty();
+    }
+
+    @Test
+    void progressCallbackTicksOnceForEachMontageAgainstTheFinalMontageCount() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.respondWith(
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
+                          ]
+                        }
+                        """, 100, 10),
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0002.jpg", "action": "keep" }
+                          ]
+                        }
+                        """, 100, 10));
+
+        final List<String> ticks = new ArrayList<>();
+        this.sieve().sift(this.prep("montage-001", "montage-002"), OPTIONS, (current, total) -> ticks.add(current +
+                "/" + total));
+
+        assertThat(ticks).containsExactly("1/2", "2/2");
+    }
+
+    @Test
+    void cancellationStopsTheLoopLeavingAlreadyWrittenShardsAndAPartialReport() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.writeMontage("montage-003", "IMG_0003.jpg");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "screenshot" }
+                  ]
+                }
+                """, 100, 10));
+
+        // Cancels once montage-001's tick fires, so montage-002 and 003 are never dispatched.
+        final var cancelled = new AtomicBoolean(false);
+        final ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
+
+        final SiftReport report = this.sieve().sift(
+                this.prep("montage-001", "montage-002", "montage-003"), OPTIONS, cancelAfterFirstTick, cancelled::get);
+
+        assertThat(report).isEqualTo(report(1, 0, 1, 100, 10));
+        assertThat(this.prepDir.resolve("decisions-001.json")).exists();
+        assertThat(this.prepDir.resolve("decisions-002.json")).doesNotExist();
+        assertThat(this.prepDir.resolve("decisions-003.json")).doesNotExist();
+        verify(this.messages, times(1)).create(any(MessageCreateParams.class));
+        verify(this.client).close();
+    }
+
+    @Test
+    void aMontageJudgedWhileAStopWasAlreadyAskedForIsStillCounted() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        final List<String> ticks = new ArrayList<>();
+        // The stop is set from inside the call, so it is already pending by the time the response
+        // is judged. Polling a counter instead would land after the loop rather than during it.
+        final var stopped = new AtomicBoolean();
+        when(this.messages.create(any(MessageCreateParams.class))).thenAnswer(_ -> {
+            stopped.set(true);
+            return keeping("IMG_0001.jpg", 100, 10);
+        });
+
+        final SiftReport report = this.sieve().sift(prep, OPTIONS,
+                (current, total) -> ticks.add(current + "/" + total), stopped::get);
+
+        assertThat(report.montagesSifted()).isEqualTo(1);
+        assertThat(this.prepDir.resolve("decisions-001.json")).exists();
+        assertThat(ticks).containsExactly("1/1");
+    }
+
+    @Test
+    void aMontageWhoseRetryWasCancelledMidCallIsNotCounted() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        final var stopped = new AtomicBoolean();
+        // The first response fails validation, so a retry is dispatched. The stop is set from
+        // inside that retry, which is the one arm no other test reaches.
+        when(this.messages.create(any(MessageCreateParams.class)))
+                .thenReturn(misnamed(100, 10))
+                .thenAnswer(_ -> {
+                    stopped.set(true);
+                    return misnamed(100, 10);
+                });
+        final List<String> ticks = new ArrayList<>();
+
+        final SiftReport report = this.sieve().sift(prep, OPTIONS,
+                (current, total) -> ticks.add(current + "/" + total), stopped::get);
+
+        assertThat(report.montagesSifted()).isZero();
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
+        verify(this.messages, times(2)).create(any(MessageCreateParams.class));
+        assertThat(ticks).isEmpty();
+    }
+
+    @Test
+    void aStopLandingOnALaterMontageKeepsTheTicksTheEarlierOnesEarned() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.writeMontage("montage-003", "IMG_0003.jpg");
+        final var stopped = new AtomicBoolean();
+        when(this.messages.create(any(MessageCreateParams.class)))
+                .thenReturn(keeping("IMG_0001.jpg", 100, 10))
+                .thenAnswer(_ -> {
+                    stopped.set(true);
+                    return misnamed(100, 10);
+                });
+        final List<String> ticks = new ArrayList<>();
+
+        this.sieve().sift(this.prep("montage-001", "montage-002", "montage-003"), OPTIONS,
+                (current, total) -> ticks.add(current + "/" + total), stopped::get);
+
+        assertThat(this.prepDir.resolve("decisions-002.json")).doesNotExist();
+        assertThat(ticks).containsExactly("1/3");
+    }
+
+    // Without the pre-retry check, a cancellation landing here waits out a whole extra API round
+    // trip before it takes effect.
+    @Test
+    void cancellationAfterAFailedFirstAttemptSkipsTheRetryAndWritesNothing() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "WRONG.jpg", "action": "keep" }
+                  ]
+                }
+                """, 100, 10));
+
+        // The first poll (the while loop's own entry check) must pass so the doomed first attempt
+        // actually runs. The second poll, right before the corrective retry, is where cancellation
+        // lands instead.
+        final var polls = new AtomicInteger();
+        final CancellationSignal cancelBeforeRetry = () -> polls.incrementAndGet() > 1;
+        final List<String> ticks = new ArrayList<>();
+
+        final SiftReport report = this.sieve().sift(prep, OPTIONS,
+                (current, total) -> ticks.add(current + "/" + total), cancelBeforeRetry);
+
+        // The failed first attempt's tokens still count - that call already cost real money.
+        assertThat(report).isEqualTo(report(0, 0, 1, 100, 10));
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
+        verify(this.messages, times(1)).create(any(MessageCreateParams.class));
+        assertThat(ticks).isEmpty();
+    }
+
+    // A stateless call cannot remember the slugs earlier montages picked, so the accumulated
+    // cross-shard validation is what enforces group-id uniqueness across the run.
+    @Test
+    void failsLoudWhenTwoMontagesReuseANearDupGroupId() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg", "IMG_0002.jpg");
+        this.writeMontage("montage-002", "IMG_0003.jpg", "IMG_0004.jpg");
+        this.respondWith(
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-chosen", "group": "beach",
+                              "chosen_reason": "sharpest" },
+                            { "index": 2, "name": "IMG_0002.jpg", "action": "near-dup-reject", "group": "beach",
+                              "reason": "blurrier" }
+                          ]
+                        }
+                        """, 1000, 100),
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0003.jpg", "action": "near-dup-chosen", "group": "beach",
+                              "chosen_reason": "sharpest" },
+                            { "index": 2, "name": "IMG_0004.jpg", "action": "near-dup-reject", "group": "beach",
+                              "reason": "blurrier" }
+                          ]
+                        }
+                        """, 1000, 100));
+
+        assertThatThrownBy(() -> this.sieve().sift(this.prep("montage-001", "montage-002"), OPTIONS))
+                .isInstanceOf(SiftException.class)
+                .hasMessageContaining("montage-002")
+                .hasMessageContaining("near-dup group 'beach' spans 2 shards");
+        assertThat(this.prepDir.resolve("decisions-001.json")).exists();
+        assertThat(this.prepDir.resolve("decisions-002.json")).doesNotExist();
+    }
+
+    // A file named by both a decision and index.json's unreviewable list would double-move at
+    // apply time. The user answers that with TRUST_DECISION, and the answer lives in a ledger only
+    // the apply phase reads. Rejecting the shard here would overrule them, and each rejection
+    // costs another paid model call.
+    //
+    // The fixture is synthetic. The renderer keeps sidecar srcs and unreviewable entries disjoint,
+    // so only a hand-edited index.json reaches this state through the model's own verdict.
+    @Test
+    void writesTheShardWhenAFileIsAlsoListedAsUnreviewableLeavingThatOverlapToApply() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "screenshot" }
+                  ]
+                }
+                """, 1000, 100));
+
+        final SiftReport report =
+                this.sieve().sift(this.prep(List.of(this.src("IMG_0001.jpg")), "montage-001"), OPTIONS);
+
+        assertThat(report).isEqualTo(report(1, 0, 1, 1000, 100));
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).verdicts())
+                .containsExactly(new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
+        // One call, so the overlap never even reached the corrective retry.
+        verify(this.messages, times(1)).create(any(MessageCreateParams.class));
+    }
+
+    // Nothing constrains what an already-written shard names, so this case needs no hand-built
+    // fixture at all.
+    @Test
+    void resumesAnExistingShardNamingAnUnreviewableFileInsteadOfPayingToReSiftIt() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        new ShardCodec().write(this.prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+                List.of(new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"))));
+
+        final SiftReport report =
+                this.sieve().sift(this.prep(List.of(this.src("IMG_0001.jpg")), "montage-001"), OPTIONS);
+
+        assertThat(report).isEqualTo(report(0, 1, 0, 0, 0));
+        verify(this.messages, times(0)).create(any(MessageCreateParams.class));
+    }
+
+    // A sidecar names the photos its montage shows. Without one there is nothing to key the
+    // model's verdicts against, and no request can be built at all.
+    @Test
+    void skipsAMontageWhoseSidecarIsUnreadableAndStillSiftsTheRest() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        Files.writeString(this.prepDir.resolve("montage-001.json"), "{ not json");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0002.jpg", "action": "junk", "reason": "screenshot" }
+                  ]
+                }
+                """, 500, 50));
+
+        final List<String> ticks = new ArrayList<>();
+        final SiftReport report = this.sieve().sift(this.prep("montage-001", "montage-002"), OPTIONS,
+                (current, total) -> ticks.add(current + "/" + total));
+
+        assertThat(report).isEqualTo(report(1, 1, 1, 500, 50));
+        assertThat(this.prepDir.resolve("decisions-002.json")).exists();
+        // Never sifted, so no shard is invented for it - and no model call was spent trying.
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
+        verify(this.messages, times(1)).create(any(MessageCreateParams.class));
+        assertThat(ticks).containsExactly("1/2", "2/2");
+    }
+
+    // The state a resolved corrupt sidecar leaves behind: the sidecar filed away, its shard still
+    // on disk. APPLY_ANYWAY is an answer to trust that shard, so re-sifting the montage would
+    // overwrite the very decisions the user chose to keep.
+    @Test
+    void leavesAnExistingShardAloneWhenItsSidecarHasBeenFiledAway() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        new ShardCodec().write(this.prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+                List.of(new Classification(this.src("IMG_0001.jpg"), "junk", "the user's own answer"))));
+        Files.delete(this.prepDir.resolve("montage-001.json"));
+
+        final SiftReport report = this.sieve().sift(this.prep("montage-001"), OPTIONS);
+
+        assertThat(report).isEqualTo(report(0, 1, 0, 0, 0));
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).verdicts())
+                .containsExactly(new Classification(this.src("IMG_0001.jpg"), "junk", "the user's own answer"));
+        verify(this.messages, times(0)).create(any(MessageCreateParams.class));
+    }
+
+    @Test
+    void retriesOnceWithTheProblemListWhenTheFirstResponseFailsValidation() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "WRONG.jpg", "action": "keep" }
+                          ]
+                        }
+                        """, 100, 10),
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "screenshot" }
+                          ]
+                        }
+                        """, 120, 30));
+
+        final SiftReport report = this.sieve().sift(prep, OPTIONS);
+
+        final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
+        assertThat(shard.verdicts()).containsExactly(
+                new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
+        // Both attempts' tokens count: the failed first call cost real money too.
+        assertThat(report).isEqualTo(report(1, 0, 2, 220, 40));
+        final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
+        verify(this.messages, times(2)).create(captor.capture());
+        final MessageCreateParams retry = captor.getAllValues().getLast();
+        assertThat(retry.messages()).hasSize(3);
+        assertThat(retry.messages().get(1).role()).isEqualTo(MessageParam.Role.ASSISTANT);
+        assertThat(retry.messages().get(1).content().string().orElseThrow()).contains("WRONG.jpg");
+        assertThat(retry.messages().get(2).role()).isEqualTo(MessageParam.Role.USER);
+        assertThat(retry.messages().get(2).content().string().orElseThrow())
+                .contains("failed validation")
+                .contains("verdict 1 names 'WRONG.jpg' but photo 1 is 'IMG_0001.jpg'")
+                .contains("complete corrected verdict list");
+        assertThat(retry.outputConfig()).isPresent();
+    }
+
+    // A model that fails the same montage twice stops burning tokens right there.
+    @Test
+    void failsAfterOneRetryAggregatingBothAttemptsProblems() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "WRONG.jpg", "action": "keep" }
+                  ]
+                }
+                """, 100, 10));
+
+        assertThatThrownBy(() -> this.sieve().sift(prep, OPTIONS))
+                .isInstanceOf(SiftException.class)
+                .hasMessageContaining("a corrective retry did not fix it")
+                .hasMessageContaining("First attempt (1 problem(s))")
+                .hasMessageContaining("Retry (1 problem(s))");
+        verify(this.messages, times(2))
+                .create(any(MessageCreateParams.class));
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
+    }
+
+    @Test
+    void givingUpOnAMontageCarriesOutWhatTheRunHadAlreadySpent() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(keeping("WRONG.jpg", 100, 10), keeping("ALSO_WRONG.jpg", 120, 30));
+
+        assertThatThrownBy(() -> this.sieve().sift(prep, OPTIONS))
+                .isInstanceOf(SiftException.class)
+                .extracting(failure -> ((SiftException) failure).report())
+                .isEqualTo(report(0, 0, 2, 220, 40));
+    }
+
+    // A tentative shard left in the accepted set would surface as a phantom problem when a later
+    // montage is validated.
+    @Test
+    void aFailedFirstAttemptLeavesTheAcceptedSetCleanForLaterMontages() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.respondWith(
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0001.jpg", "action": "trash", "reason": "blurry" }
+                          ]
+                        }
+                        """, 100, 10),
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "blurry" }
+                          ]
+                        }
+                        """, 120, 30),
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0002.jpg", "action": "junk", "reason": "screenshot" }
+                          ]
+                        }
+                        """, 200, 20));
+
+        final SiftReport report = this.sieve().sift(this.prep("montage-001", "montage-002"), OPTIONS);
+
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).verdicts())
+                .containsExactly(new Classification(this.src("IMG_0001.jpg"), "junk", "blurry"));
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-002.json")).verdicts())
+                .containsExactly(new Classification(this.src("IMG_0002.jpg"), "junk", "screenshot"));
+        assertThat(report).isEqualTo(report(2, 0, 3, 420, 60));
+    }
+
+    // The API rejects empty text blocks, so a blank reply cannot be echoed verbatim on retry.
+    @Test
+    void aBlankResponseRetriesWithAPlaceholderEcho() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(
+                response("", 100, 10),
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
+                          ]
+                        }
+                        """, 120, 30));
+
+        final SiftReport report = this.sieve().sift(prep, OPTIONS);
+
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).verdicts())
+                .containsExactly(new Keep(this.src("IMG_0001.jpg")));
+        assertThat(report).isEqualTo(report(1, 0, 2, 220, 40));
+        final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
+        verify(this.messages, times(2)).create(captor.capture());
+        final MessageCreateParams retry = captor.getAllValues().getLast();
+        assertThat(retry.messages().get(1).content().string().orElseThrow()).isEqualTo("(empty response)");
+        assertThat(retry.messages().get(2).content().string().orElseThrow())
+                .contains("response carries no text content");
+    }
+
+    @Test
+    void resumesAMontageWhoseValidShardAlreadyExists() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        new ShardCodec().write(this.prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+                List.of(new Classification(this.src("IMG_0001.jpg"), "junk", "photo of a screen"))));
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0002.jpg", "action": "keep" }
+                  ]
+                }
+                """, 500, 50));
+
+        final List<String> ticks = new ArrayList<>();
+        final SiftReport report = this.sieve().sift(this.prep("montage-001", "montage-002"), OPTIONS,
+                (current, total) -> ticks.add(current + "/" + total));
+
+        assertThat(report).isEqualTo(report(1, 1, 1, 500, 50));
+        assertThat(ticks).containsExactly("1/2", "2/2");
+        final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
+        verify(this.messages).create(captor.capture());
+        // The one request that went out is montage-002's, still numbered 2 of 2: a skip does not
+        // renumber the sheets that follow it.
+        assertThat(captor.getValue().messages().getFirst().content().blockParams().orElseThrow()
+                .getLast().text().orElseThrow().text()).contains("sheet 002 (2 of 2)");
+    }
+
+    @Test
+    void reSiftsAMontageWhoseExistingShardIsUnreadable() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        Files.writeString(this.prepDir.resolve("decisions-001.json"), "not a shard at all");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "screenshot" }
+                  ]
+                }
+                """, 100, 10));
+
+        final SiftReport report = this.sieve().sift(prep, OPTIONS);
+
+        assertThat(report).isEqualTo(report(1, 0, 1, 100, 10));
+        final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
+        assertThat(shard.verdicts()).containsExactly(
+                new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
+    }
+
+    @Test
+    void reSiftsAMontageWhoseExistingShardBreaksTheContract() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        // Parseable, but a blank reason breaks the shard contract - resume must decline it.
+        new ShardCodec().write(this.prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+                List.of(new Classification(this.src("IMG_0001.jpg"), "junk", ""))));
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "screenshot" }
+                  ]
+                }
+                """, 100, 10));
+
+        final SiftReport report = this.sieve().sift(prep, OPTIONS);
+
+        assertThat(report).isEqualTo(report(1, 0, 1, 100, 10));
+        final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
+        assertThat(shard.verdicts()).containsExactly(
+                new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
+    }
+
+    // A resumed shard joins the accumulated set, so the cross-shard rules keep firing across the
+    // resume boundary.
+    @Test
+    void aResumedShardStillBlocksALaterGroupIdReuse() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg", "IMG_0002.jpg");
+        this.writeMontage("montage-002", "IMG_0003.jpg", "IMG_0004.jpg");
+        new ShardCodec().write(this.prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+                List.of(new NearDupChosen(this.src("IMG_0001.jpg"), "beach", "sharpest"),
+                        new NearDupReject(this.src("IMG_0002.jpg"), "beach", "blurrier"))));
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0003.jpg", "action": "near-dup-chosen", "group": "beach",
+                      "chosen_reason": "sharpest" },
+                    { "index": 2, "name": "IMG_0004.jpg", "action": "near-dup-reject", "group": "beach",
+                      "reason": "blurrier" }
+                  ]
+                }
+                """, 100, 10));
+
+        assertThatThrownBy(() -> this.sieve().sift(this.prep("montage-001", "montage-002"), OPTIONS))
+                .isInstanceOf(SiftException.class)
+                .hasMessageContaining("montage-002")
+                .hasMessageContaining("near-dup group 'beach' spans 2 shards");
+    }
+
+    // Only thinking is asserted because only thinking can be set: anthropic-java 2.50.0's request
+    // builder exposes no effort parameter at all. Whichever one a later SDK adds, this test is
+    // where the decision to send neither is written down.
+    @Test
+    void theRequestAsksForNoParticularReasoning() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
+                  ]
+                }
+                """, 100, 10));
+
+        this.sieve().sift(prep, OPTIONS);
+
+        final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
+        verify(this.messages).create(captor.capture());
+        assertThat(captor.getValue().thinking()).isEmpty();
+        assertThat(captor.getValue().maxTokens()).isEqualTo(16384);
+    }
+
+    @Test
+    void rendersTheSystemPromptFromTheCardsTheRunRecordedRatherThanLiveConfig() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        final var recorded = SiftCategory.of("receipts", "Photographed paperwork and invoices.");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
+                  ]
+                }
+                """, 100, 10));
+
+        this.sieve().sift(this.prep(List.of(recorded), List.of(), "montage-001"), OPTIONS);
+
+        final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
+        verify(this.messages).create(captor.capture());
+        assertThat(captor.getValue().system().orElseThrow().string().orElseThrow())
+                .contains("### `receipts`")
+                .contains("Photographed paperwork and invoices.")
+                .doesNotContain("### `junk`");
+    }
+
+    @Test
+    void acceptsAVerdictNamingARecordedCategoryThatLiveConfigDoesNotCarry() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        final var recorded = SiftCategory.of("receipts", "Photographed paperwork and invoices.");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "receipts", "reason": "a scanned invoice" }
+                  ]
+                }
+                """, 100, 10));
+
+        final SiftReport report = this.sieve().sift(this.prep(List.of(recorded), List.of(), "montage-001"), OPTIONS);
+
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).verdicts()).containsExactly(
+                new Classification(this.src("IMG_0001.jpg"), "receipts", "a scanned invoice"));
+        assertThat(report.montagesSifted()).isEqualTo(1);
+    }
+
+    @Test
+    void sendsSystemPromptMontageImageAndPhotoTable() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
+                  ]
+                }
+                """, 100, 10));
+
+        this.sieve().sift(prep, OPTIONS);
+
+        final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
+        verify(this.messages).create(captor.capture());
+        final MessageCreateParams request = captor.getValue();
+        assertThat(request.model().asString()).isEqualTo("claude-sonnet-5");
+        assertThat(request.system().orElseThrow().string().orElseThrow())
+                .contains("### `junk`")
+                .contains("When unsure, keep.");
+        final List<ContentBlockParam> blocks =
+                request.messages().getFirst().content().blockParams().orElseThrow();
+        final String imageData = blocks.getFirst().image().orElseThrow()
+                .source().base64().orElseThrow().data();
+        assertThat(imageData).isEqualTo(
+                Base64.getEncoder().encodeToString(Files.readAllBytes(this.prepDir.resolve("montage-001.jpg"))));
+        assertThat(blocks.getLast().text().orElseThrow().text())
+                .contains("Scope: 2019-06")
+                .contains("1. IMG_0001.jpg");
+        assertThat(request.outputConfig()).isPresent();
+    }
+
+    @Test
+    void theSentSchemaRefusesACategoryVerdictUntilItCarriesAReason() throws Exception {
+        final String schema = this.schemaSentFor(CARDS);
+
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "junk" }""")).isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "a screenshot" }""")).isEmpty();
+    }
+
+    @Test
+    void theSentSchemaRefusesANearDupKeeperUntilItCarriesAGroupAndAChosenReason() throws Exception {
+        final String schema = this.schemaSentFor(CARDS);
+
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-chosen", "chosen_reason": "sharpest" }"""))
+                .isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-chosen", "group": "beach" }"""))
+                .isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-chosen", "group": "beach",
+                  "chosen_reason": "sharpest" }""")).isEmpty();
+    }
+
+    @Test
+    void theSentSchemaRefusesANearDupRejectUntilItCarriesAGroupAndAReason() throws Exception {
+        final String schema = this.schemaSentFor(CARDS);
+
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-reject", "reason": "softer than beach-1" }"""))
+                .isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-reject", "group": "beach" }"""))
+                .isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-reject", "group": "beach",
+                  "reason": "softer than beach-1" }""")).isEmpty();
+    }
+
+    @Test
+    void theSentSchemaRefusesABlankReasonAsWellAsAMissingOne() throws Exception {
+        final String schema = this.schemaSentFor(CARDS);
+
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "" }""")).isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-chosen", "group": "beach",
+                  "chosen_reason": "" }""")).isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-reject", "group": "",
+                  "reason": "softer than beach-1" }""")).isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "a" }""")).isEmpty();
+    }
+
+    @Test
+    void theSentSchemaRefusesAnActionNamingACategoryTheRunNeverRecorded() throws Exception {
+        final String schema = this.schemaSentFor(CARDS);
+
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "receipts", "reason": "a scanned invoice" }"""))
+                .isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "scenery", "reason": "flat light" }""")).isEmpty();
+    }
+
+    // Keep is the majority verdict on a real sheet. A branch that demanded a reason for it would
+    // buy one per tile per montage, at the output rate, and every other test here would still pass.
+    @Test
+    void theSentSchemaAcceptsAKeepCarryingNothingButTheCommonThree() throws Exception {
+        assertThat(refusals(this.schemaSentFor(CARDS), """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }""")).isEmpty();
+    }
+
+    @Test
+    void theSentSchemaAcceptsAKeepThatVolunteersAReason() throws Exception {
+        assertThat(refusals(this.schemaSentFor(CARDS), """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "keep", "reason": "a clear photo of people" }"""))
+                .isEmpty();
+    }
+
+    @Test
+    void refusesToSiftARunThatRecordedNoCategories() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        final PrepDir prep = this.prep(List.of(), List.of(), "montage-001");
+
+        assertThatThrownBy(() -> this.sieve().sift(prep, OPTIONS))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("no photo categories");
+        verify(this.messages, never()).create(any(MessageCreateParams.class));
+    }
+
+    @Test
+    void theSentSchemaNamesTheRunsOwnRecordedCategoriesRatherThanAFixedSet() throws Exception {
+        final String schema = this.schemaSentFor(List.of(SiftCategory.of("receipts", "Scans of invoices.")));
+
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "receipts", "reason": "a scanned invoice" }"""))
+                .isEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "a screenshot" }""")).isNotEmpty();
+    }
+
+    @Test
+    void failsLoudWhenAVerdictNamesTheWrongPhoto() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "WRONG.jpg", "action": "keep" }
+                  ]
+                }
+                """, 100, 10));
+
+        assertThatThrownBy(() -> this.sieve().sift(prep, OPTIONS))
+                .isInstanceOf(SiftException.class)
+                .hasMessageContaining("verdict 1 names 'WRONG.jpg' but photo 1 is 'IMG_0001.jpg'");
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
+    }
+
+    @Test
+    void failsLoudWhenAVerdictIsMissing() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg", "IMG_0002.jpg");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
+                  ]
+                }
+                """, 100, 10));
+
+        assertThatThrownBy(() -> this.sieve().sift(prep, OPTIONS))
+                .isInstanceOf(SiftException.class)
+                .hasMessageContaining("montage-001: no verdict for 1 of its photos (IMG_0002.jpg)");
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
+    }
+
+    @Test
+    void failsLoudWhenAnActionIsNotAConfiguredCategory() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "trash", "reason": "blurry" }
+                  ]
+                }
+                """, 100, 10));
+
+        assertThatThrownBy(() -> this.sieve().sift(prep, OPTIONS))
+                .isInstanceOf(SiftException.class)
+                .hasMessageContaining("invalid action 'trash'");
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
+    }
+
+    @Test
+    void failsLoudWhenTheResponseIsNotTheVerdictJson() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(response("not json at all", 100, 10));
+
+        assertThatThrownBy(() -> this.sieve().sift(prep, OPTIONS))
+                .isInstanceOf(SiftException.class)
+                .hasMessageContaining("montage-001")
+                .hasMessageContaining("not valid verdict JSON");
+    }
+
+    @Test
+    void failsLoudWhenTheModelIsNotConfigured() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        final var sieve = new AnthropicSieve(sievePrompt(settings(null)), new ShardCodec(),
+                new SidecarReader(), settings(null), noClient(), noCheckClient());
+
+        assertThatThrownBy(() -> sieve.sift(prep, OPTIONS))
+                .isInstanceOf(IllegalStateException.class)
+                .isNotInstanceOf(MissingCredentialException.class)
+                .hasMessageContaining("sluice.sift.provider-settings.anthropic.model");
+    }
+
+    // Someone hitting this has taken neither route, so the message names both rather than the one
+    // the app happens to check first.
+    @Test
+    void failsLoudNamingBothRoutesToAKeyWhenNoTierHoldsOne() {
+        final SecretStore empty = new FixedSecretStore(null);
+
+        assertThatThrownBy(() -> AnthropicSieve.defaultClient(
+                settings("claude-sonnet-5").providerSettings("anthropic"), empty))
+                .isInstanceOfSatisfying(MissingCredentialException.class,
+                        e -> assertThat(e.id()).isEqualTo(AnthropicSieve.API_KEY))
+                .hasMessageContaining("Settings")
+                .hasMessageContaining("ANTHROPIC_API_KEY");
+    }
+
+    // Nothing observes the key after the client is built. What this proves is that the store's
+    // answer was carried through rather than dropped, since dropping it reaches the no-key refusal.
+    @Test
+    void buildsTheClientFromTheKeyTheStoreHolds() {
+        assertThatCode(() -> AnthropicSieve.defaultClient(settings("claude-sonnet-5").providerSettings("anthropic"),
+                new FixedSecretStore("sk-synthetic-0001"))).doesNotThrowAnyException();
+    }
+
+    // Two separate literals agreeing today is not the same as them being tied together.
+    @Test
+    void namesItsCredentialAfterTheProviderItRegistersAs() {
+        assertThat(AnthropicSieve.API_KEY.name()).isEqualTo(this.sieve().describe().id());
+    }
+
+    @Test
+    void aCheckWithNoKeyStoredAnywhereIsAnsweredRatherThanThrown() {
+        final var sieve = this.checkingSieve(_ -> {
+            throw new MissingCredentialException(AnthropicSieve.API_KEY, "no key");
+        });
+
+        assertThat(sieve.check()).isEqualTo(new ProviderCheck.NoCredential());
+    }
+
+    @Test
+    void anAcceptedKeyAnswersWithWhatTheAccountCanRun() {
+        this.listsModels(model("claude-sonnet-5", "Claude Sonnet 5", true, true));
+
+        final ProviderCheck outcome = this.checkingSieve(_ -> this.client).check();
+
+        assertThat(outcome).isEqualTo(new ProviderCheck.Accepted(new ModelCatalog(
+                List.of(new ModelOption("claude-sonnet-5", "Claude Sonnet 5")), "claude-sonnet-5")));
+    }
+
+    @Test
+    void aModelThatCannotReadAPhotoIsNotOffered() {
+        this.listsModels(model("claude-sonnet-5", "Claude Sonnet 5", true, true),
+                model("text-only", "Text only", false, true),
+                model("no-schema", "No schema", true, false));
+
+        final ProviderCheck outcome = this.checkingSieve(_ -> this.client).check();
+
+        assertThat(((ProviderCheck.Accepted) outcome).models().options())
+                .containsExactly(new ModelOption("claude-sonnet-5", "Claude Sonnet 5"));
+    }
+
+    @Test
+    void aModelDescribedInAShapeThisAppCannotReadIsNotOffered() {
+        this.listsModels(modelWithoutCapabilities("mystery-model", "Mystery model"),
+                model("claude-sonnet-5", "Claude Sonnet 5", true, true));
+
+        final ProviderCheck outcome = this.checkingSieve(_ -> this.client).check();
+
+        assertThat(((ProviderCheck.Accepted) outcome).models().options())
+                .containsExactly(new ModelOption("claude-sonnet-5", "Claude Sonnet 5"));
+    }
+
+    // A working key over an account with nothing usable is a real answer, and a catalog cannot
+    // carry it: one always holds at least one model.
+    @Test
+    void anAccountWithNothingUsableIsItsOwnAnswer() {
+        this.listsModels(model("text-only", "Text only", false, false));
+
+        assertThat(this.checkingSieve(_ -> this.client).check())
+                .isEqualTo(new ProviderCheck.NoUsableModels());
+    }
+
+    @Test
+    void modelsThisProviderKnowsComeFirstInItsOwnOrderAndTheRestFollow() {
+        this.listsModels(model("something-new", "Something new", true, true),
+                model("claude-opus-5", "Claude Opus 5", true, true),
+                model("claude-haiku-4-5", "Claude Haiku 4.5", true, true));
+
+        final ProviderCheck outcome = this.checkingSieve(_ -> this.client).check();
+
+        assertThat(((ProviderCheck.Accepted) outcome).models().options())
+                .extracting(ModelOption::id)
+                .containsExactly("claude-haiku-4-5", "claude-opus-5", "something-new");
+    }
+
+    // Marking a model recommended that the account cannot select would default the picker onto a
+    // model the service refuses.
+    @Test
+    void aRecommendationTheAccountCannotRunIsDropped() {
+        this.listsModels(model("claude-opus-5", "Claude Opus 5", true, true));
+
+        final ProviderCheck outcome = this.checkingSieve(_ -> this.client).check();
+
+        assertThat(((ProviderCheck.Accepted) outcome).models().recommended()).isNull();
+    }
+
+    @Test
+    void aModelTheServiceNamesByADatedSnapshotTakesThePlaceOfItsPlainId() {
+        this.listsModels(model("something-new", "Something new", true, true),
+                model("claude-haiku-4-5-20251001", "Claude Haiku 4.5", true, true));
+
+        final ProviderCheck outcome = this.checkingSieve(_ -> this.client).check();
+
+        assertThat(((ProviderCheck.Accepted) outcome).models().options())
+                .extracting(ModelOption::id)
+                .containsExactly("claude-haiku-4-5-20251001", "something-new");
+    }
+
+    @Test
+    void aRecommendationTheServiceNamesByADatedSnapshotAnswersWithTheOfferedId() {
+        this.listsModels(model("claude-sonnet-5-20260101", "Claude Sonnet 5", true, true));
+
+        final ProviderCheck outcome = this.checkingSieve(_ -> this.client).check();
+
+        assertThat(((ProviderCheck.Accepted) outcome).models().recommended())
+                .isEqualTo("claude-sonnet-5-20260101");
+    }
+
+    @Test
+    void aLaterPointReleaseIsNotRecommendedInPlaceOfTheVersionItSucceeds() {
+        this.listsModels(model("claude-sonnet-5-1", "Claude Sonnet 5.1", true, true));
+
+        final ProviderCheck outcome = this.checkingSieve(_ -> this.client).check();
+
+        assertThat(((ProviderCheck.Accepted) outcome).models().recommended()).isNull();
+    }
+
+    @Test
+    void aKeyTheServiceDoesNotKnowIsReportedAsRejected() {
+        this.listFails(UnauthorizedException.builder()
+                .headers(Headers.builder().build())
+                .body(JsonValue.from(Map.of("message", "invalid x-api-key")))
+                .build());
+
+        assertThat(this.checkingSieve(_ -> this.client).check())
+                .isEqualTo(new ProviderCheck.Rejected());
+    }
+
+    @Test
+    void anAccountNotEntitledToThisCarriesWhatTheServiceSaid() {
+        this.listFails(PermissionDeniedException.builder()
+                .headers(Headers.builder().build())
+                .body(JsonValue.from(Map.of("message", "your credit balance is too low")))
+                .build());
+
+        assertThat(this.checkingSieve(_ -> this.client).check())
+                .isInstanceOfSatisfying(ProviderCheck.Refused.class,
+                        refused -> assertThat(refused.detail()).contains("credit balance"));
+    }
+
+    @Test
+    void aTransportFailureCarriesWhatFailed() {
+        this.listFails(new AnthropicIoException("connect timed out", null));
+
+        assertThat(this.checkingSieve(_ -> this.client).check())
+                .isInstanceOfSatisfying(ProviderCheck.Unreachable.class,
+                        unreachable -> assertThat(unreachable.detail()).contains("connect timed out"));
+    }
+
+    // An unparseable endpoint is a field a user typed, and the HTTP client rejects it with an
+    // exception from no family this class could enumerate.
+    @Test
+    void aFailureFromOutsideTheSdksOwnFamiliesStillBecomesAnAnswer() {
+        this.listFails(new IllegalArgumentException("Expected URL scheme 'http' or 'https'"));
+
+        assertThat(this.checkingSieve(_ -> this.client).check())
+                .isInstanceOfSatisfying(ProviderCheck.Unreachable.class,
+                        unreachable -> assertThat(unreachable.detail()).contains("URL scheme"));
+    }
+
+    // Not the same state as holding no key at all, though both fail before a request goes out.
+    @Test
+    void aCredentialStoreThatRefusesToAnswerIsReportedRatherThanThrown() {
+        final var sieve = this.checkingSieve(_ -> {
+            throw new IllegalStateException("the credential store refused");
+        });
+
+        assertThat(sieve.check())
+                .isInstanceOfSatisfying(ProviderCheck.Unreachable.class,
+                        unreachable -> assertThat(unreachable.detail()).contains("refused"));
+    }
+
+    @Test
+    void theCheckClosesTheClientItBuilt() {
+        this.listsModels(model("claude-sonnet-5", "Claude Sonnet 5", true, true));
+
+        this.checkingSieve(_ -> this.client).check();
+
+        verify(this.client).close();
+    }
+
+    @Test
+    void aFailedCheckStillClosesTheClientItBuilt() {
+        this.listFails(new AnthropicIoException("connect timed out", null));
+
+        this.checkingSieve(_ -> this.client).check();
+
+        verify(this.client).close();
+    }
+
+    @Test
+    void aPlainCheckIsCheckedAgainstWhatIsStored() {
+        this.listsModels(model("claude-sonnet-5", "Claude Sonnet 5", true, true));
+        final var received = new ArrayList<SiftProviderSettings>();
+
+        this.checkingSieve(providerSettings -> {
+            received.add(providerSettings);
+            return this.client;
+        }).check();
+
+        assertThat(received).containsExactly(new SiftProviderSettings("claude-sonnet-5", null, null));
+    }
+
+    @Test
+    void aCandidateCheckIsCheckedAgainstTheGivenSettingsRatherThanWhatIsStored() {
+        this.listsModels(model("claude-sonnet-5", "Claude Sonnet 5", true, true));
+        final var received = new ArrayList<SiftProviderSettings>();
+        final var candidate = new SiftProviderSettings(null, "https://example.test", null);
+
+        this.checkingSieve(providerSettings -> {
+            received.add(providerSettings);
+            return this.client;
+        }).check(candidate);
+
+        assertThat(received).containsExactly(candidate);
+    }
+
+    // A verdict list the ceiling cut short parses as broken JSON, and the two want different
+    // answers from whoever reads the failure.
+    @Test
+    void aResponseTheCeilingCutShortIsReportedAsThatRatherThanAsBrokenJson() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(
+                response("{ \"verdicts\": [ { \"index\": 1, \"name\"", 100, 16384, StopReason.MAX_TOKENS),
+                response("{ \"verdicts\": [ { \"index\": 1, \"name\"", 100, 16384, StopReason.MAX_TOKENS));
+
+        assertThatThrownBy(() -> this.sieve().sift(prep, OPTIONS))
+                .isInstanceOf(SiftException.class)
+                .hasMessageContaining("cut off at the 16384-token ceiling")
+                .hasMessageNotContaining("not valid verdict JSON");
+    }
+
+    private static SiftOptions bounded(final SpendCeiling ceiling) {
+        return new SiftOptions(false, null, ceiling);
+    }
+
+    private static Message keeping(final String name, final long inputTokens, final long outputTokens) {
+        return response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "%s", "action": "keep" }
+                  ]
+                }
+                """.formatted(name), inputTokens, outputTokens);
+    }
+
+    private static Message misnamed(final long inputTokens, final long outputTokens) {
+        return response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "WRONG.jpg", "action": "keep" }
+                  ]
+                }
+                """, inputTokens, outputTokens);
+    }
+
+    private static SiftReport report(final int sifted, final int skipped, final int calls,
+                                     final long inputTokens, final long outputTokens) {
+        return new SiftReport(sifted, skipped, calls,
+                new TokenSpend(inputTokens, outputTokens, "anthropic", MODEL), false);
+    }
+
+    private AnthropicSieve sieve() {
+        return this.sieve(settings("claude-sonnet-5"));
+    }
+
+    private AnthropicSieve sieve(final SiftSettings settings) {
+        when(this.client.messages()).thenReturn(this.messages);
+        return new AnthropicSieve(sievePrompt(settings), new ShardCodec(), new SidecarReader(),
+                settings, () -> this.client, noCheckClient());
+    }
+
+
+    private AnthropicSieve checkingSieve(final Function<SiftProviderSettings, AnthropicClient> checkClientFactory) {
+        final SiftSettings settings = settings("claude-sonnet-5");
+        return new AnthropicSieve(sievePrompt(settings), new ShardCodec(), new SidecarReader(),
+                settings, noClient(), checkClientFactory);
+    }
+
+    private void listsModels(final ModelInfo... models) {
+        when(this.client.models()).thenReturn(this.modelService);
+        when(this.modelService.list()).thenReturn(this.page(List.of(models)));
+    }
+
+    private void listFails(final RuntimeException failure) {
+        when(this.client.models()).thenReturn(this.modelService);
+        when(this.modelService.list()).thenThrow(failure);
+    }
+
+    // Parsed from the wire shape rather than assembled, so the accessors the sieve calls read what
+    // the service would really have sent. A null last_id is what ends the paging.
+    private ModelListPage page(final List<ModelInfo> models) {
+        final String data = models.stream()
+                .map(AnthropicSieveTest::asJson)
+                .collect(Collectors.joining(","));
+        final ModelListPageResponse response = parsed(
+                "{\"data\":[" + data + "],\"first_id\":null,\"has_more\":false,\"last_id\":null}",
+                ModelListPageResponse.class);
+        return ModelListPage.builder()
+                .service(this.modelService)
+                .params(ModelListParams.none())
+                .response(response)
+                .build();
+    }
+
+    private static ModelInfo model(final String id, final String label, final boolean readsImages,
+                                   final boolean answersSchemas) {
+        return parsed(modelJson(id, label,
+                ",\"capabilities\":{\"image_input\":{\"supported\":" + readsImages
+                        + "},\"structured_outputs\":{\"supported\":" + answersSchemas + "}}"),
+                ModelInfo.class);
+    }
+
+    private static ModelInfo modelWithoutCapabilities(final String id, final String label) {
+        return parsed(modelJson(id, label, ",\"capabilities\":{}"), ModelInfo.class);
+    }
+
+    private static String asJson(final ModelInfo model) {
+        try {
+            return ObjectMappers.jsonMapper().writeValueAsString(model);
+        } catch (final JsonProcessingException e) {
+            throw new AssertionError("a model built here could not be written back out", e);
+        }
+    }
+
+    private static <T> T parsed(final String json, final Class<T> type) {
+        try {
+            return ObjectMappers.jsonMapper().readValue(json, type);
+        } catch (final JsonProcessingException e) {
+            throw new AssertionError("this fixture is not valid JSON: " + json, e);
+        }
+    }
+
+    private static String modelJson(final String id, final String label, final String capabilities) {
+        return "{\"type\":\"model\",\"id\":\"" + id + "\",\"display_name\":\"" + label
+                + "\",\"created_at\":\"2026-01-01T00:00:00Z\"" + capabilities + "}";
+    }
+
+    private static Supplier<AnthropicClient> noClient() {
+        return () -> {
+            throw new AssertionError("this test builds no client");
+        };
+    }
+
+    private static Function<SiftProviderSettings, AnthropicClient> noCheckClient() {
+        return _ -> {
+            throw new AssertionError("this test builds no client");
+        };
+    }
+
+    private void respondWith(final Message first, final Message... rest) {
+        when(this.messages.create(any(MessageCreateParams.class))).thenReturn(first, rest);
+    }
+
+    private static Message response(final String json, final long inputTokens, final long outputTokens) {
+        return response(json, inputTokens, outputTokens, StopReason.END_TURN);
+    }
+
+    private static Message response(final String json, final long inputTokens, final long outputTokens,
+                                    final StopReason stopReason) {
+        return Message.builder()
+                .id("msg_test")
+                .model("claude-sonnet-5")
+                .stopReason(stopReason)
+                .stopDetails(Optional.empty())
+                .stopSequence(Optional.empty())
+                .container(Optional.empty())
+                .addContent(ContentBlock.ofText(TextBlock.builder()
+                        .text(json)
+                        .citations(List.of())
+                        .build()))
+                .usage(Usage.builder()
+                        .inputTokens(inputTokens)
+                        .outputTokens(outputTokens)
+                        .cacheCreation(CacheCreation.builder()
+                                .ephemeral1hInputTokens(0L)
+                                .ephemeral5mInputTokens(0L)
+                                .build())
+                        .cacheCreationInputTokens(0L)
+                        .cacheReadInputTokens(0L)
+                        .inferenceGeo(Optional.empty())
+                        .serverToolUse(Optional.empty())
+                        .serviceTier(Optional.empty())
+                        .outputTokensDetails(Optional.empty())
+                        .build())
+                .build();
+    }
+
+    // Taken off a captured request rather than rebuilt here, so what is judged is what would have
+    // left the machine.
+    private String schemaSentFor(final List<SiftCategory> cards) throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.respondWith(response("""
+                { "verdicts": [ { "index": 1, "name": "IMG_0001.jpg", "action": "keep" } ] }
+                """, 10, 1));
+        this.sieve().sift(this.prep(cards, List.of(), "montage-001"), OPTIONS);
+        final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
+        verify(this.messages).create(captor.capture());
+        return ObjectMappers.jsonMapper().writeValueAsString(captor.getValue()
+                .outputConfig().orElseThrow().format().orElseThrow().schema()._additionalProperties());
+    }
+
+    private static List<String> refusals(final String schema, final String verdict) {
+        return SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12)
+                .getSchema(schema, InputFormat.JSON)
+                .validate("{ \"verdicts\": [ " + verdict + " ] }", InputFormat.JSON)
+                .stream()
+                .map(Object::toString)
+                .toList();
+    }
+
+    private PrepDir prepWithOneMontage(final String... names) throws IOException {
+        this.writeMontage("montage-001", names);
+        return this.prep("montage-001");
+    }
+
+    // One montage whose sidecar lists the given photos, plus its montage JPEG (any bytes do: the
+    // sieve only reads and encodes them).
+    private void writeMontage(final String montage, final String... names) throws IOException {
+        final var photos = new StringBuilder();
+        for (final String name : names) {
+            if (!photos.isEmpty()) {
+                photos.append(",\n");
+            }
+            photos.append("""
+                    { "src": "%s", "name": "%s", "time": "2019-06-20T15:00:10Z", "received": false }"""
+                    .formatted(jsonEscaped(this.src(name)), name));
+        }
+        Files.writeString(this.prepDir.resolve(montage + ".json"), """
+                {
+                  "montage": "%s",
+                  "photos": [ %s ]
+                }
+                """.formatted(montage, photos));
+        Files.write(this.prepDir.resolve(montage + ".jpg"), new byte[] {1, 2, 3, 4});
+    }
+
+    private PrepDir prep(final String... montages) {
+        return this.prep(List.of(), montages);
+    }
+
+    private PrepDir prep(final List<Path> unreviewable, final String... montages) {
+        return this.prep(CARDS, unreviewable, montages);
+    }
+
+    private PrepDir prep(final List<SiftCategory> categories, final List<Path> unreviewable,
+                         final String... montages) {
+        return new PrepDir("2019-06", categories, this.prepDir.resolve("base"), 0, unreviewable, montages.length,
+                this.prepDir, List.of(montages));
+    }
+
+    private Path src(final String name) {
+        return this.prepDir.resolve("sorted").resolve(name);
+    }
+
+    private static String jsonEscaped(final Path path) {
+        return path.toString().replace("\\", "\\\\");
+    }
+
+    private static SievePrompt sievePrompt(final SiftSettings settings) {
+        return new SievePrompt(settings);
+    }
+
+    private static SiftSettings settings(final @Nullable String model) {
+        return new FixedSettings("anthropic", CARDS,
+                new SiftProviderSettings(model, null, null));
+    }
+
+    private record FixedSettings(String provider, List<SiftCategory> categories,
+                                 SiftProviderSettings providerSettings) implements SiftSettings {
+
+        @Override
+        public SiftProviderSettings providerSettings(final String providerId) {
+            return this.provider.equals(providerId) ? this.providerSettings : SiftProviderSettings.unset();
+        }
+
+        @Override
+        public MontageConfig montage() {
+            return MontageConfig.defaults();
+        }
+    }
+
+    // Stands in for whatever this machine's tiers hold, a credential or nothing. Building a client
+    // neither stores nor clears one, so those two refuse rather than pretending to work.
+    private record FixedSecretStore(@Nullable String held) implements SecretStore {
+
+        @Override
+        public Optional<String> secret(final SecretId id) {
+            return Optional.ofNullable(this.held);
+        }
+
+        @Override
+        public SecretStatus status(final SecretId id) {
+            return this.held == null ? new SecretStatus.Absent() : new SecretStatus.InFile();
+        }
+
+        @Override
+        public List<SecretHolding> holdings(final SecretId id) {
+            return List.of(new SecretHolding(new SecretStatus.InFile(),
+                    this.held == null ? SecretHolding.Holding.EMPTY : SecretHolding.Holding.HOLDS));
+        }
+
+        @Override
+        public Optional<SecretStatus.StoredLocation> whereASaveWouldStoreIt() {
+            return Optional.of(new SecretStatus.InFile());
+        }
+
+        @Override
+        public void save(final SecretId id, final String secret) {
+            throw new UnsupportedOperationException("building a client stores no credential");
+        }
+
+        @Override
+        public void remove(final SecretId id) {
+            throw new UnsupportedOperationException("building a client clears no credential");
+        }
+    }
+}

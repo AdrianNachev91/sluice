@@ -15,8 +15,8 @@ import photos.sluice.application.port.out.UnrecognisedProviderException;
 import photos.sluice.application.port.out.WorkingRootBusyException;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftScope;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.secrets.SecretHolding;
 import photos.sluice.secrets.SecretId;
@@ -184,7 +184,7 @@ public class RefusalClassifier {
         return new Refusal(RefusalKind.SCOPE_OCCUPIED,
                 "A sift of " + occupied.occupant().scope() + " has not finished. Resume, troubleshoot or "
                         + "discard it before starting another for the same scope.",
-                Fields.of("occupant", CullPayloads.run(occupied.occupant())));
+                Fields.of("occupant", SiftPayloads.run(occupied.occupant())));
     }
 
     /**
@@ -194,14 +194,14 @@ public class RefusalClassifier {
      * @return {@link Refusal} the refusal
      */
     private static Refusal scopeOverlaps(final Pipeline.ScopeOverlapsException overlapped) {
-        final List<String> tags = overlapped.across().stream().map(CullRunSummary::scope).sorted().toList();
+        final List<String> tags = overlapped.across().stream().map(SiftRunSummary::scope).sorted().toList();
         final String them = tags.size() == 1 ? "it" : "them";
         return new Refusal(RefusalKind.SCOPE_OVERLAPS,
-                CullScope.tag(overlapped.chosen()) + " covers months already in " + String.join(", ", tags)
+                SiftScope.tag(overlapped.chosen()) + " covers months already in " + String.join(", ", tags)
                         + ", which " + (tags.size() == 1 ? "has" : "have") + " not finished. Finish or "
                         + "discard " + them + " first.",
-                Fields.of("chosen", CullScope.tag(overlapped.chosen()),
-                        "overlapping", overlapped.across().stream().map(CullPayloads::run).toList()));
+                Fields.of("chosen", SiftScope.tag(overlapped.chosen()),
+                        "overlapping", overlapped.across().stream().map(SiftPayloads::run).toList()));
     }
 
     /**

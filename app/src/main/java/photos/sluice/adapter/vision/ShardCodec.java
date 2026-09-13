@@ -5,13 +5,13 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
-import photos.sluice.domain.cull.Decision.Classification;
-import photos.sluice.domain.cull.Decision.NearDupChosen;
-import photos.sluice.domain.cull.Decision.NearDupReject;
-import photos.sluice.domain.cull.DecisionShard;
-import photos.sluice.domain.cull.Verdict;
-import photos.sluice.domain.cull.Verdict.Keep;
-import photos.sluice.domain.cull.VerdictAction;
+import photos.sluice.domain.sift.Decision.Classification;
+import photos.sluice.domain.sift.Decision.NearDupChosen;
+import photos.sluice.domain.sift.Decision.NearDupReject;
+import photos.sluice.domain.sift.DecisionShard;
+import photos.sluice.domain.sift.Verdict;
+import photos.sluice.domain.sift.Verdict.Keep;
+import photos.sluice.domain.sift.VerdictAction;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.exc.JacksonIOException;
 import tools.jackson.databind.DeserializationFeature;
@@ -40,7 +40,7 @@ import java.util.List;
  * content as a finding while letting a lock or a permission denial propagate.
  *
  * <p>Everything representable-but-wrong is left for
- * {@link photos.sluice.domain.cull.ShardValidator}, the single source of truth for the shard
+ * {@link photos.sluice.domain.sift.ShardValidator}, the single source of truth for the shard
  * contract. An absent required field deserializes to null and becomes empty here, and the validator
  * reports it aggregated with the rest of the run's problems rather than as a first-error parse
  * crash. Null DTO fields are omitted on write, so a classification shard carries only file, action

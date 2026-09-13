@@ -18,11 +18,11 @@ import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.TroubleshootPresenter;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PrepDirHealth.State;
-import photos.sluice.domain.cull.TroubleshootReport;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PrepDirHealth.State;
+import photos.sluice.domain.sift.TroubleshootReport;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -234,7 +234,7 @@ class TroubleshootPaneTest {
         final JobHandle<TroubleshootReport> pass = reporting(new TroubleshootReport(
                 health, false, null, List.of(), health, "the technical report"));
         when(pipeline.troubleshoot(any())).thenReturn(pass);
-        when(pipeline.cullRun(any())).thenReturn(new CullRunSummary("2019", PREP_DIR, health, null,
+        when(pipeline.siftRun(any())).thenReturn(new SiftRunSummary("2019", PREP_DIR, health, null,
                 Instant.now()));
         final var presenter = new TroubleshootPresenter(pipeline,
                 new RunLauncherPresenter(pipeline, new FxProgressPort()));

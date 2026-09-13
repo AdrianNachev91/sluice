@@ -6,12 +6,12 @@ import photos.sluice.adapter.fs.Sha256Hasher;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
-import photos.sluice.domain.cull.AnswerSource;
-import photos.sluice.domain.cull.CorruptSidecarResolution;
-import photos.sluice.domain.cull.Decision;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.Finding.MissingSource;
-import photos.sluice.domain.cull.ValidationReport;
+import photos.sluice.domain.sift.AnswerSource;
+import photos.sluice.domain.sift.CorruptSidecarResolution;
+import photos.sluice.domain.sift.Decision;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.Finding.MissingSource;
+import photos.sluice.domain.sift.ValidationReport;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -21,23 +21,23 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static photos.sluice.application.service.CullPrepTestSupport.FailingSidecarRead;
-import static photos.sluice.application.service.CullPrepTestSupport.applyEngine;
-import static photos.sluice.application.service.CullPrepTestSupport.applyPlanner;
-import static photos.sluice.application.service.CullPrepTestSupport.cards;
-import static photos.sluice.application.service.CullPrepTestSupport.classificationJson;
-import static photos.sluice.application.service.CullPrepTestSupport.nearDupChosenJson;
-import static photos.sluice.application.service.CullPrepTestSupport.nearDupRejectJson;
-import static photos.sluice.application.service.CullPrepTestSupport.prepDir;
-import static photos.sluice.application.service.CullPrepTestSupport.prepDirRemedies;
-import static photos.sluice.application.service.CullPrepTestSupport.readIndex;
-import static photos.sluice.application.service.CullPrepTestSupport.readLedger;
-import static photos.sluice.application.service.CullPrepTestSupport.sidecarEntry;
-import static photos.sluice.application.service.CullPrepTestSupport.writeFile;
-import static photos.sluice.application.service.CullPrepTestSupport.writeIndex;
-import static photos.sluice.application.service.CullPrepTestSupport.writeMoveRecord;
-import static photos.sluice.application.service.CullPrepTestSupport.writeShard;
-import static photos.sluice.application.service.CullPrepTestSupport.writeSidecar;
+import static photos.sluice.application.service.SiftPrepTestSupport.FailingSidecarRead;
+import static photos.sluice.application.service.SiftPrepTestSupport.applyEngine;
+import static photos.sluice.application.service.SiftPrepTestSupport.applyPlanner;
+import static photos.sluice.application.service.SiftPrepTestSupport.cards;
+import static photos.sluice.application.service.SiftPrepTestSupport.classificationJson;
+import static photos.sluice.application.service.SiftPrepTestSupport.nearDupChosenJson;
+import static photos.sluice.application.service.SiftPrepTestSupport.nearDupRejectJson;
+import static photos.sluice.application.service.SiftPrepTestSupport.prepDir;
+import static photos.sluice.application.service.SiftPrepTestSupport.prepDirRemedies;
+import static photos.sluice.application.service.SiftPrepTestSupport.readIndex;
+import static photos.sluice.application.service.SiftPrepTestSupport.readLedger;
+import static photos.sluice.application.service.SiftPrepTestSupport.sidecarEntry;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeFile;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeIndex;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeMoveRecord;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeShard;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeSidecar;
 
 // The read-only half of applying: whether a batch of shards is valid at all, and where each
 // decision already stands. Most of these drive a real apply() and assert on what it refused to do.
@@ -230,17 +230,17 @@ class ApplyPlannerTest {
         assertThat(report.decisions()).isEmpty();
     }
 
-    // A montage with an unreadable sidecar and no shard reads like one still being culled, and is
-    // not. A culler keys its verdicts against the sidecar, so it can never produce a shard here.
+    // A montage with an unreadable sidecar and no shard reads like one still being sifted, and is
+    // not. A sieve keys its verdicts against the sidecar, so it can never produce a shard here.
     // Unreported, the run sits WAITING with an empty findings list and only a discard escapes it.
     @Test
     void validateReportsACorruptSidecarForAMontageWithNoShardYet(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
-        final Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        writeFile(culled, "x");
+        final Path sifted = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(sifted, "x");
         writeIndex(prepDir, 1, List.of("montage-001", "montage-002"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
-        writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(sifted));
+        writeShard(prepDir, "montage-001", classificationJson(sifted, "junk", "blurry"));
         // montage-002 has neither a sidecar nor a shard.
 
         final ValidationReport report = applyPlanner(root)
@@ -255,14 +255,14 @@ class ApplyPlannerTest {
     @Test
     void validateSaysNothingAboutAMontageWithAReadableSidecarAndNoShardYet(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
-        final Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path sifted = root.resolve("Sorted/Photos/2019/06/a.jpg");
         final Path uncalled = root.resolve("Sorted/Photos/2019/06/b.jpg");
-        writeFile(culled, "x");
+        writeFile(sifted, "x");
         writeFile(uncalled, "y");
         writeIndex(prepDir, 2, List.of("montage-001", "montage-002"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(sifted));
         writeSidecar(prepDir, "montage-002", sidecarEntry(uncalled));
-        writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
+        writeShard(prepDir, "montage-001", classificationJson(sifted, "junk", "blurry"));
 
         final ValidationReport report = applyPlanner(root)
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
@@ -273,11 +273,11 @@ class ApplyPlannerTest {
     @Test
     void validateStopsReportingACorruptSidecarWithNoShardOnceItIsSetAside(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
-        final Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        writeFile(culled, "x");
+        final Path sifted = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(sifted, "x");
         writeIndex(prepDir, 1, List.of("montage-001", "montage-002"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
-        writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(sifted));
+        writeShard(prepDir, "montage-001", classificationJson(sifted, "junk", "blurry"));
         prepDirRemedies(root, root.resolve("Library")).resolveCorruptSidecar(prepDir, "montage-002",
                 CorruptSidecarResolution.SET_ASIDE, AnswerSource.DESKTOP);
 
@@ -292,11 +292,11 @@ class ApplyPlannerTest {
     @Test
     void validateStopsReportingACorruptSidecarWithNoShardOnceItIsApplyAnyway(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
-        final Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        writeFile(culled, "x");
+        final Path sifted = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(sifted, "x");
         writeIndex(prepDir, 1, List.of("montage-001", "montage-002"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
-        writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(sifted));
+        writeShard(prepDir, "montage-001", classificationJson(sifted, "junk", "blurry"));
         prepDirRemedies(root, root.resolve("Library")).resolveCorruptSidecar(prepDir, "montage-002",
                 CorruptSidecarResolution.APPLY_ANYWAY, AnswerSource.DESKTOP);
 
@@ -352,10 +352,10 @@ class ApplyPlannerTest {
         assertThat(report.decisions()).extracting(Decision::file).containsExactly(second);
     }
 
-    // A shard whose read merely failed says nothing about the culling agent's work. A CorruptShard
+    // A shard whose read merely failed says nothing about the sifting agent's work. A CorruptShard
     // finding would be a wrong diagnosis on content that is likely intact.
     @Test
-    void validateLetsAFailedShardReadPropagateInsteadOfBlamingTheCuller(@TempDir final Path root) throws IOException {
+    void validateLetsAFailedShardReadPropagateInsteadOfBlamingTheSieve(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
@@ -372,7 +372,7 @@ class ApplyPlannerTest {
 
     // A sidecar whose read merely failed, over a lock a backup process held for a moment, has done
     // nothing wrong. Diagnosing it as CorruptSidecar would cost the user an irreversible CHOICE
-    // answer over a file that was never damaged. Injected at the CullPrepPort seam, so the
+    // answer over a file that was never damaged. Injected at the SiftPrepPort seam, so the
     // classification does not depend on how a platform treats a directory standing in for a file.
     @Test
     void validateLetsAFailedSidecarReadPropagateInsteadOfDiagnosingCorruption(@TempDir final Path root) throws IOException {

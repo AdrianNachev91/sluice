@@ -1,7 +1,7 @@
 package photos.sluice.application.service;
 
 import org.junit.jupiter.api.Test;
-import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.SiftJobOutcome;
 
 import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
@@ -18,8 +18,8 @@ class AutoResumedSiftsTest {
     @Test
     void everyListenerHearsTheRunsNameAndItsJob() {
         final var heard = new ArrayList<String>();
-        final JobHandle<CullJobOutcome> job = neverFinishes();
-        final var jobs = new ArrayList<JobHandle<CullJobOutcome>>();
+        final JobHandle<SiftJobOutcome> job = neverFinishes();
+        final var jobs = new ArrayList<JobHandle<SiftJobOutcome>>();
         this.sifts.onResumed((scope, resumed) -> {
             heard.add(scope);
             jobs.add(resumed);
@@ -56,8 +56,8 @@ class AutoResumedSiftsTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static JobHandle<CullJobOutcome> neverFinishes() {
-        final JobHandle<CullJobOutcome> handle = mock(JobHandle.class);
+    private static JobHandle<SiftJobOutcome> neverFinishes() {
+        final JobHandle<SiftJobOutcome> handle = mock(JobHandle.class);
         when(handle.onComplete()).thenReturn(new CompletableFuture<>());
         return handle;
     }

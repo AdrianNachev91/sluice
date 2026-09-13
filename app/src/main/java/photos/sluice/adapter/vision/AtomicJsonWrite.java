@@ -12,7 +12,7 @@ import java.nio.file.StandardCopyOption;
  *
  * <p>Writing straight to the destination leaves a truncated file behind when the process dies
  * mid-write, or when the disk fills. What that costs depends on the artifact, and it is never
- * nothing. A rebuild, a repair the user has to answer, or a montage re-culled at the model's price.
+ * nothing. A rebuild, a repair the user has to answer, or a montage re-sifted at the model's price.
  * The bytes go to a temporary file in the same directory instead, and an atomic rename publishes
  * them. A plain move is allowed by its own contract to fall back on a copy, and a copy interrupted
  * partway leaves the destination holding exactly the half-written file this avoids.

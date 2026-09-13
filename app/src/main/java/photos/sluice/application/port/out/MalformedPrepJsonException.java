@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 
 /**
- * Thrown by every {@link CullPrepPort} read when the artifact cannot be trusted, permanently. That
+ * Thrown by every {@link SiftPrepPort} read when the artifact cannot be trusted, permanently. That
  * covers absent entirely, unparseable JSON, a null document, and a required field or list a shape
  * guarantees is never empty or null.
  *

@@ -26,10 +26,10 @@ import photos.sluice.application.port.in.SortedTally.MonthRow;
 import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.port.in.SpendEstimate;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PrepDirHealth.State;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.model.SortSummary.LowConfidenceCounts;
 import photos.sluice.application.service.JobHandle;
@@ -671,8 +671,8 @@ class RunLauncherPaneTest {
 
     private static RunLauncherPresenter presenterOverAnUnfinishedSiftOf2019() {
         final Pipeline pipeline = pipeline();
-        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
-                new CullRunSummary("2019", Path.of("logs", "sift-prep", "2019"),
+        when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(
+                new SiftRunSummary("2019", Path.of("logs", "sift-prep", "2019"),
                         new PrepDirHealth(State.WAITING, List.of()), null, Instant.EPOCH))));
         return new RunLauncherPresenter(pipeline, new FxProgressPort());
     }

@@ -91,20 +91,20 @@ public class DisasterDrawer {
     }
 
     /**
-     * Deletes every disaster-drawer entry under cullPrepRoot whose filename-embedded filing time is
+     * Deletes every disaster-drawer entry under siftPrepRoot whose filename-embedded filing time is
      * older than the 30-day retention window. Recognized by two things together: sitting directly
      * inside a {@code disasters/} folder, and carrying the leading timestamp this drawer writes. A
      * file failing either is left alone, never deleted.
      *
-     * @param cullPrepRoot {@link Path} the root directory holding every prep dir
+     * @param siftPrepRoot {@link Path} the root directory holding every prep dir
      * @return int the number of entries deleted
      */
-    public int sweepExpired(final Path cullPrepRoot) {
-        if (!this.mediaStore.exists(cullPrepRoot)) {
+    public int sweepExpired(final Path siftPrepRoot) {
+        if (!this.mediaStore.exists(siftPrepRoot)) {
             return 0;
         }
         final Instant cutoff = Instant.now().minus(RETENTION);
-        final List<Path> expired = this.mediaStore.listFiles(cullPrepRoot).stream()
+        final List<Path> expired = this.mediaStore.listFiles(siftPrepRoot).stream()
                 .filter(DisasterDrawer::isDrawerEntry)
                 .filter(file -> isExpired(file, cutoff, TIMESTAMP_PREFIX))
                 .toList();

@@ -4,15 +4,15 @@ import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.RunResultView.CardAction;
 import photos.sluice.adapter.ui.RunResultView.Count;
 import photos.sluice.adapter.ui.RunResultView.Tone;
-import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.SiftJobOutcome;
 import photos.sluice.application.port.in.WaitingReason;
-import photos.sluice.application.port.out.CullException;
-import photos.sluice.application.port.out.CullReport;
+import photos.sluice.application.port.out.SiftException;
+import photos.sluice.application.port.out.SiftReport;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.commit.LibraryBucket;
-import photos.sluice.domain.cull.ApplyReport;
-import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.sift.ApplyReport;
+import photos.sluice.domain.sift.Finding;
 import photos.sluice.domain.imports.ImportSummary;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.rescue.RescueSummary;
@@ -134,7 +134,7 @@ final class RunResults {
         return switch (outcome) {
             case final SortSummary sorted -> sortResult(ran, sorted, narrowedTo);
             case final CommitSummary moved -> movedResult(ran, moved);
-            case final CullJobOutcome sift -> siftResult(ran, sift);
+            case final SiftJobOutcome sift -> siftResult(ran, sift);
             case final RescueSummary rescued -> rescueResult(ran, rescued);
             case final ImportSummary brought -> importResult(ran, brought);
             // A mode whose engine answers with something nothing here reads yet. Headed as
@@ -173,11 +173,11 @@ final class RunResults {
      * the message stays out.
      *
      * @param ran {@link RunMode} the mode the job was started in
-     * @param incomplete {@link CullException} what the provider could not finish, carrying whatever
+     * @param incomplete {@link SiftException} what the provider could not finish, carrying whatever
      *         the run had judged and spent
      * @return {@link RunResultView} the card
      */
-    static RunResultView incompleteResult(final RunMode ran, final CullException incomplete) {
+    static RunResultView incompleteResult(final RunMode ran, final SiftException incomplete) {
         return new RunResultView(ran.verb() + " stopped and needs a look.", Tone.UNFINISHED,
                 INCOMPLETE_DETAIL, abandonedCounts(incomplete.report()), null, null, DONE,
                 Location.RUNS);
@@ -189,16 +189,16 @@ final class RunResults {
      * <p>Every row is dropped at zero. A provider that failed on its first sheet judged nothing and
      * spent nothing, and rows of zeroes would be three lines saying so.
      *
-     * @param report {@link CullReport} what the run had judged and consumed. Null only because the
+     * @param report {@link SiftReport} what the run had judged and consumed. Null only because the
      *         exception's own field allows it
      * @return a {@link List} of {@link Count} the rows
      */
-    private static List<Count> abandonedCounts(final @Nullable CullReport report) {
+    private static List<Count> abandonedCounts(final @Nullable SiftReport report) {
         if (report == null) {
             return List.of();
         }
         final List<Count> rows = new ArrayList<>();
-        addWhenAny(rows, "result-sheets-judged", "Sheets judged", report.montagesCulled());
+        addWhenAny(rows, "result-sheets-judged", "Sheets judged", report.montagesSifted());
         addWhenAny(rows, "result-calls", "Calls to your provider", report.apiCalls());
         addWhenAny(rows, "result-tokens", "Tokens used",
                 report.spend().inputTokens() + report.spend().outputTokens());
@@ -558,27 +558,27 @@ final class RunResults {
      * What the card says about a sift, whichever of the four ways it ended.
      *
      * @param ran {@link RunMode} the mode the job was started in
-     * @param outcome {@link CullJobOutcome} how the sift ended
+     * @param outcome {@link SiftJobOutcome} how the sift ended
      * @return {@link RunResultView} the card
      */
-    private static RunResultView siftResult(final RunMode ran, final CullJobOutcome outcome) {
+    private static RunResultView siftResult(final RunMode ran, final SiftJobOutcome outcome) {
         return switch (outcome) {
-            case CullJobOutcome.Applied(final CullReport report, final ApplyReport applied, Path _,
+            case SiftJobOutcome.Applied(final SiftReport report, final ApplyReport applied, Path _,
                                         final Long tokens) ->
                     new RunResultView(finishedHeading(ran), Tone.FINISHED, null,
                             siftCounts(report, applied, tokens), null, null, DONE);
-            case CullJobOutcome.Waiting(final var job, final WaitingReason why, _, Path _,
+            case SiftJobOutcome.Waiting(final var job, final WaitingReason why, _, Path _,
                                         final ApplyReport moved) ->
                     new RunResultView(waitingHeading(ran, why), Tone.UNFINISHED,
                             waitingDetail(why, moved), pausedCounts(job.shards(), moved), null,
                             resumeOffer(why, job.prepDir()), DONE, resumeLocation(why));
-            case CullJobOutcome.Blocked(final var job, final var findings, _, Path _) ->
+            case SiftJobOutcome.Blocked(final var job, final var findings, _, Path _) ->
                     new RunResultView(ran.verb() + " stopped and needs a look.", Tone.UNFINISHED,
                             blockedDetail(job.shards(), findings),
                             sheetCounts(job.shards()), null, null, DONE, Location.RUNS);
             // The one case with no prep dir behind it, so nothing counted the sheets. It is reached
             // only before rendering finished, which is why there are none to count.
-            case CullJobOutcome.Cancelled _ ->
+            case SiftJobOutcome.Cancelled _ ->
                     new RunResultView(headingFor(ran, true), toneFor(true),
                             CANCELLED_BEFORE_ANY_SHEET, List.of(), null, null, DONE);
         };
@@ -618,11 +618,11 @@ final class RunResults {
      * @param tokens every token the run spent, or null where that could not be read
      * @return a {@link List} of {@link Count} the rows
      */
-    private static List<Count> siftCounts(final CullReport report, final ApplyReport applied,
+    private static List<Count> siftCounts(final SiftReport report, final ApplyReport applied,
                                           final @Nullable Long tokens) {
         final List<Count> rows = new ArrayList<>();
         rows.add(new Count("result-reviewed", "Photos looked at", RunWords.grouped(applied.reviewed())));
-        rows.add(new Count("result-sheets", "Sheets judged", RunWords.grouped(report.montagesCulled())));
+        rows.add(new Count("result-sheets", "Sheets judged", RunWords.grouped(report.montagesSifted())));
         rows.add(new Count("result-api-calls", "Calls to your provider", RunWords.grouped(report.apiCalls())));
         // Left out where nothing was spent, which is every run on a provider that reaches no model.
         // A zero there is not a cheap run, it is a figure that does not apply. Left out too where

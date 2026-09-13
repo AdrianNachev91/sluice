@@ -7,7 +7,7 @@ package photos.sluice.application.service;
  *
  * <p>Declares {@code throws Exception}, like {@code Callable<T>}. That lets it call straight
  * through to a checked-exception engine method (for example {@code ApplyEngine.apply()} or
- * {@code VisionCuller.cull()}) with no wrap-and-rethrow boilerplate at the call site.
+ * {@code VisionSieve.sift()}) with no wrap-and-rethrow boilerplate at the call site.
  *
  * @param <T> the type of result this work produces
  */

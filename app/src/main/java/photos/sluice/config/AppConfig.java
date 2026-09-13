@@ -22,11 +22,11 @@ import java.nio.file.Path;
  * adapters that need a config-computed value at construction time.
  *
  * <p>It also enables the {@code @ConfigurationProperties} records that carry Sluice's bound
- * settings: {@link PathsProperties}, {@link MontageProperties}, {@link CullConfig},
+ * settings: {@link PathsProperties}, {@link MontageProperties}, {@link SiftConfig},
  * {@link ImagingConfig}, and {@link UiProperties}.
  */
 @Configuration
-@EnableConfigurationProperties({PathsProperties.class, MontageProperties.class, CullConfig.class,
+@EnableConfigurationProperties({PathsProperties.class, MontageProperties.class, SiftConfig.class,
         ImagingConfig.class, UiProperties.class})
 public class AppConfig {
 

@@ -26,11 +26,11 @@ import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PrepDirHealth.State;
 import photos.sluice.domain.job.ShardTally;
 
 import java.nio.file.Path;
@@ -160,7 +160,7 @@ class RunsPaneTest {
     void copyingInstructionsThatLeaveTheRunAloneSaysSoOnTheButton() throws Exception {
         final Pipeline pipeline = mock(Pipeline.class);
         when(pipeline.archivesFolder()).thenReturn(Path.of("logs", "archives"));
-        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
+        when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(new SiftRunSummary("2019",
                 Path.of("logs", "sift-prep", "2019"), new PrepDirHealth(State.WAITING, List.of()),
                 new ShardTally(0, 0, 4), Instant.now()))));
         when(pipeline.launchPromptFor(any())).thenReturn("Sift the photo sheets in ...");
@@ -243,7 +243,7 @@ class RunsPaneTest {
     @Test
     void aFolderThatCouldNotBeReadSaysSoInsteadOfTheNoRunsLine() throws Exception {
         final Pipeline pipeline = mock(Pipeline.class);
-        when(pipeline.cullRuns()).thenReturn(new CullRuns.Unlistable(Path.of("logs", "sift-prep")));
+        when(pipeline.siftRuns()).thenReturn(new SiftRuns.Unlistable(Path.of("logs", "sift-prep")));
         final Parent pane = onFxThread(() -> built(runsPresenter(pipeline)));
 
         assertThat(pane.lookup("#runs-unreadable").isManaged()).isTrue();
@@ -332,18 +332,18 @@ class RunsPaneTest {
 
     private static Pipeline waitingPipeline() {
         final Pipeline pipeline = mock(Pipeline.class);
-        when(pipeline.cullRuns())
-                .thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+        when(pipeline.siftRuns())
+                .thenReturn(new SiftRuns.Listed(List.of(run("2019", State.WAITING))));
         when(pipeline.archivesFolder()).thenReturn(Path.of("logs", "archives"));
         return pipeline;
     }
 
-    private static CullRunSummary run(final String scope, final State state) {
+    private static SiftRunSummary run(final String scope, final State state) {
         return run(scope, state, List.of());
     }
 
-    private static CullRunSummary run(final String scope, final State state, final List<Finding> findings) {
-        return new CullRunSummary(scope, Path.of("logs", "sift-prep", scope),
+    private static SiftRunSummary run(final String scope, final State state, final List<Finding> findings) {
+        return new SiftRunSummary(scope, Path.of("logs", "sift-prep", scope),
                 new PrepDirHealth(state, findings),
                 state == State.DAMAGED || state == State.COMPLETE ? null : new ShardTally(2, 2, 4),
                 Instant.now());
@@ -358,15 +358,15 @@ class RunsPaneTest {
 
     private static Pipeline rejectedAnswersPipeline() {
         final Pipeline pipeline = mock(Pipeline.class);
-        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.BLOCKED,
+        when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.BLOCKED,
                 List.of(new Finding.PhotosNotJudged("montage-001", List.of("IMG_1.jpg")))))));
         when(pipeline.archivesFolder()).thenReturn(Path.of("logs", "archives"));
         return pipeline;
     }
 
-    private static Parent built(final CullRunSummary... runs) {
+    private static Parent built(final SiftRunSummary... runs) {
         final Pipeline pipeline = mock(Pipeline.class);
-        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(runs)));
+        when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(runs)));
         when(pipeline.archivesFolder()).thenReturn(Path.of("logs", "archives"));
         return built(runsPresenter(pipeline));
     }

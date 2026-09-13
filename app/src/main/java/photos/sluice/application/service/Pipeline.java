@@ -3,7 +3,7 @@ package photos.sluice.application.service;
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.SiftJobOutcome;
 import photos.sluice.application.port.in.CurateOutcome;
 import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.InboxTally;
@@ -14,8 +14,8 @@ import photos.sluice.application.port.in.ReviewListing;
 import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.in.SortedTally;
 import photos.sluice.application.port.in.SpendEstimate;
-import photos.sluice.application.port.out.CullPrepPort;
-import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.application.port.out.SiftPrepPort;
+import photos.sluice.application.port.out.SiftSettings;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.MontageRenderer;
 import photos.sluice.application.port.out.PathsPort;
@@ -23,17 +23,17 @@ import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.SpendLedgerPort;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
-import photos.sluice.domain.cull.AnswerSource;
-import photos.sluice.domain.cull.ChoiceAnswer;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.CullScope;
-import photos.sluice.domain.cull.DiscardReport;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.LaunchPrompt;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PurgeReport;
-import photos.sluice.domain.cull.TroubleshootReport;
+import photos.sluice.domain.sift.AnswerSource;
+import photos.sluice.domain.sift.ChoiceAnswer;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.SiftScope;
+import photos.sluice.domain.sift.DiscardReport;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.LaunchPrompt;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PurgeReport;
+import photos.sluice.domain.sift.TroubleshootReport;
 import photos.sluice.domain.imports.ImportKind;
 import photos.sluice.domain.imports.ImportSummary;
 import photos.sluice.domain.model.SortScope;
@@ -50,7 +50,7 @@ import java.util.List;
  * (the JavaFX UI, a future CLI) gets a {@link JobHandle} back instead of blocking. Progress is
  * bracketed through {@link ProgressPort} around each engine call, via {@link PhaseRunner}.
  *
- * <p>Cull and curate orchestration live in {@link CullEngine} and {@link CurateEngine}. Pipeline
+ * <p>Sift and curate orchestration live in {@link SiftEngine} and {@link CurateEngine}. Pipeline
  * builds and wires both, then exposes their methods under one type so a driving adapter depends
  * on a single class.
  *
@@ -69,7 +69,7 @@ public class Pipeline {
     private static final String DISCARDING = "Discarding...";
     private static final String IMPORTING = "Importing...";
 
-    // How often a waiting job re-checks its prep dir's shard tally. Not a CullSettings knob: it is
+    // How often a waiting job re-checks its prep dir's shard tally. Not a SiftSettings knob: it is
     // an internal responsiveness/overhead tradeoff. Short enough that a human dropping files never
     // perceives the delay, long enough not to hammer disk or spam re-validation.
     private static final Duration DEFAULT_WATCH_POLL_INTERVAL = Duration.ofSeconds(2);
@@ -80,7 +80,7 @@ public class Pipeline {
     private final ImportEngine importEngine;
     private final JobRunner jobRunner;
     private final PhaseRunner phaseRunner;
-    private final CullEngine cullEngine;
+    private final SiftEngine siftEngine;
     private final CurateEngine curateEngine;
     private final DisasterDrawer disasterDrawer;
     private final Troubleshooter troubleshooter;
@@ -103,12 +103,12 @@ public class Pipeline {
      * @param commitEngine {@link CommitEngine} the commit engine
      * @param rescueEngine {@link RescueEngine} the rescue engine
      * @param importEngine {@link ImportEngine} brings chosen folders and files into the Inbox
-     * @param montageRenderer {@link MontageRenderer} renders cull contact-sheet montages
-     * @param cullDispatcher {@link CullDispatcher} dispatches cull decisions to the vision agent
-     * @param applyEngine {@link ApplyEngine} applies merged cull decisions
+     * @param montageRenderer {@link MontageRenderer} renders sift contact-sheet montages
+     * @param siftDispatcher {@link SiftDispatcher} dispatches sift decisions to the vision agent
+     * @param applyEngine {@link ApplyEngine} applies merged sift decisions
      * @param prepDirRemedies {@link PrepDirRemedies} discards a prep dir the user gave up on
-     * @param cullPrepPort {@link CullPrepPort} prepares cull montages and shards
-     * @param cullSettings {@link CullSettings} user-facing cull configuration
+     * @param siftPrepPort {@link SiftPrepPort} prepares sift montages and shards
+     * @param siftSettings {@link SiftSettings} user-facing sift configuration
      * @param mediaStore {@link MediaStore} moves/copies media files
      * @param pathsPort {@link PathsPort} resolves configured library/inbox paths
      * @param jobRunner {@link JobRunner} runs work as cancellable background jobs
@@ -119,15 +119,15 @@ public class Pipeline {
      * @param applyPlanner {@link ApplyPlanner} the gate a watcher's readiness check runs
      * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that gate honours
      * @param pathValidation {@link PathValidationUseCase} checks the folder roots before work reaches them
-     * @param spendLedger {@link SpendLedgerPort} records what each cull run consumed
+     * @param spendLedger {@link SpendLedgerPort} records what each sift run consumed
      * @param secretStore {@link SecretStore} says whether the configured provider's credential is held
      */
     @Autowired
     public Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
                     final ImportEngine importEngine, final MontageRenderer montageRenderer,
-                    final CullDispatcher cullDispatcher, final ApplyEngine applyEngine,
-                    final PrepDirRemedies prepDirRemedies, final CullPrepPort cullPrepPort,
-                    final CullSettings cullSettings,
+                    final SiftDispatcher siftDispatcher, final ApplyEngine applyEngine,
+                    final PrepDirRemedies prepDirRemedies, final SiftPrepPort siftPrepPort,
+                    final SiftSettings siftSettings,
                     final MediaStore mediaStore, final PathsPort pathsPort,
                     final JobRunner jobRunner,
                     final ProgressPort progressPort, final DisasterDrawer disasterDrawer,
@@ -135,9 +135,9 @@ public class Pipeline {
                     final ApplyPlanner applyPlanner, final LedgerReader ledgerReader,
                     final PathValidationUseCase pathValidation, final SpendLedgerPort spendLedger,
                     final SecretStore secretStore) {
-        this(sortEngine, commitEngine, rescueEngine, importEngine, montageRenderer, cullDispatcher, applyEngine,
+        this(sortEngine, commitEngine, rescueEngine, importEngine, montageRenderer, siftDispatcher, applyEngine,
                 prepDirRemedies,
-                cullPrepPort, cullSettings, mediaStore, pathsPort, jobRunner, progressPort,
+                siftPrepPort, siftSettings, mediaStore, pathsPort, jobRunner, progressPort,
                 disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, ledgerReader, pathValidation,
                 spendLedger, secretStore, DEFAULT_WATCH_POLL_INTERVAL);
     }
@@ -150,12 +150,12 @@ public class Pipeline {
      * @param commitEngine {@link CommitEngine} the commit engine
      * @param rescueEngine {@link RescueEngine} the rescue engine
      * @param importEngine {@link ImportEngine} brings chosen folders and files into the Inbox
-     * @param montageRenderer {@link MontageRenderer} renders cull contact-sheet montages
-     * @param cullDispatcher {@link CullDispatcher} dispatches cull decisions to the vision agent
-     * @param applyEngine {@link ApplyEngine} applies merged cull decisions
+     * @param montageRenderer {@link MontageRenderer} renders sift contact-sheet montages
+     * @param siftDispatcher {@link SiftDispatcher} dispatches sift decisions to the vision agent
+     * @param applyEngine {@link ApplyEngine} applies merged sift decisions
      * @param prepDirRemedies {@link PrepDirRemedies} discards a prep dir the user gave up on
-     * @param cullPrepPort {@link CullPrepPort} prepares cull montages and shards
-     * @param cullSettings {@link CullSettings} user-facing cull configuration
+     * @param siftPrepPort {@link SiftPrepPort} prepares sift montages and shards
+     * @param siftSettings {@link SiftSettings} user-facing sift configuration
      * @param mediaStore {@link MediaStore} moves/copies media files
      * @param pathsPort {@link PathsPort} resolves configured library/inbox paths
      * @param jobRunner {@link JobRunner} runs work as cancellable background jobs
@@ -166,14 +166,14 @@ public class Pipeline {
      * @param applyPlanner {@link ApplyPlanner} the gate a watcher's readiness check runs
      * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that gate honours
      * @param pathValidation {@link PathValidationUseCase} checks the folder roots before work reaches them
-     * @param spendLedger {@link SpendLedgerPort} records what each cull run consumed
+     * @param spendLedger {@link SpendLedgerPort} records what each sift run consumed
      * @param secretStore {@link SecretStore} says whether the configured provider's credential is held
      * @param watchPollInterval {@link Duration} how often a waiting job re-checks its prep dir
      */
     Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
              final ImportEngine importEngine, final MontageRenderer montageRenderer,
-             final CullDispatcher cullDispatcher, final ApplyEngine applyEngine,
-             final PrepDirRemedies prepDirRemedies, final CullPrepPort cullPrepPort, final CullSettings cullSettings,
+             final SiftDispatcher siftDispatcher, final ApplyEngine applyEngine,
+             final PrepDirRemedies prepDirRemedies, final SiftPrepPort siftPrepPort, final SiftSettings siftSettings,
              final MediaStore mediaStore, final PathsPort pathsPort,
              final JobRunner jobRunner,
              final ProgressPort progressPort, final DisasterDrawer disasterDrawer,
@@ -189,11 +189,11 @@ public class Pipeline {
         this.jobRunner = jobRunner;
         this.phaseRunner = new PhaseRunner(progressPort);
         this.rootsGuard = new RootsGuard(pathValidation);
-        this.cullEngine = new CullEngine(montageRenderer, cullDispatcher, applyEngine, cullPrepPort, cullSettings,
+        this.siftEngine = new SiftEngine(montageRenderer, siftDispatcher, applyEngine, siftPrepPort, siftSettings,
                 mediaStore, pathsPort, jobRunner, progressPort, applyPlanner, ledgerReader,
                 prepDirDoctor, prepDirRemedies, this.rootsGuard, spendLedger, secretStore, watchPollInterval,
                 this.runChanges, this.autoResumedSifts);
-        this.curateEngine = new CurateEngine(sortEngine, jobRunner, this.cullEngine, this.phaseRunner);
+        this.curateEngine = new CurateEngine(sortEngine, jobRunner, this.siftEngine, this.phaseRunner);
         this.disasterDrawer = disasterDrawer;
         this.troubleshooter = troubleshooter;
         this.prepDirDoctor = prepDirDoctor;
@@ -210,7 +210,7 @@ public class Pipeline {
      */
     public void armWatchesForResumableRuns() {
         this.requireUsableRoots();
-        this.cullEngine.armWatchesForResumableRuns();
+        this.siftEngine.armWatchesForResumableRuns();
     }
 
     /**
@@ -220,7 +220,7 @@ public class Pipeline {
      */
     public void sweepExpiredDisasterDrawers() {
         this.requireUsableRoots();
-        this.disasterDrawer.sweepExpired(this.pathsPort.cullPrep());
+        this.disasterDrawer.sweepExpired(this.pathsPort.siftPrep());
         this.disasterDrawer.sweepExpiredGraveyard(this.pathsPort.graveyard());
     }
 
@@ -292,18 +292,18 @@ public class Pipeline {
     }
 
     /**
-     * Runs a cull job over one scope.
+     * Runs a sift job over one scope.
      *
-     * @param scope {@link CullScope} which files to cull
-     * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running job
+     * @param scope {@link SiftScope} which files to sift
+     * @return a {@link JobHandle} of {@link SiftJobOutcome} a handle to the running job
      */
-    public JobHandle<CullJobOutcome> cull(final CullScope scope) {
+    public JobHandle<SiftJobOutcome> sift(final SiftScope scope) {
         this.requireUsableRoots();
-        return this.cullEngine.cull(scope);
+        return this.siftEngine.sift(scope);
     }
 
     /**
-     * Runs a sort followed by a cull, as one job.
+     * Runs a sort followed by a sift, as one job.
      *
      * <p>No surface calls this. It is kept whole and tested against the day one does.
      * {@code PipelineSurfaceTest} pins it, so a later deletion is a decision rather than a tidy-up.
@@ -317,19 +317,19 @@ public class Pipeline {
     }
 
     /**
-     * Resumes a cull job that was waiting on shards.
+     * Resumes a sift job that was waiting on shards.
      *
-     * @param prepDir {@link Path} the cull prep directory to resume
+     * @param prepDir {@link Path} the sift prep directory to resume
      * @param allowPartial boolean whether to proceed with missing shards
-     * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running job
+     * @return a {@link JobHandle} of {@link SiftJobOutcome} a handle to the running job
      */
-    public JobHandle<CullJobOutcome> resume(final Path prepDir, final boolean allowPartial) {
+    public JobHandle<SiftJobOutcome> resume(final Path prepDir, final boolean allowPartial) {
         this.requireUsableRoots();
-        return this.cullEngine.resume(prepDir, allowPartial);
+        return this.siftEngine.resume(prepDir, allowPartial);
     }
 
     /**
-     * Every cull run currently on disk, diagnosed.
+     * Every sift run currently on disk, diagnosed.
      *
      * <p>Derived by enumerating the sift-prep root and diagnosing each dir, never from a persisted
      * list. Enumerating is what keeps a damaged run visible, which is exactly when it most needs to
@@ -342,15 +342,15 @@ public class Pipeline {
      * <p>Not routed through {@link JobRunner}: it only reads, so it does not compete for the single
      * job slot.
      *
-     * <p>A sift-prep root nobody could read answers {@link CullRuns.Unlistable} rather than an empty
+     * <p>A sift-prep root nobody could read answers {@link SiftRuns.Unlistable} rather than an empty
      * list, which would read as a reader having no runs.
      *
-     * @return {@link CullRuns} every run found, diagnosed and ordered by scope, or that the root
+     * @return {@link SiftRuns} every run found, diagnosed and ordered by scope, or that the root
      *     could not be read
      */
-    public CullRuns cullRuns() {
+    public SiftRuns siftRuns() {
         this.requireUsableRoots();
-        return this.prepDirDoctor.runs(this.pathsPort.cullPrep());
+        return this.prepDirDoctor.runs(this.pathsPort.siftPrep());
     }
 
     /**
@@ -358,16 +358,16 @@ public class Pipeline {
      *
      * <p>Reads one prep dir rather than the whole sift-prep root.
      *
-     * <p>Never throws whatever state the dir is in, the contract {@link #cullRuns} already carries
+     * <p>Never throws whatever state the dir is in, the contract {@link #siftRuns} already carries
      * per run. A dir that could not be read answers DAMAGED with a null tally.
      *
-     * <p>Not routed through {@link JobRunner}, for the same reason as {@link #cullRuns}. That is
+     * <p>Not routed through {@link JobRunner}, for the same reason as {@link #siftRuns}. That is
      * what lets it answer while a sift is running.
      *
      * @param prepDir {@link Path} the run to diagnose
-     * @return {@link CullRunSummary} that run's scope, diagnosis, tally and age
+     * @return {@link SiftRunSummary} that run's scope, diagnosis, tally and age
      */
-    public CullRunSummary cullRun(final Path prepDir) {
+    public SiftRunSummary siftRun(final Path prepDir) {
         this.requireUsableRoots();
         return this.prepDirDoctor.summaryOf(prepDir);
     }
@@ -420,7 +420,7 @@ public class Pipeline {
      * <p>A walk of the tree, so its cost grows with what is in there. A caller that would block a
      * window on it runs it off whatever thread paints.
      *
-     * <p>Not routed through {@link JobRunner}, for the same reason as {@link #cullRuns}.
+     * <p>Not routed through {@link JobRunner}, for the same reason as {@link #siftRuns}.
      *
      * @return {@link InboxTally} what is waiting, and what it comes to on disk
      */
@@ -487,7 +487,7 @@ public class Pipeline {
      * @return {@link SpendEstimate} what a sift over them is expected to consume
      */
     public SpendEstimate estimateFor(final int photos) {
-        return this.cullEngine.estimateFor(photos);
+        return this.siftEngine.estimateFor(photos);
     }
 
     /**
@@ -503,7 +503,7 @@ public class Pipeline {
      * @return boolean true when a run on the configured provider can spend
      */
     public boolean configuredProviderSpends() {
-        return this.cullEngine.configuredProviderSpends();
+        return this.siftEngine.configuredProviderSpends();
     }
 
     /**
@@ -523,7 +523,7 @@ public class Pipeline {
      * have just changed underneath it.
      */
     public void stopAllWatching() {
-        this.cullEngine.disarmAllWatches();
+        this.siftEngine.disarmAllWatches();
     }
 
     /**
@@ -567,9 +567,9 @@ public class Pipeline {
     /**
      * Runs a troubleshoot pass over prepDir as a background job. Routing it through JobRunner buys
      * the same one-job-at-a-time discipline every other job gets. A reconcile's move-log rewrite can
-     * then never race a concurrent apply/cull/commit against the same prep dir.
+     * then never race a concurrent apply/sift/commit against the same prep dir.
      *
-     * @param prepDir {@link Path} the cull prep directory to troubleshoot
+     * @param prepDir {@link Path} the sift prep directory to troubleshoot
      * @return a {@link JobHandle} of {@link TroubleshootReport} a handle to the running job
      * @throws RunOutsideWorkingRootException if it sits outside the sift-prep root in force
      */
@@ -577,7 +577,7 @@ public class Pipeline {
         this.requireUsableRoots();
         return this.jobRunner.submit(_ -> {
             this.phaseRunner.planned(List.of());
-            this.cullEngine.refuseRunOutsideWorkingRoot(prepDir);
+            this.siftEngine.refuseRunOutsideWorkingRoot(prepDir);
             return this.troubleshooter.troubleshoot(prepDir);
         });
     }
@@ -610,7 +610,7 @@ public class Pipeline {
     }
 
     /**
-     * Runs a manual, one-button purge of every completed cull run as a background job. Routing it
+     * Runs a manual, one-button purge of every completed sift run as a background job. Routing it
      * through JobRunner buys the same one-job-at-a-time discipline every other job gets. A purge can
      * then never race a re-prep of a scope it is in the middle of deleting.
      *
@@ -620,7 +620,7 @@ public class Pipeline {
         this.requireUsableRoots();
         return this.jobRunner.submit(_ -> {
             this.phaseRunner.planned(List.of());
-            return this.prepDirDoctor.purgeCompleted(this.pathsPort.cullPrep());
+            return this.prepDirDoctor.purgeCompleted(this.pathsPort.siftPrep());
         });
     }
 
@@ -632,7 +632,7 @@ public class Pipeline {
      * through JobRunner buys the same one-job-at-a-time discipline every other job gets, so a
      * discard can never race a re-prep of the scope it is giving up on.
      *
-     * @param prepDir {@link Path} the cull prep directory to discard
+     * @param prepDir {@link Path} the sift prep directory to discard
      * @return a {@link JobHandle} of {@link DiscardReport} a handle to the running job
      * @throws RunOutsideWorkingRootException if it sits outside the sift-prep root in force
      */
@@ -640,16 +640,16 @@ public class Pipeline {
         this.requireUsableRoots();
         return this.jobRunner.submit(_ -> {
             this.phaseRunner.planned(List.of(DISCARDING));
-            this.cullEngine.refuseRunOutsideWorkingRoot(prepDir);
+            this.siftEngine.refuseRunOutsideWorkingRoot(prepDir);
             if (this.prepDirDoctor.diagnose(prepDir).state() == PrepDirHealth.State.COMPLETE) {
                 throw new RunAlreadyFinishedException(prepDir);
             }
-            this.cullEngine.disarmWatch(prepDir);
+            this.siftEngine.disarmWatch(prepDir);
             final DiscardReport report =
                     this.phaseRunner.run(DISCARDING, progress -> this.prepDirRemedies.discard(prepDir, progress));
             // After the file work, so a discard that threw leaves the run still occupying its scope
             // in the ledger as well as on disk.
-            this.cullEngine.recordDiscard(prepDir.getFileName().toString());
+            this.siftEngine.recordDiscard(prepDir.getFileName().toString());
             return report;
         });
     }
@@ -665,7 +665,7 @@ public class Pipeline {
      */
     public String launchPromptFor(final Path prepDir) {
         this.requireUsableRoots();
-        return this.cullEngine.launchPromptFor(prepDir);
+        return this.siftEngine.launchPromptFor(prepDir);
     }
 
     /**
@@ -689,13 +689,13 @@ public class Pipeline {
      */
     public String redoRejectedAnswers(final Path prepDir) {
         this.requireUsableRoots();
-        this.cullEngine.refuseRunOutsideWorkingRoot(prepDir);
+        this.siftEngine.refuseRunOutsideWorkingRoot(prepDir);
         final List<Finding> findings = this.prepDirDoctor.diagnose(prepDir).findings();
         final List<String> sheets = LaunchPrompt.sheetsToRedo(findings);
         if (sheets.isEmpty()) {
             throw new NothingToRedoException(prepDir);
         }
-        final String prompt = this.cullEngine.redoPromptFor(prepDir, findings);
+        final String prompt = this.siftEngine.redoPromptFor(prepDir, findings);
         this.prepDirRemedies.setAsideAnswers(prepDir, sheets);
         return prompt;
     }
@@ -703,11 +703,11 @@ public class Pipeline {
     /**
      * Whether a watcher is currently polling one waiting run's prep dir.
      *
-     * @param prepDir {@link Path} the cull prep directory to check
+     * @param prepDir {@link Path} the sift prep directory to check
      * @return boolean true if a watcher is currently polling it
      */
     public boolean isWatchActive(final Path prepDir) {
-        return this.cullEngine.isWatchActive(prepDir);
+        return this.siftEngine.isWatchActive(prepDir);
     }
 
     /**
@@ -792,14 +792,14 @@ public class Pipeline {
     }
 
     /**
-     * Thrown when a fresh cull or curate is refused because an unfinished run already occupies the
+     * Thrown when a fresh sift or curate is refused because an unfinished run already occupies the
      * scope's own prep dir. It carries that run, diagnosed, so a caller routes the user to the
      * right way out without parsing the message. Which remedy each state offers:
-     * {@code app/docs/design/application/service/cull-engine.md}.
+     * {@code app/docs/design/application/service/sift-engine.md}.
      */
     public static sealed class ScopeOccupiedException extends IllegalStateException
             permits CurateConflictException {
-        private final transient CullRunSummary occupant;
+        private final transient SiftRunSummary occupant;
 
         /**
          * Creates the exception, rendering the refusal message from the occupying run.
@@ -807,9 +807,9 @@ public class Pipeline {
          * <p>Public, like the refusals in {@code port.in}. A facade whose refusals only it can
          * construct cannot be stood in for.
          *
-         * @param occupant {@link CullRunSummary} the run already occupying the scope
+         * @param occupant {@link SiftRunSummary} the run already occupying the scope
          */
-        public ScopeOccupiedException(final CullRunSummary occupant) {
+        public ScopeOccupiedException(final SiftRunSummary occupant) {
             super("A sift for '" + occupant.scope() + "' already occupies " + occupant.prepDir() + ", and is "
                     + occupant.health().state() + " - resume, troubleshoot or discard it before starting another"
                     + " for the same scope.");
@@ -819,9 +819,9 @@ public class Pipeline {
         /**
          * Returns the run occupying the scope, diagnosed.
          *
-         * @return {@link CullRunSummary} the occupying run
+         * @return {@link SiftRunSummary} the occupying run
          */
-        public CullRunSummary occupant() {
+        public SiftRunSummary occupant() {
             return this.occupant;
         }
     }
@@ -839,18 +839,18 @@ public class Pipeline {
      * comes back, and is refused by the next.
      */
     public static final class ScopeOverlapsException extends IllegalStateException {
-        private final transient CullScope.Year chosen;
-        private final transient List<CullRunSummary> across;
+        private final transient SiftScope.Year chosen;
+        private final transient List<SiftRunSummary> across;
 
         /**
          * Creates the exception over the timeframe chosen and the unfinished runs it overlaps.
          *
-         * @param chosen {@link CullScope.Year} the timeframe the caller asked to sift
-         * @param across a {@link List} of {@link CullRunSummary} the unfinished runs it overlaps
+         * @param chosen {@link SiftScope.Year} the timeframe the caller asked to sift
+         * @param across a {@link List} of {@link SiftRunSummary} the unfinished runs it overlaps
          */
-        public ScopeOverlapsException(final CullScope.Year chosen, final List<CullRunSummary> across) {
-            super(CullScope.tag(chosen) + " overlaps "
-                    + String.join(", ", across.stream().map(CullRunSummary::scope).toList())
+        public ScopeOverlapsException(final SiftScope.Year chosen, final List<SiftRunSummary> across) {
+            super(SiftScope.tag(chosen) + " overlaps "
+                    + String.join(", ", across.stream().map(SiftRunSummary::scope).toList())
                     + (across.size() == 1
                     ? ", which is a sift you have not finished. Finish or discard it first."
                     : ", which are sifts you have not finished. Finish or discard them first."));
@@ -861,18 +861,18 @@ public class Pipeline {
         /**
          * Returns the timeframe the caller asked to sift.
          *
-         * @return {@link CullScope.Year} the chosen scope
+         * @return {@link SiftScope.Year} the chosen scope
          */
-        public CullScope.Year chosen() {
+        public SiftScope.Year chosen() {
             return this.chosen;
         }
 
         /**
          * Returns the unfinished runs the chosen timeframe overlaps, diagnosed.
          *
-         * @return a {@link List} of {@link CullRunSummary} the runs in the way
+         * @return a {@link List} of {@link SiftRunSummary} the runs in the way
          */
-        public List<CullRunSummary> across() {
+        public List<SiftRunSummary> across() {
             return this.across;
         }
     }
@@ -896,10 +896,10 @@ public class Pipeline {
         /**
          * Creates the exception carrying both the occupying run and the partial sort result.
          *
-         * @param occupant {@link CullRunSummary} the run already occupying the scope
+         * @param occupant {@link SiftRunSummary} the run already occupying the scope
          * @param sortSummary {@link SortSummary} the sort summary produced before the conflict
          */
-        public CurateConflictException(final CullRunSummary occupant, final SortSummary sortSummary) {
+        public CurateConflictException(final SiftRunSummary occupant, final SortSummary sortSummary) {
             super(occupant);
             this.sortSummary = sortSummary;
         }
@@ -967,7 +967,7 @@ public class Pipeline {
     }
 
     /**
-     * Thrown when a fresh cull or curate is refused because scope's own prep dir could not be read
+     * Thrown when a fresh sift or curate is refused because scope's own prep dir could not be read
      * at all, which is a different fault from a diagnosed run occupying it. Refusing is the same
      * safe direction a {@link ScopeOccupiedException} takes: proceeding would let a fresh prep clear
      * a directory nobody could confirm was actually empty. Nothing here was diagnosed, so it carries

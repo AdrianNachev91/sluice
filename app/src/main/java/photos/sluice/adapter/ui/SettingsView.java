@@ -146,7 +146,7 @@ public record SettingsView(FolderField workingRoot, FolderField libraryRoot, Fol
     }
 
     /**
-     * One provider a user can route culling through, and which controls it uses.
+     * One provider a user can route sifting through, and which controls it uses.
      *
      * <p>A choice carries its own fields, so picking one in a dropdown answers what to show without
      * asking anything again. Nothing can then be asked about a provider that does not exist.

@@ -1,7 +1,7 @@
 package photos.sluice.application.port.out;
 
 /**
- * How a cull run ended, as the spend ledger records it.
+ * How a sift run ended, as the spend ledger records it.
  *
  * <p>Not the outcome set one for one, because the distinctions the two draw are different. A
  * cancellation before montage rendering finished and one after dispatch ran are separate outcomes,

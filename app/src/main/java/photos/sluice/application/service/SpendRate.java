@@ -5,7 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import photos.sluice.application.port.out.RunEnding;
 import photos.sluice.application.port.out.SpendLedgerEntry;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.util.List;
 import java.util.Set;
@@ -89,7 +89,7 @@ record SpendRate(double callsPerMontage, long outputTokensPerMontage, boolean fr
                 .filter(entry -> COMPLETED.contains(entry.ending()))
                 .filter(entry -> modelId != null && modelId.equals(entry.modelId()))
                 .filter(entry -> entry.tileSize() == grid.tileSize() && entry.tilesPerRow() == grid.tilesPerRow())
-                .filter(entry -> entry.montagesCulled() > 0)
+                .filter(entry -> entry.montagesSifted() > 0)
                 .toList();
         final List<SpendLedgerEntry> matching = applicable.stream().filter(SpendRate::credible).toList();
         if (matching.isEmpty()) {
@@ -103,7 +103,7 @@ record SpendRate(double callsPerMontage, long outputTokensPerMontage, boolean fr
             }
             return seed();
         }
-        final long montages = matching.stream().mapToLong(SpendLedgerEntry::montagesCulled).sum();
+        final long montages = matching.stream().mapToLong(SpendLedgerEntry::montagesSifted).sum();
         final long calls = matching.stream().mapToLong(SpendLedgerEntry::apiCalls).sum();
         final long output = matching.stream().mapToLong(SpendLedgerEntry::outputTokens).sum();
         return new SpendRate((double) calls / montages, output / montages, true);
@@ -121,7 +121,7 @@ record SpendRate(double callsPerMontage, long outputTokensPerMontage, boolean fr
      * @return boolean true when the run's own counts are consistent with each other
      */
     private static boolean credible(final SpendLedgerEntry entry) {
-        final long montages = entry.montagesCulled();
+        final long montages = entry.montagesSifted();
         return entry.apiCalls() >= montages
                 && entry.apiCalls() <= montages * MAX_CALLS_PER_MONTAGE
                 && entry.outputTokens() <= montages * MAX_CREDIBLE_OUTPUT_TOKENS_PER_MONTAGE;

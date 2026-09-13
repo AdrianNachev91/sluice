@@ -1,22 +1,22 @@
 # Pipeline
 
 How `application/service/Pipeline` wraps `SortEngine`/`CommitEngine`/`RescueEngine`, and builds and
-exposes `CullEngine`/`CurateEngine`. A driving caller gets a `JobHandle` back instead of blocking,
+exposes `SiftEngine`/`CurateEngine`. A driving caller gets a `JobHandle` back instead of blocking,
 with progress reported through `ProgressPort` via `PhaseRunner`
 (`app/src/main/java/photos/sluice/application/service/Pipeline.java`,
 `app/src/main/java/photos/sluice/application/service/PhaseRunner.java`,
 `app/src/main/java/photos/sluice/application/service/JobRunner.java`,
-`app/src/main/java/photos/sluice/application/port/out/ProgressPort.java`). `cull()`/`resume()` and
-`curate()` are one-line delegates to `CullEngine`/`CurateEngine` - see
-[`cull-engine.md`](cull-engine.md)/[`curate-engine.md`](curate-engine.md) for how those actually
-work. `cullRuns()` delegates to `PrepDirDoctor.runs()` instead, since listing what is on disk is
+`app/src/main/java/photos/sluice/application/port/out/ProgressPort.java`). `sift()`/`resume()` and
+`curate()` are one-line delegates to `SiftEngine`/`CurateEngine` - see
+[`sift-engine.md`](sift-engine.md)/[`curate-engine.md`](curate-engine.md) for how those actually
+work. `siftRuns()` delegates to `PrepDirDoctor.runs()` instead, since listing what is on disk is
 diagnosis rather than orchestration. `troubleshoot(prepDir)` and `purgeCompleted()` are each a
 one-line `JobRunner.submit()` delegate (to `Troubleshooter` and `PrepDirDoctor` respectively), with
 no `PhaseRunner`/`ProgressPort` bracketing. Neither has per-item progress worth reporting, so
 `JobRunner`'s one-job-at-a-time discipline is the whole reason either runs as a job. See
 [`troubleshooter.md`](troubleshooter.md)/[`prep-dir-doctor.md`](prep-dir-doctor.md) for what each
 actually does. `stopAllWatching()` retires every auto-resume poller at once, which is bookkeeping
-against an in-memory map rather than work - see [`cull-engine.md`](cull-engine.md). Two callers need
+against an in-memory map rather than work - see [`sift-engine.md`](sift-engine.md). Two callers need
 it: a save that moved the working root and so left them all polling outside it, and an app that is
 closing. A save moving only the library or the inbox does not come here.
 
@@ -31,14 +31,14 @@ Those two are the only entry points that run no root check. Neither resolves a p
 whose roots are unusable has to be able to close as cleanly as one whose roots are fine.
 
 Every other public method opens with the same call before it resolves a single path:
-`RootsGuard.requireUsable()`. That includes `sort`, `commit`, `rescue`, `cull`, `curate`, `resume`,
-`cullRuns`, `armWatchesForResumableRuns`, `sweepExpiredDisasterDrawers`, `troubleshoot`,
+`RootsGuard.requireUsable()`. That includes `sort`, `commit`, `rescue`, `sift`, `curate`, `resume`,
+`siftRuns`, `armWatchesForResumableRuns`, `sweepExpiredDisasterDrawers`, `troubleshoot`,
 `purgeCompleted`, and `discard`. `RootsGuard` reads `PathValidationUseCase.violationsInForce()` and
 throws `PathsMisconfiguredException` (an `IllegalStateException`) the moment the list is non-empty:
 any of the three roots unset, unparsable, missing, unreadable, or overlapping another. A fresh
 install with nothing configured meets this on every one of those calls until its first run is set
-up. `CullEngine.resume` runs the identical check on its own, since a watcher's auto-resume reaches
-it without passing through `Pipeline` at all - see [`cull-engine.md`](cull-engine.md).
+up. `SiftEngine.resume` runs the identical check on its own, since a watcher's auto-resume reaches
+it without passing through `Pipeline` at all - see [`sift-engine.md`](sift-engine.md).
 `SettingsService.save` runs a narrower version of the same question, admitting an unset root where
 these do not - see [`settings-service.md`](settings-service.md).
 
@@ -93,7 +93,7 @@ of those three needs. It refuses a prep dir `PrepDirDoctor.diagnose()` reports `
 (`purgeCompleted()` is that state's own verb). And it retires any watcher polling the prep dir
 before the graveyard move starts, so an auto-resume can never fire against a run mid-discard. See
 [`prep-dir-remedies.md`](prep-dir-remedies.md) section 3 for what `discard()` actually
-moves/deletes, and [`cull-engine.md`](cull-engine.md) for the watcher it disarms.
+moves/deletes, and [`sift-engine.md`](sift-engine.md) for the watcher it disarms.
 
 ### Scenarios
 
@@ -117,9 +117,9 @@ moves/deletes, and [`cull-engine.md`](cull-engine.md) for the watcher it disarms
   [`path-validation-service.md`](path-validation-service.md) in this same design folder.
 - `SettingsService`, the other caller of that same use case, admitting an unset root where these
   entry points do not: [`settings-service.md`](settings-service.md) in this same design folder.
-- [`cull-engine.md`](cull-engine.md): `CullEngine` - `cull()`/`resume()`, scope occupancy, cancellation, and the
+- [`sift-engine.md`](sift-engine.md): `SiftEngine` - `sift()`/`resume()`, scope occupancy, cancellation, and the
   watchers that auto-resume a waiting run.
-- [`prep-dir-doctor.md`](prep-dir-doctor.md): `PrepDirDoctor` - `runs()` behind `cullRuns()`, and `purgeCompleted()`.
+- [`prep-dir-doctor.md`](prep-dir-doctor.md): `PrepDirDoctor` - `runs()` behind `siftRuns()`, and `purgeCompleted()`.
 - [`curate-engine.md`](curate-engine.md): `CurateEngine` - `curate()`, and the `Pipeline.CurateConflictException` type
   it throws.
 - `JobRunner`/`JobHandle`/`JobWork` (the single-slot async executor `Pipeline` submits onto): no dedicated design doc
@@ -135,6 +135,6 @@ moves/deletes, and [`cull-engine.md`](cull-engine.md) for the watcher it disarms
 - `Troubleshooter`: [`troubleshooter.md`](troubleshooter.md) in this same design folder.
 - `PrepDirDoctor`: [`prep-dir-doctor.md`](prep-dir-doctor.md) in this same design folder, for `diagnose()` and
   `purgeCompleted()`.
-- `CullMontageRenderer`: [`cull-montage-renderer.md`](../../adapter/imaging/cull-montage-renderer.md) in the
+- `SiftMontageRenderer`: [`sift-montage-renderer.md`](../../adapter/imaging/sift-montage-renderer.md) in the
   `adapter/imaging` design folder, its own Cancellation section for the render/batch checks `MontageRenderer.build()`
   does internally.

@@ -4,8 +4,8 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
 import photos.sluice.domain.job.ShardTally;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
@@ -75,7 +75,7 @@ public class RunsCommand implements Callable<Integer> {
     public Integer call() {
         final CommandSpec running = Objects.requireNonNull(this.spec,
                 "the parser fills this in before it runs a command");
-        return this.reports.report(running, "runs", () -> outcomeOf(this.pipeline.cullRuns()));
+        return this.reports.report(running, "runs", () -> outcomeOf(this.pipeline.siftRuns()));
     }
 
     /**
@@ -85,24 +85,24 @@ public class RunsCommand implements Callable<Integer> {
      * table in front of a caller whose runs are all still there. A script reading the exit code
      * would take that for an install with nothing sifted.
      *
-     * @param reading {@link CullRuns} what the sweep found
+     * @param reading {@link SiftRuns} what the sweep found
      * @return {@link CommandOutcome} the outcome
      */
-    private static CommandOutcome outcomeOf(final CullRuns reading) {
+    private static CommandOutcome outcomeOf(final SiftRuns reading) {
         return switch (reading) {
-            case CullRuns.Listed(final List<CullRunSummary> runs) ->
-                    CommandOutcome.done(runs.stream().map(CullPayloads::run).toList(), lines(runs));
-            case CullRuns.Unlistable(final Path root) -> CommandOutcome.refused(RunsRefusals.unreadable(root));
+            case SiftRuns.Listed(final List<SiftRunSummary> runs) ->
+                    CommandOutcome.done(runs.stream().map(SiftPayloads::run).toList(), lines(runs));
+            case SiftRuns.Unlistable(final Path root) -> CommandOutcome.refused(RunsRefusals.unreadable(root));
         };
     }
 
     /**
      * The runs as a person reads them: a header, then one line each, columns lined up.
      *
-     * @param runs a {@link List} of {@link CullRunSummary} every run found
+     * @param runs a {@link List} of {@link SiftRunSummary} every run found
      * @return a {@link List} of {@link String} the lines to print
      */
-    private static List<String> lines(final List<CullRunSummary> runs) {
+    private static List<String> lines(final List<SiftRunSummary> runs) {
         if (runs.isEmpty()) {
             return List.of("No sift runs.");
         }

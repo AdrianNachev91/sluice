@@ -19,7 +19,7 @@ public final class UnrecognisedProviderException extends IllegalStateException {
      * @param registered a {@link Set} of {@link String} every provider id this build has
      */
     public UnrecognisedProviderException(final String provider, final Set<String> registered) {
-        super("No vision culler registered for provider '" + provider + "'. Registered: " + registered);
+        super("No vision provider registered under the id '" + provider + "'. Registered: " + registered);
         this.provider = provider;
         this.registered = Set.copyOf(registered);
     }

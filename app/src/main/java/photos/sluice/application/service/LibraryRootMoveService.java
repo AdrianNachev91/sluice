@@ -11,9 +11,9 @@ import photos.sluice.application.port.out.HashIndexPort;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.domain.copy.CopySummary;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.PrepDirHealth.State;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -55,7 +55,7 @@ public class LibraryRootMoveService implements LibraryRootUseCase {
      * @param copyEngine {@link CopyEngine} copies the old library into the new one
      * @param hashIndex {@link HashIndexPort} the index a fresh-index move files aside
      * @param paths {@link PathsPort} resolves the roots in force, before the move
-     * @param prepDirDoctor {@link PrepDirDoctor} says which cull runs have not finished
+     * @param prepDirDoctor {@link PrepDirDoctor} says which sift runs have not finished
      * @param pathValidation {@link PathValidationUseCase} checks the roots the app is running on
      * @param progressPort {@link ProgressPort} reports the copy's progress
      */
@@ -215,7 +215,7 @@ public class LibraryRootMoveService implements LibraryRootUseCase {
     }
 
     /**
-     * Refuses the move while any cull run on disk is short of complete.
+     * Refuses the move while any sift run on disk is short of complete.
      *
      * <p>Every state but complete counts, damaged included. A damaged run is one nobody has
      * established anything about, and treating an unknown as finished is the reading that lets the
@@ -229,12 +229,12 @@ public class LibraryRootMoveService implements LibraryRootUseCase {
      * @throws RunsUnreadableException when the sift-prep root itself could not be read
      */
     private void requireEveryRunHasFinished() {
-        if (!(this.prepDirDoctor.runs(this.paths.cullPrep()) instanceof CullRuns.Listed(final List<CullRunSummary> runs))) {
-            throw new RunsUnreadableException(this.paths.cullPrep());
+        if (!(this.prepDirDoctor.runs(this.paths.siftPrep()) instanceof SiftRuns.Listed(final List<SiftRunSummary> runs))) {
+            throw new RunsUnreadableException(this.paths.siftPrep());
         }
         final List<String> unfinished = runs.stream()
                 .filter(run -> run.health().state() != State.COMPLETE)
-                .map(CullRunSummary::scope)
+                .map(SiftRunSummary::scope)
                 .toList();
         if (!unfinished.isEmpty()) {
             throw new UnfinishedRunsException(

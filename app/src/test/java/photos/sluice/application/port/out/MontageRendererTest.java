@@ -1,10 +1,10 @@
 package photos.sluice.application.port.out;
 
 import org.junit.jupiter.api.Test;
-import photos.sluice.domain.cull.CullCategory;
-import photos.sluice.domain.cull.CullScope;
-import photos.sluice.domain.cull.MontageConfig;
-import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.sift.SiftCategory;
+import photos.sluice.domain.sift.SiftScope;
+import photos.sluice.domain.sift.MontageConfig;
+import photos.sluice.domain.sift.PrepDir;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 
@@ -18,7 +18,7 @@ class MontageRendererTest {
 
     @Test
     void progressAndCancellationAwareOverloadsDefaultToThePlainBuildMethod() {
-        final var prepDir = new PrepDir("2020", List.of(CullCategory.of("junk", "objectively worthless")),
+        final var prepDir = new PrepDir("2020", List.of(SiftCategory.of("junk", "objectively worthless")),
                 Path.of("base"), 5, List.of(), 1, Path.of("prep"), List.of());
         final var calls = new ArrayList<String>();
         final MontageRenderer renderer = (_, _) -> {
@@ -26,7 +26,7 @@ class MontageRendererTest {
             return prepDir;
         };
 
-        final var scope = new CullScope.Year(2020, null);
+        final var scope = new SiftScope.Year(2020, null);
         final var config = new MontageConfig(224, 5);
 
         assertThat(renderer.build(scope, config, ProgressCallback.NO_OP)).isSameAs(prepDir);

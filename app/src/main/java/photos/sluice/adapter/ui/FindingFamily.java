@@ -1,6 +1,6 @@
 package photos.sluice.adapter.ui;
 
-import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.sift.Finding;
 
 import java.util.List;
 

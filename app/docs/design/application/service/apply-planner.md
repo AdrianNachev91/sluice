@@ -3,7 +3,7 @@
 How `application/service/ApplyPlanner` decides what a prep directory's run still has left to do,
 before anything moves
 (`app/src/main/java/photos/sluice/application/service/ApplyPlanner.java`, validation rules in
-`domain/cull/ShardValidator`). It answers two questions: whether the shard batch is valid at all,
+`domain/sift/ShardValidator`). It answers two questions: whether the shard batch is valid at all,
 and where each decision or unreviewable file already stands for resume.
 
 `ApplyPlanner` is read-only. It changes nothing itself: no move, no copy, no delete, no ledger
@@ -71,7 +71,7 @@ in both is reported once.
 Containment normalizes both paths and compares whole segments. That refuses a parent reference
 climbing out of the root, and a relative path anchored somewhere else entirely. Symlinks are not
 resolved: that would cost a filesystem call per file and fail outright on a source an earlier run
-already moved. `CullDestinations.requireUnderSorted()` repeats the check immediately before each
+already moved. `SiftDestinations.requireUnderSorted()` repeats the check immediately before each
 move or copy (see [`apply-engine.md`](apply-engine.md)), the mirror of the destination refusal on
 the other side.
 
@@ -84,15 +84,15 @@ which case that answer decides. Only the healthy montages' srcs and shards ever 
 of each ledger resolution's effect.
 
 **The finding is raised whether or not that montage has a shard yet.** A montage with an unreadable
-sidecar and no shard reads like one still being culled, and is not. A culler keys its verdicts
+sidecar and no shard reads like one still being sifted, and is not. A sieve keys its verdicts
 against the sidecar, so it can never produce a shard for a montage whose sidecar it cannot read. Not
 yet actionable would therefore never become actionable. Left unreported, the run sits `WAITING` with
 an empty findings list, the troubleshoot screen has nothing to offer, and only a discard escapes.
 Reported, `SET_ASIDE` becomes reachable: it drops the montage and leaves its photos in `Sorted` for a
-later cull to see fresh.
+later sift to see fresh.
 
 A montage whose sidecar reads fine and simply has no shard yet is still skipped in silence. That is
-the genuinely-still-culling case, and flagging it is the noise this finding must not become.
+the genuinely-still-sifting case, and flagging it is the noise this finding must not become.
 
 Both ledger answers are terminal, so neither re-raises the finding. `SET_ASIDE` drops the montage
 outright. `APPLY_ANYWAY` trusts the shard as its own scope. A montage answered that way while still
@@ -103,11 +103,11 @@ A shard that is present but won't parse is a `Finding.CorruptShard`, never an ex
 because `PrepDirDoctor.diagnose()` reuses the same call to drive a dashboard. A thrown exception
 there would crash the read instead of describing the dir. The distinction is between damaged content
 and a read that merely failed. Only the first becomes a finding. A read failure on an intact shard
-propagates, so a lock or a permission denial is never reported as the culling agent's mistake.
+propagates, so a lock or a permission denial is never reported as the sifting agent's mistake.
 
 `CorruptShard` carries the NONE remedy, unlike `CorruptSidecar`'s CHOICE. A sidecar is this app's
 own output, so a corrupt one is a prep-dir problem the engine can offer options for. A shard is the
-culling agent's output. No engine-level repair can invent judgements it failed to record, so the
+sifting agent's output. No engine-level repair can invent judgements it failed to record, so the
 ways out are a rewritten shard or the last-resort discard-and-redo.
 
 `resolveOverlaps()` runs right after `ShardValidator`, suppressing a
@@ -203,7 +203,7 @@ trusted on its own.
 | A montage's shard is missing, `allowPartial` set                                              | That montage's photos stay in place; the rest of the run applies                                          |
 | A decisions file exists with no matching montage                                              | `ApplyException`, zero files moved (regardless of `allowPartial`)                                         |
 | A montage's shard is present but its content will not parse                                   | `CorruptShard` - `ApplyException`, zero files moved; every other montage still validates                  |
-| A montage's shard is present but the read itself fails, content intact                        | Propagates as a plain `UncheckedIOException` - never diagnosed as the culler's mistake                    |
+| A montage's shard is present but the read itself fails, content intact                        | Propagates as a plain `UncheckedIOException` - never diagnosed as the sieve's mistake                     |
 | A decision's category is absent from index.json's own set, or a required field is blank       | `ApplyException`, zero files moved                                                                        |
 | A category was edited or deleted in settings after this run was prepped                       | Irrelevant - the run is judged against the set index.json recorded at prep time                           |
 | A decision's `file` doesn't match any sidecar entry, but its basename does (and is unique)    | Healed - applied to the resolved path, reported as a heal                                                 |
@@ -217,7 +217,7 @@ trusted on its own.
 ## Related
 
 - The shard contract itself, and the auto-heal rule: `ShardValidator`'s own doc comment
-  (`app/src/main/java/photos/sluice/domain/cull/ShardValidator.java`).
+  (`app/src/main/java/photos/sluice/domain/sift/ShardValidator.java`).
 - The pipeline that calls `validate()` then classifies every decision, and carries the
   Pending/Done results out: [`apply-engine.md`](apply-engine.md).
 - The move-record log's own file format, markers, and parsing rules:

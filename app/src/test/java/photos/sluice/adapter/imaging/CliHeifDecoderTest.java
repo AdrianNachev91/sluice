@@ -32,11 +32,11 @@ class CliHeifDecoderTest {
     }
 
     // arctic-sky.avif (real, public-domain, verified genuine ftyp/avif box structure - see
-    // cull/README.md) exercises the AV1 payload path through the same HeifDecoder port, unlike
+    // sift/README.md) exercises the AV1 payload path through the same HeifDecoder port, unlike
     // the HEVC fixture above. Dimensions cross-checked with `magick identify` (1600x1063).
     @Test
     void decodesARealAvifFixtureToItsFullResolution() {
-        final Optional<BufferedImage> result = this.decoder.decode(FIXTURES.resolve("cull/arctic-sky.avif"));
+        final Optional<BufferedImage> result = this.decoder.decode(FIXTURES.resolve("sift/arctic-sky.avif"));
 
         assertThat(result).isPresent();
         assertThat(result.get().getWidth()).isEqualTo(1600);

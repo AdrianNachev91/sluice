@@ -76,7 +76,7 @@ class ReasonNotesTest {
         assertThat(ReasonNotes.datesIn(List.of(line))).containsExactly(entry("IMG_1.jpg", 2019, 6, 1));
     }
 
-    // A reason is free text a culling agent wrote, so it can hold the shape a dated line has.
+    // A reason is free text a sifting agent wrote, so it can hold the shape a dated line has.
     @Test
     void aReasonShapedLikeADateCannotTakeTheDateOffTheNameBeforeIt() {
         assertThat(ReasonNotes.datesIn(List.of("IMG_1.jpg (2019-06) - shot of a screen (2020-01) - blurred")))

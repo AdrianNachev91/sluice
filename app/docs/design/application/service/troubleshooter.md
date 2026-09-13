@@ -53,7 +53,7 @@ already-trustworthy log, demoting its witnessed provenance to reconstructed for 
 before stray shards). Until the log is rebuilt, an already-moved file can still look like a stray
 shard's own missing match. Unlike the reconcile gate, this repair isn't gated on overall prep-dir
 state. A `StrayShard` finding can surface either while `WAITING` (other montages still being
-culled) or `BLOCKED` (culling finished, something else needs a remedy). `PrepDirDoctor` never
+sifted) or `BLOCKED` (sifting finished, something else needs a remedy). `PrepDirDoctor` never
 gates it on the shard contract being otherwise complete, the way it gates `MissingSource`.
 
 Every `StrayShard` finding gets one attempt. Each re-reads current disk state. So an earlier repair

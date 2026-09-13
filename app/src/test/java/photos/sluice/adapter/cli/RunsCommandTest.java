@@ -4,10 +4,10 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.PrepDirHealth;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.PrepDirHealth;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation.NotConfigured;
@@ -31,7 +31,7 @@ class RunsCommandTest {
 
     @Test
     void anInstallWithNothingSiftedSaysSoRatherThanPrintingAnEmptyTable() {
-        when(this.pipeline.cullRuns()).thenReturn(listed());
+        when(this.pipeline.siftRuns()).thenReturn(listed());
 
         final CliHarness.Result result = this.run("runs");
 
@@ -41,7 +41,7 @@ class RunsCommandTest {
 
     @Test
     void aRootNobodyCouldReadIsRefusedRatherThanReportedAsAnInstallWithNothingSifted() {
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Unlistable(PREP_ROOT));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Unlistable(PREP_ROOT));
 
         final CliHarness.Result result = this.run("runs");
 
@@ -52,7 +52,7 @@ class RunsCommandTest {
 
     @Test
     void aCallerAskingForADocumentIsToldWhichRootCouldNotBeRead() {
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Unlistable(PREP_ROOT));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Unlistable(PREP_ROOT));
 
         assertThat(this.run("runs", "--json").out())
                 .contains("\"kind\":\"RUNS_UNREADABLE\"")
@@ -61,7 +61,7 @@ class RunsCommandTest {
 
     @Test
     void eachRunIsListedWithHowFarThroughItsSheetsItIs() {
-        when(this.pipeline.cullRuns()).thenReturn(listed(
+        when(this.pipeline.siftRuns()).thenReturn(listed(
                 summary("2019-06", PrepDirHealth.State.WAITING, List.of(), new ShardTally(12, 11, 25))));
 
         final CliHarness.Result result = this.run("runs");
@@ -71,7 +71,7 @@ class RunsCommandTest {
 
     @Test
     void theScopeAPersonReadsIsTheOneOtherCommandsTake() {
-        when(this.pipeline.cullRuns()).thenReturn(listed(
+        when(this.pipeline.siftRuns()).thenReturn(listed(
                 summary("2019-06", PrepDirHealth.State.READY, List.of(), new ShardTally(25, 25, 25))));
 
         assertThat(this.run("runs", "--json").out()).contains("\"scope\":\"2019-06\"");
@@ -79,7 +79,7 @@ class RunsCommandTest {
 
     @Test
     void theColumnsLineUpWhateverLengthTheScopesAre() {
-        when(this.pipeline.cullRuns()).thenReturn(listed(
+        when(this.pipeline.siftRuns()).thenReturn(listed(
                 summary("2019", PrepDirHealth.State.READY, List.of(), new ShardTally(25, 25, 25)),
                 summary("2019-06-07-08", PrepDirHealth.State.WAITING, List.of(), new ShardTally(1, 1, 9))));
 
@@ -92,7 +92,7 @@ class RunsCommandTest {
 
     @Test
     void whenARunWasLastWrittenToIsShownToTheSecond() {
-        when(this.pipeline.cullRuns()).thenReturn(listed(
+        when(this.pipeline.siftRuns()).thenReturn(listed(
                 summary("2019-06", PrepDirHealth.State.READY, List.of(), new ShardTally(25, 25, 25))));
 
         assertThat(this.run("runs").out()).contains("2026-08-20T10:15:30Z").doesNotContain("069830400");
@@ -101,7 +101,7 @@ class RunsCommandTest {
 
     @Test
     void noLineEndsInBlanks() {
-        when(this.pipeline.cullRuns()).thenReturn(listed(
+        when(this.pipeline.siftRuns()).thenReturn(listed(
                 summary("2019", PrepDirHealth.State.READY, List.of(), new ShardTally(25, 25, 25)),
                 summary("2019-06-07-08", PrepDirHealth.State.WAITING, List.of(), new ShardTally(1, 1, 9))));
 
@@ -111,7 +111,7 @@ class RunsCommandTest {
 
     @Test
     void aRunNobodyCouldCountTheSheetsOfShowsADashRatherThanAZero() {
-        when(this.pipeline.cullRuns()).thenReturn(listed(
+        when(this.pipeline.siftRuns()).thenReturn(listed(
                 summary("2019-06", PrepDirHealth.State.DAMAGED,
                         List.of(new Finding.UnreadablePrepDir(PREP_ROOT)), null)));
 
@@ -121,7 +121,7 @@ class RunsCommandTest {
 
     @Test
     void aPersonSeesHowManyProblemsARunHasAndAMachineSeesWhatTheyAre() {
-        when(this.pipeline.cullRuns()).thenReturn(listed(
+        when(this.pipeline.siftRuns()).thenReturn(listed(
                 summary("2019-06", PrepDirHealth.State.BLOCKED,
                         List.of(new Finding.CorruptSidecar("montage-002")), new ShardTally(25, 24, 25))));
 
@@ -131,7 +131,7 @@ class RunsCommandTest {
 
     @Test
     void askedForADocumentTheOutputStreamCarriesOneAndTheTableIsNotPrinted() {
-        when(this.pipeline.cullRuns()).thenReturn(listed(
+        when(this.pipeline.siftRuns()).thenReturn(listed(
                 summary("2019-06", PrepDirHealth.State.READY, List.of(), new ShardTally(25, 25, 25))));
 
         final CliHarness.Result result = this.run("runs", "--json");
@@ -142,7 +142,7 @@ class RunsCommandTest {
 
     @Test
     void theFlagReadsTheSameBeforeTheVerbAsAfterIt() {
-        when(this.pipeline.cullRuns()).thenReturn(listed());
+        when(this.pipeline.siftRuns()).thenReturn(listed());
 
         assertThat(this.run("--json", "runs").out()).contains("\"command\":\"runs\"");
         assertThat(this.run("runs", "--json").out()).contains("\"command\":\"runs\"");
@@ -150,17 +150,17 @@ class RunsCommandTest {
 
     @Test
     void listingRunsAsksTheFacadeForNothingButTheRuns() {
-        when(this.pipeline.cullRuns()).thenReturn(listed());
+        when(this.pipeline.siftRuns()).thenReturn(listed());
 
         this.run("runs");
 
-        verify(this.pipeline).cullRuns();
+        verify(this.pipeline).siftRuns();
         verifyNoMoreInteractions(this.pipeline);
     }
 
     @Test
     void anInstallWithNoFoldersChosenYetIsRefusedRatherThanCrashing() {
-        when(this.pipeline.cullRuns()).thenThrow(new PathsMisconfiguredException(
+        when(this.pipeline.siftRuns()).thenThrow(new PathsMisconfiguredException(
                 List.of(new NotConfigured(PathRole.WORKING_ROOT))));
 
         final CliHarness.Result result = this.run("runs");
@@ -172,7 +172,7 @@ class RunsCommandTest {
 
     @Test
     void aRefusedListingStillWritesItsDocumentForTheCallerThatAskedForOne() {
-        when(this.pipeline.cullRuns()).thenThrow(new PathsMisconfiguredException(
+        when(this.pipeline.siftRuns()).thenThrow(new PathsMisconfiguredException(
                 List.of(new NotConfigured(PathRole.WORKING_ROOT))));
 
         final CliHarness.Result result = this.run("runs", "--json");
@@ -183,7 +183,7 @@ class RunsCommandTest {
 
     @Test
     void aFailureNothingClassifiedTakesItsOwnCodeAndHandsOverTheTrace() {
-        when(this.pipeline.cullRuns()).thenThrow(new IllegalArgumentException("the disk went away"));
+        when(this.pipeline.siftRuns()).thenThrow(new IllegalArgumentException("the disk went away"));
 
         final CliHarness.Result result = this.run("runs");
 
@@ -196,7 +196,7 @@ class RunsCommandTest {
     // the document is supposed to be, and a caller reading one run per line would see many.
     @Test
     void aFailuresTraceDoesNotBreakTheDocumentOntoASecondLine() {
-        when(this.pipeline.cullRuns()).thenThrow(new IllegalArgumentException("the disk went away"));
+        when(this.pipeline.siftRuns()).thenThrow(new IllegalArgumentException("the disk went away"));
 
         final CliHarness.Result result = this.run("runs", "--json");
 
@@ -216,7 +216,7 @@ class RunsCommandTest {
     // and the failure being simulated is one that happens while reading another failure.
     @Test
     void aFailureThatCannotEvenBeReadStillLeavesTheCallerADocument() {
-        when(this.pipeline.cullRuns()).thenThrow(new IllegalStateException("the original failure"));
+        when(this.pipeline.siftRuns()).thenThrow(new IllegalStateException("the original failure"));
         final var command = new RunsCommand(this.pipeline, new CommandReports(new RefusalClassifier(new NoSecrets()) {
             @Override
             public Refusal refusalFor(final Throwable failure) {
@@ -236,13 +236,13 @@ class RunsCommandTest {
         return CliHarness.run(CliHarness.parser(command), args);
     }
 
-    private static CullRuns listed(final CullRunSummary... runs) {
-        return new CullRuns.Listed(List.of(runs));
+    private static SiftRuns listed(final SiftRunSummary... runs) {
+        return new SiftRuns.Listed(List.of(runs));
     }
 
-    private static CullRunSummary summary(final String scope, final PrepDirHealth.State state,
+    private static SiftRunSummary summary(final String scope, final PrepDirHealth.State state,
                                           final List<Finding> findings, final @Nullable ShardTally shards) {
-        return new CullRunSummary(scope, PREP_ROOT.resolve(scope), new PrepDirHealth(state, findings), shards,
+        return new SiftRunSummary(scope, PREP_ROOT.resolve(scope), new PrepDirHealth(state, findings), shards,
                 WRITTEN);
     }
 }

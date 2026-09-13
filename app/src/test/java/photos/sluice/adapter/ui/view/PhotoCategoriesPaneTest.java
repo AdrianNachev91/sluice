@@ -20,14 +20,14 @@ import org.testfx.api.FxToolkit;
 import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.application.port.in.SettingsUseCase;
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
-import photos.sluice.domain.cull.CategoryName;
-import photos.sluice.domain.cull.CullCategory;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.CategoryName;
+import photos.sluice.domain.sift.SiftCategory;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -183,9 +183,9 @@ class PhotoCategoriesPaneTest {
         });
 
         assertThat(name.getText()).hasSize(CategoryName.maxLength());
-        assertThat(description.getText()).hasSize(CullCategory.maxDescriptionLength());
+        assertThat(description.getText()).hasSize(SiftCategory.maxDescriptionLength());
         assertThat(examples.getText())
-                .hasSize(CullCategory.maxExamples() * CullCategory.maxExample());
+                .hasSize(SiftCategory.maxExamples() * SiftCategory.maxExample());
     }
 
     @Test
@@ -290,7 +290,7 @@ class PhotoCategoriesPaneTest {
 
         assertThat(store.saved).isNotNull();
         assertThat(store.saved.categories().getLast())
-                .isEqualTo(new CullCategory("blurry", "Blurry shots",
+                .isEqualTo(new SiftCategory("blurry", "Blurry shots",
                         List.of("pocket shots", "ceiling shots"), Boolean.FALSE));
     }
 
@@ -439,18 +439,18 @@ class PhotoCategoriesPaneTest {
 
     private static RecordingSettings store() {
         return new RecordingSettings(
-                new CullCategory("blurry", "Not worth keeping",
+                new SiftCategory("blurry", "Not worth keeping",
                         List.of("pocket shots", "ceiling shots"), Boolean.TRUE),
-                CullCategory.of("funny", "Worth a laugh later"));
+                SiftCategory.of("funny", "Worth a laugh later"));
     }
 
     // Three cards, none of them the built-in one. So every one has a Delete, and the list can shift
     // under a button without the undeletable card standing in for the rule.
     private static RecordingSettings threeOrdinaryCards() {
         return new RecordingSettings(
-                CullCategory.of("blurry", "Not worth keeping"),
-                CullCategory.of("scenery", "Worth a second look"),
-                CullCategory.of("food", "Meals and menus"));
+                SiftCategory.of("blurry", "Not worth keeping"),
+                SiftCategory.of("scenery", "Worth a second look"),
+                SiftCategory.of("food", "Meals and menus"));
     }
 
     /**
@@ -494,8 +494,8 @@ class PhotoCategoriesPaneTest {
 
     private static RecordingSettings aFullSet() {
         return new RecordingSettings(IntStream.range(0, Settings.maxCategories())
-                .mapToObj(i -> CullCategory.of("card-" + i, "description " + i))
-                .toArray(CullCategory[]::new));
+                .mapToObj(i -> SiftCategory.of("card-" + i, "description " + i))
+                .toArray(SiftCategory[]::new));
     }
 
     private static void switchOff(final Parent pane, final Node card) throws Exception {
@@ -527,18 +527,18 @@ class PhotoCategoriesPaneTest {
 
     private static final class RecordingSettings implements SettingsUseCase {
 
-        private final List<CullCategory> cards;
+        private final List<SiftCategory> cards;
 
         private @Nullable Settings saved;
 
-        private RecordingSettings(final CullCategory... cards) {
+        private RecordingSettings(final SiftCategory... cards) {
             this.cards = new ArrayList<>(List.of(cards));
         }
 
         @Override
         public Settings settings() {
             return new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"), "anthropic",
-                    Map.of("anthropic", new CullProviderSettings("a-model", null, 2)),
+                    Map.of("anthropic", new SiftProviderSettings("a-model", null, 2)),
                     this.saved == null ? this.cards : this.saved.categories(),
                     new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         }

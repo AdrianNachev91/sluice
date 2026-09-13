@@ -3,25 +3,25 @@ package photos.sluice.application.service;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
-import photos.sluice.application.port.out.CullPrepPort;
+import photos.sluice.application.port.out.SiftPrepPort;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MediaReader;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.Sha256Port;
 import photos.sluice.application.service.MoveLedger.Ledger;
 import photos.sluice.application.service.MoveLedger.MoveRecord;
-import photos.sluice.domain.cull.CorruptSidecarResolution;
-import photos.sluice.domain.cull.Decision;
-import photos.sluice.domain.cull.Decision.NearDupChosen;
-import photos.sluice.domain.cull.DecisionShard;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.MontageNaming;
-import photos.sluice.domain.cull.OverlapResolution;
-import photos.sluice.domain.cull.PrepDir;
-import photos.sluice.domain.cull.ShardValidator;
-import photos.sluice.domain.cull.ShardValidator.ShardFile;
-import photos.sluice.domain.cull.ValidationReport;
-import photos.sluice.domain.cull.Verdict;
+import photos.sluice.domain.sift.CorruptSidecarResolution;
+import photos.sluice.domain.sift.Decision;
+import photos.sluice.domain.sift.Decision.NearDupChosen;
+import photos.sluice.domain.sift.DecisionShard;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.MontageNaming;
+import photos.sluice.domain.sift.OverlapResolution;
+import photos.sluice.domain.sift.PrepDir;
+import photos.sluice.domain.sift.ShardValidator;
+import photos.sluice.domain.sift.ShardValidator.ShardFile;
+import photos.sluice.domain.sift.ValidationReport;
+import photos.sluice.domain.sift.Verdict;
 import photos.sluice.domain.paths.Containment;
 
 import java.nio.file.Path;
@@ -48,7 +48,7 @@ import java.util.stream.Collectors;
  * snapshot rather than reading one itself. This class cannot even read the ledger files on its
  * own, let alone append to them.
  *
- * <p>It holds no cull settings either, on the same principle. A run is judged against the category
+ * <p>It holds no sift settings either, on the same principle. A run is judged against the category
  * set its own {@link PrepDir} recorded at prep time. With no settings to reach for, judging it
  * against live config instead is a compile error rather than a convention.
  *
@@ -61,7 +61,7 @@ import java.util.stream.Collectors;
 public class ApplyPlanner {
 
     private final MediaReader mediaReader;
-    private final CullPrepPort cullPrepPort;
+    private final SiftPrepPort siftPrepPort;
     private final Sha256Port sha256Port;
     private final PathsPort pathsPort;
     private final ShardValidator shardValidator = new ShardValidator();
@@ -70,14 +70,14 @@ public class ApplyPlanner {
      * Creates a planner wired to its ports.
      *
      * @param mediaReader {@link MediaReader} checks file existence and lists prep-dir files
-     * @param cullPrepPort {@link CullPrepPort} reads prep-dir sidecars and shards
+     * @param siftPrepPort {@link SiftPrepPort} reads prep-dir sidecars and shards
      * @param sha256Port {@link Sha256Port} hashes a destination to verify a recorded move
      * @param pathsPort {@link PathsPort} resolves the Sorted root every source is held to
      */
-    public ApplyPlanner(final MediaReader mediaReader, final CullPrepPort cullPrepPort,
+    public ApplyPlanner(final MediaReader mediaReader, final SiftPrepPort siftPrepPort,
                         final Sha256Port sha256Port, final PathsPort pathsPort) {
         this.mediaReader = mediaReader;
-        this.cullPrepPort = cullPrepPort;
+        this.siftPrepPort = siftPrepPort;
         this.sha256Port = sha256Port;
         this.pathsPort = pathsPort;
     }
@@ -89,9 +89,9 @@ public class ApplyPlanner {
      * not a totality guarantee, and {@link PrepDirDoctor} is where that distinction is handled.
      *
      * <p>A missing montage shard is a finding only when allowPartial waives it. A diagnosis always
-     * passes allowPartial, so a still-culling prep dir reports on the shards it already has rather
-     * than drowning in "not culled yet" noise. A decisions file with no matching montage is always a
-     * finding: almost always a culler numbering mistake, and its decisions would otherwise be
+     * passes allowPartial, so a still-sifting prep dir reports on the shards it already has rather
+     * than drowning in "not sifted yet" noise. A decisions file with no matching montage is always a
+     * finding: almost always a sieve numbering mistake, and its decisions would otherwise be
      * silently ignored. The shard contract itself is always checked too.
      *
      * <p>The shard contract is checked ONCE, over every montage's shards together. Several of its
@@ -99,7 +99,7 @@ public class ApplyPlanner {
      * different montages, a basename that only heals while unique across the whole scope. Validating
      * one montage at a time would silently disable every one of them.
      *
-     * <p>This is the single validator on the resume path, so it has to catch everything a culler's
+     * <p>This is the single validator on the resume path, so it has to catch everything a sieve's
      * own batch check would have. That means a stray shard, a group id reused across two montages,
      * and a shard present but unparseable, alongside the whole per-decision contract.
      *
@@ -119,7 +119,7 @@ public class ApplyPlanner {
         final var extraFindings = new ArrayList<Finding>();
 
         final Set<String> missingMontages = prepDir.entries().stream()
-                .filter(montage -> !this.cullPrepPort.hasShard(prepDirPath, montage))
+                .filter(montage -> !this.siftPrepPort.hasShard(prepDirPath, montage))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (!options.allowPartial()) {
             missingMontages.forEach(montage ->
@@ -191,16 +191,16 @@ public class ApplyPlanner {
      * fresh {@link Finding.CorruptSidecar}.
      *
      * <p>That finding is raised whether or not the montage already has a shard. A montage with a
-     * corrupt sidecar and no shard is not a montage still being culled, however much it looks like
-     * one. A culler keys its verdicts against the sidecar, so it cannot produce a shard for a
+     * corrupt sidecar and no shard is not a montage still being sifted, however much it looks like
+     * one. A sieve keys its verdicts against the sidecar, so it cannot produce a shard for a
      * montage whose sidecar it cannot read. Waiting for one means waiting forever. Reported
      * instead, SET_ASIDE becomes reachable, which drops the montage and leaves its photos in Sorted
-     * for a later cull to see fresh.
+     * for a later sift to see fresh.
      *
      * <p>A shard that is present but cannot be parsed is a {@link Finding.CorruptShard}, never an
-     * exception escaping this method. It is a culling-agent content mistake, so it belongs in the
+     * exception escaping this method. It is a sifting-agent content mistake, so it belongs in the
      * same aggregated report as every other one. That matters most on the apply-only resume path,
-     * where no culler runs and this is the only gate the shard ever passes through.
+     * where no sieve runs and this is the only gate the shard ever passes through.
      *
      * @param prepDirPath {@link Path} the prep directory being validated
      * @param montage {@link String} the montage id to collect
@@ -214,7 +214,7 @@ public class ApplyPlanner {
                                 final Ledger ledger,
                                 final List<Path> sidecarSrcs, final List<ShardFile> shardFiles,
                                 final List<Finding> extraFindings) {
-        final Optional<List<Path>> srcs = Sidecars.srcsOf(this.cullPrepPort, prepDirPath, montage);
+        final Optional<List<Path>> srcs = Sidecars.srcsOf(this.siftPrepPort, prepDirPath, montage);
         if (srcs.isPresent()) {
             sidecarSrcs.addAll(srcs.get());
             if (hasShard) {
@@ -246,7 +246,7 @@ public class ApplyPlanner {
      * Reads one montage's shard, recording a {@link Finding.CorruptShard} instead of throwing when
      * the content cannot be turned into decisions. Only malformed content is caught. A read that
      * merely failed while the shard itself is intact propagates, so a lock or a permission denial
-     * never gets diagnosed as a culler mistake.
+     * never gets diagnosed as a sieve mistake.
      *
      * @param prepDirPath {@link Path} the prep directory holding the shard
      * @param montage {@link String} the montage whose shard to read
@@ -256,7 +256,7 @@ public class ApplyPlanner {
     private Optional<DecisionShard> readShard(final Path prepDirPath, final String montage,
                                               final List<Finding> extraFindings) {
         try {
-            return Optional.of(this.cullPrepPort.readShard(prepDirPath, montage));
+            return Optional.of(this.siftPrepPort.readShard(prepDirPath, montage));
         } catch (final MalformedPrepJsonException e) {
             extraFindings.add(new Finding.CorruptShard(montage, MontageNaming.shardFileFor(montage)));
             return Optional.empty();

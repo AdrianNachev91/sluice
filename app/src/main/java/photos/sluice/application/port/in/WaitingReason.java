@@ -1,11 +1,11 @@
 package photos.sluice.application.port.in;
 
 /**
- * Why a cull run paused rather than finished.
+ * Why a sift run paused rather than finished.
  *
  * <p>Coarse on purpose. It answers what a person cares about, so the several places a run can be
  * cancelled from collapse into one value. How far a cancelled run got is a question about money,
- * and {@code CullJobOutcome.cullReport()} is where that is answered.
+ * and {@code SiftJobOutcome.siftReport()} is where that is answered.
  */
 public enum WaitingReason {
 

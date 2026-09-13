@@ -19,13 +19,13 @@ import photos.sluice.application.port.in.LibraryRootMoveOutcome.MovedWithFreshIn
 import photos.sluice.application.port.in.LibraryRootResolution;
 import photos.sluice.application.port.in.LibraryRootUseCase;
 import photos.sluice.application.port.in.SettingsUseCase;
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.application.service.JobRunner;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -225,7 +225,7 @@ class SettingsPaneTest {
     // makes after the move. That save keeps the rest of what the user was storing.
     private static Presenters presenterNeedingLibraryRootResolution(final LibraryRootUseCase libraryRoot) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
-                "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
+                "anthropic", Map.of("anthropic", new SiftProviderSettings("a-model", null, 2)), List.of(),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         final var libraryRootInForce = new AtomicReference<>("D:\\library");
         final var useCase = new SettingsUseCase() {

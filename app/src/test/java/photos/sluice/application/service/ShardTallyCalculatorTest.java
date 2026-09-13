@@ -3,15 +3,15 @@ package photos.sluice.application.service;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
-import photos.sluice.adapter.vision.JsonCullPrepStore;
-import photos.sluice.application.port.out.CullPrepPort;
-import photos.sluice.domain.cull.AnswerSource;
-import photos.sluice.domain.cull.ApplyReport;
-import photos.sluice.domain.cull.Decision;
-import photos.sluice.domain.cull.DecisionShard;
-import photos.sluice.domain.cull.OverlapResolution;
-import photos.sluice.domain.cull.PrepDir;
-import photos.sluice.domain.cull.SidecarPhotoEntry;
+import photos.sluice.adapter.vision.JsonSiftPrepStore;
+import photos.sluice.application.port.out.SiftPrepPort;
+import photos.sluice.domain.sift.AnswerSource;
+import photos.sluice.domain.sift.ApplyReport;
+import photos.sluice.domain.sift.Decision;
+import photos.sluice.domain.sift.DecisionShard;
+import photos.sluice.domain.sift.OverlapResolution;
+import photos.sluice.domain.sift.PrepDir;
+import photos.sluice.domain.sift.SidecarPhotoEntry;
 import photos.sluice.domain.job.ShardTally;
 
 import java.io.IOException;
@@ -19,19 +19,19 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static photos.sluice.application.service.CullPrepTestSupport.applyPlanner;
-import static photos.sluice.application.service.CullPrepTestSupport.cards;
-import static photos.sluice.application.service.CullPrepTestSupport.classificationJson;
-import static photos.sluice.application.service.CullPrepTestSupport.keepJson;
-import static photos.sluice.application.service.CullPrepTestSupport.moveLedger;
-import static photos.sluice.application.service.CullPrepTestSupport.prepDir;
-import static photos.sluice.application.service.CullPrepTestSupport.prepDirRemedies;
-import static photos.sluice.application.service.CullPrepTestSupport.readIndex;
-import static photos.sluice.application.service.CullPrepTestSupport.sidecarEntry;
-import static photos.sluice.application.service.CullPrepTestSupport.writeFile;
-import static photos.sluice.application.service.CullPrepTestSupport.writeIndex;
-import static photos.sluice.application.service.CullPrepTestSupport.writeShard;
-import static photos.sluice.application.service.CullPrepTestSupport.writeSidecar;
+import static photos.sluice.application.service.SiftPrepTestSupport.applyPlanner;
+import static photos.sluice.application.service.SiftPrepTestSupport.cards;
+import static photos.sluice.application.service.SiftPrepTestSupport.classificationJson;
+import static photos.sluice.application.service.SiftPrepTestSupport.keepJson;
+import static photos.sluice.application.service.SiftPrepTestSupport.moveLedger;
+import static photos.sluice.application.service.SiftPrepTestSupport.prepDir;
+import static photos.sluice.application.service.SiftPrepTestSupport.prepDirRemedies;
+import static photos.sluice.application.service.SiftPrepTestSupport.readIndex;
+import static photos.sluice.application.service.SiftPrepTestSupport.sidecarEntry;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeFile;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeIndex;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeShard;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeSidecar;
 
 class ShardTallyCalculatorTest {
 
@@ -177,7 +177,7 @@ class ShardTallyCalculatorTest {
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-        final var calculator = new ShardTallyCalculator(new JsonCullPrepStore(), applyPlanner(root),
+        final var calculator = new ShardTallyCalculator(new JsonSiftPrepStore(), applyPlanner(root),
                 _ -> {
                     throw new IllegalStateException("simulated ledger read failure");
                 });
@@ -213,19 +213,19 @@ class ShardTallyCalculatorTest {
     }
 
     private static ShardTallyCalculator shardTallyCalculator(final Path root) {
-        return shardTallyCalculator(root, new JsonCullPrepStore());
+        return shardTallyCalculator(root, new JsonSiftPrepStore());
     }
 
-    private static ShardTallyCalculator shardTallyCalculator(final Path root, final CullPrepPort cullPrepPort) {
-        return new ShardTallyCalculator(cullPrepPort, applyPlanner(root, cullPrepPort),
+    private static ShardTallyCalculator shardTallyCalculator(final Path root, final SiftPrepPort siftPrepPort) {
+        return new ShardTallyCalculator(siftPrepPort, applyPlanner(root, siftPrepPort),
                 moveLedger(new NioMediaStore()));
     }
 
     // Only hasShard is overridden, the one call this exists to fail with a non-I/O
     // RuntimeException. A port constrains nothing about what an adapter may actually raise.
-    private static final class ThrowingHasShard implements CullPrepPort {
+    private static final class ThrowingHasShard implements SiftPrepPort {
 
-        private final CullPrepPort delegate = new JsonCullPrepStore();
+        private final SiftPrepPort delegate = new JsonSiftPrepStore();
 
         @Override
         public PrepDir readIndex(final Path prepDir) {

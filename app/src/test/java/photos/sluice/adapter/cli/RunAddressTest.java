@@ -4,10 +4,10 @@ import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.CullScope;
-import photos.sluice.domain.cull.PrepDirHealth;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.SiftScope;
+import photos.sluice.domain.sift.PrepDirHealth;
 import photos.sluice.domain.job.ShardTally;
 
 import java.nio.file.Path;
@@ -35,14 +35,14 @@ class RunAddressTest {
 
     @Test
     void aScopeTagNamesTheFolderTheSiftCarryingItLivesIn() {
-        when(this.pipeline.cullRuns()).thenReturn(this.listed("2019", "2019-06"));
+        when(this.pipeline.siftRuns()).thenReturn(this.listed("2019", "2019-06"));
 
         assertThat(this.addresses.folderFor("2019-06")).isEqualTo(this.prepRoot.resolve("2019-06"));
     }
 
     @Test
     void aCountTaggedSiftIsAddressedTheSameWayAYearScopedOneIs() {
-        when(this.pipeline.cullRuns()).thenReturn(this.listed("oldest-30"));
+        when(this.pipeline.siftRuns()).thenReturn(this.listed("oldest-30"));
 
         assertThat(this.addresses.folderFor("oldest-30")).isEqualTo(this.prepRoot.resolve("oldest-30"));
     }
@@ -65,7 +65,7 @@ class RunAddressTest {
 
     @Test
     void aTagNamingNoSiftIsRefusedWithTheOnesThatDoExistNamed() {
-        when(this.pipeline.cullRuns()).thenReturn(this.listed("2019", "oldest-30"));
+        when(this.pipeline.siftRuns()).thenReturn(this.listed("2019", "oldest-30"));
 
         final Refusal refusal = refusalOf(() -> this.addresses.folderFor("2020"));
 
@@ -77,7 +77,7 @@ class RunAddressTest {
 
     @Test
     void anInstallWithNoSiftsSaysSoRatherThanListingNone() {
-        when(this.pipeline.cullRuns()).thenReturn(this.listed());
+        when(this.pipeline.siftRuns()).thenReturn(this.listed());
 
         assertThat(refusalOf(() -> this.addresses.folderFor("2019")).sentence())
                 .isEqualTo("No sift called 2019. There are none yet.");
@@ -85,7 +85,7 @@ class RunAddressTest {
 
     @Test
     void aFolderNobodyCouldReadIsRefusedAsUnreadableRatherThanAsAnUnknownSift() {
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Unlistable(this.prepRoot));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Unlistable(this.prepRoot));
 
         final Refusal refusal = refusalOf(() -> this.addresses.folderFor("2019"));
 
@@ -95,14 +95,14 @@ class RunAddressTest {
 
     @Test
     void noTagTheDomainBuildsCanBeMistakenForAPath() {
-        assertThat(Path.of(CullScope.tag(new CullScope.Year(2019, null))).isAbsolute()).isFalse();
-        assertThat(Path.of(CullScope.tag(new CullScope.Year(2019, List.of(6, 8, 11)))).isAbsolute()).isFalse();
-        assertThat(Path.of(CullScope.tag(new CullScope.OldestN(30))).isAbsolute()).isFalse();
+        assertThat(Path.of(SiftScope.tag(new SiftScope.Year(2019, null))).isAbsolute()).isFalse();
+        assertThat(Path.of(SiftScope.tag(new SiftScope.Year(2019, List.of(6, 8, 11)))).isAbsolute()).isFalse();
+        assertThat(Path.of(SiftScope.tag(new SiftScope.OldestN(30))).isAbsolute()).isFalse();
     }
 
     @Test
     void anAddressNoFileSystemCouldNameIsToldWhatSiftsThereAre() {
-        when(this.pipeline.cullRuns()).thenReturn(this.listed("2019"));
+        when(this.pipeline.siftRuns()).thenReturn(this.listed("2019"));
 
         assertThat(refusalOf(() -> this.addresses.folderFor("2019" + Character.toString(0))).kind())
                 .isEqualTo(RefusalKind.RUN_NOT_FOUND);
@@ -110,15 +110,15 @@ class RunAddressTest {
 
     @Test
     void somethingThatIsNeitherATagNorAFullPathIsToldWhatSiftsThereAre() {
-        when(this.pipeline.cullRuns()).thenReturn(this.listed("2019"));
+        when(this.pipeline.siftRuns()).thenReturn(this.listed("2019"));
 
         assertThat(refusalOf(() -> this.addresses.folderFor("logs/sift-prep/2019")).kind())
                 .isEqualTo(RefusalKind.RUN_NOT_FOUND);
     }
 
-    private CullRuns listed(final String... tags) {
-        return new CullRuns.Listed(Stream.of(tags)
-                .map(tag -> new CullRunSummary(tag, this.prepRoot.resolve(tag),
+    private SiftRuns listed(final String... tags) {
+        return new SiftRuns.Listed(Stream.of(tags)
+                .map(tag -> new SiftRunSummary(tag, this.prepRoot.resolve(tag),
                         new PrepDirHealth(PrepDirHealth.State.READY, List.of()),
                         new ShardTally(25, 25, 25), WRITTEN))
                 .toList());

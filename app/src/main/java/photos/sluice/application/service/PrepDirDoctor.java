@@ -5,19 +5,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.ApplyOptions;
-import photos.sluice.application.port.out.CullPrepPort;
+import photos.sluice.application.port.out.SiftPrepPort;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.service.MoveLedger.Ledger;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.CullScope;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.PrepDir;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PrepDirHealth.State;
-import photos.sluice.domain.cull.PurgeReport;
-import photos.sluice.domain.cull.ValidationReport;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.SiftScope;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.PrepDir;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PrepDirHealth.State;
+import photos.sluice.domain.sift.PurgeReport;
+import photos.sluice.domain.sift.ValidationReport;
 import photos.sluice.domain.job.ShardTally;
 
 import java.nio.file.Path;
@@ -42,7 +42,7 @@ import java.util.Map;
  *
  * <p>{@link ApplyPlanner}'s own validate()/checkMissingSources() are reused verbatim. That reuse is
  * why a proactive diagnosis and a failed apply's own ApplyException always describe the identical
- * set of findings. The allowPartial flag is always true here, so a still-culling dir reports on the
+ * set of findings. The allowPartial flag is always true here, so a still-sifting dir reports on the
  * shards it already has rather than flagging every uncalled montage as a finding.
  *
  * <p>Nothing on the diagnosis path can move a file: it reads through the planner, which is the
@@ -61,7 +61,7 @@ public class PrepDirDoctor {
     private static final String DECISIONS_FILE = "decisions.json";
     private static final String INDEX_FILE = "index.json";
 
-    private final CullPrepPort cullPrepPort;
+    private final SiftPrepPort siftPrepPort;
     private final MediaStore mediaStore;
     private final ApplyPlanner applyPlanner;
     private final LedgerReader ledgerReader;
@@ -70,18 +70,18 @@ public class PrepDirDoctor {
     /**
      * Creates a doctor wired to the same collaborators the apply side already uses.
      *
-     * @param cullPrepPort {@link CullPrepPort} reads prep-dir index, sidecars, and shards
+     * @param siftPrepPort {@link SiftPrepPort} reads prep-dir index, sidecars, and shards
      * @param mediaStore {@link MediaStore} filesystem access for prep dirs
      * @param applyPlanner {@link ApplyPlanner} the merged shard-contract and missing-source checks
      * @param ledgerReader {@link LedgerReader} takes a read-only move-ledger snapshot per diagnosis
      */
-    public PrepDirDoctor(final CullPrepPort cullPrepPort, final MediaStore mediaStore,
+    public PrepDirDoctor(final SiftPrepPort siftPrepPort, final MediaStore mediaStore,
                          final ApplyPlanner applyPlanner, final LedgerReader ledgerReader) {
-        this.cullPrepPort = cullPrepPort;
+        this.siftPrepPort = siftPrepPort;
         this.mediaStore = mediaStore;
         this.applyPlanner = applyPlanner;
         this.ledgerReader = ledgerReader;
-        this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, applyPlanner, ledgerReader);
+        this.shardTallyCalculator = new ShardTallyCalculator(siftPrepPort, applyPlanner, ledgerReader);
     }
 
     /**
@@ -125,7 +125,7 @@ public class PrepDirDoctor {
     }
 
     /**
-     * Every cull run currently sitting under cullPrepRoot, diagnosed.
+     * Every sift run currently sitting under siftPrepRoot, diagnosed.
      *
      * <p>Enumerating the root is the point, rather than deriving the list from anything a prep dir
      * says about itself. A run whose index cannot be read is the one most in need of attention. A
@@ -133,19 +133,19 @@ public class PrepDirDoctor {
      *
      * <p>Ordered by scope so a dashboard's rows hold still between refreshes.
      *
-     * <p>A root nobody could list answers {@link CullRuns.Unlistable} rather than an empty list.
+     * <p>A root nobody could list answers {@link SiftRuns.Unlistable} rather than an empty list.
      * Those two are the opposite answer, and a caller that cannot tell them apart reports a
      * machine's silence as a user's runs being gone.
      *
-     * @param cullPrepRoot {@link Path} the sift-prep root directory to enumerate
-     * @return {@link CullRuns} the runs found, diagnosed and ordered by scope, or that the root
+     * @param siftPrepRoot {@link Path} the sift-prep root directory to enumerate
+     * @return {@link SiftRuns} the runs found, diagnosed and ordered by scope, or that the root
      *     could not be read
      */
-    public CullRuns runs(final Path cullPrepRoot) {
-        return switch (this.listingUnder(cullPrepRoot)) {
+    public SiftRuns runs(final Path siftPrepRoot) {
+        return switch (this.listingUnder(siftPrepRoot)) {
             case Listing.Found(final List<Path> prepDirs) ->
-                    new CullRuns.Listed(prepDirs.stream().map(this::summaryOf).toList());
-            case Listing.Unlistable _ -> new CullRuns.Unlistable(cullPrepRoot);
+                    new SiftRuns.Listed(prepDirs.stream().map(this::summaryOf).toList());
+            case Listing.Unlistable _ -> new SiftRuns.Unlistable(siftPrepRoot);
         };
     }
 
@@ -162,11 +162,11 @@ public class PrepDirDoctor {
      * being summarised.
      *
      * @param prepDirPath {@link Path} the prep directory to summarise
-     * @return {@link CullRunSummary} that run's scope, diagnosis, tally and age
+     * @return {@link SiftRunSummary} that run's scope, diagnosis, tally and age
      */
-    public CullRunSummary summaryOf(final Path prepDirPath) {
+    public SiftRunSummary summaryOf(final Path prepDirPath) {
         final Diagnosis diagnosis = this.examine(prepDirPath);
-        return new CullRunSummary(CullScope.tagOf(prepDirPath), prepDirPath, diagnosis.health(),
+        return new SiftRunSummary(SiftScope.tagOf(prepDirPath), prepDirPath, diagnosis.health(),
                 diagnosis.shards(), lastModifiedOrEpoch(this.mediaStore, prepDirPath));
     }
 
@@ -180,7 +180,7 @@ public class PrepDirDoctor {
     }
 
     /**
-     * Manual, one-button housekeeping: hard-deletes every prep dir under cullPrepRoot this sweep
+     * Manual, one-button housekeeping: hard-deletes every prep dir under siftPrepRoot this sweep
      * diagnoses COMPLETE, and reports every other one it looked at alongside the state that kept
      * it. No age-based auto-purge, and no graveyard detour. A completed run holds no image weight
      * worth salvaging - apply()'s own cleanup already dropped the montage/tile images. Letting go
@@ -195,18 +195,18 @@ public class PrepDirDoctor {
      * <p>A root nobody could list purges nothing and says so, rather than reporting a sweep that
      * found nothing to do. The counts alone cannot tell those two apart.
      *
-     * @param cullPrepRoot {@link Path} the sift-prep root directory to sweep
+     * @param siftPrepRoot {@link Path} the sift-prep root directory to sweep
      * @return {@link PurgeReport} every scope purged, skipped with its state, or left unreadable, this sweep
      */
-    public PurgeReport purgeCompleted(final Path cullPrepRoot) {
-        if (!(this.listingUnder(cullPrepRoot) instanceof Listing.Found(final List<Path> prepDirs))) {
-            return new PurgeReport(List.of(), Map.of(), Map.of(), cullPrepRoot);
+    public PurgeReport purgeCompleted(final Path siftPrepRoot) {
+        if (!(this.listingUnder(siftPrepRoot) instanceof Listing.Found(final List<Path> prepDirs))) {
+            return new PurgeReport(List.of(), Map.of(), Map.of(), siftPrepRoot);
         }
         final var purged = new ArrayList<String>();
         final var skipped = new LinkedHashMap<String, State>();
         final var unreadable = new LinkedHashMap<String, String>();
         for (final Path prepDir : prepDirs) {
-            final String scope = CullScope.tagOf(prepDir);
+            final String scope = SiftScope.tagOf(prepDir);
             final State state = this.diagnose(prepDir).state();
             if (state == State.DAMAGED) {
                 unreadable.put(scope, "could not be read");
@@ -270,7 +270,7 @@ public class PrepDirDoctor {
 
         final PrepDir prepDir;
         try {
-            prepDir = this.cullPrepPort.readIndex(prepDirPath);
+            prepDir = this.siftPrepPort.readIndex(prepDirPath);
         } catch (final MalformedPrepJsonException e) {
             return new Diagnosis(new PrepDirHealth(State.BLOCKED,
                     List.of(new Finding.CorruptIndex(prepDirPath.resolve(INDEX_FILE)))), null);
@@ -325,7 +325,7 @@ public class PrepDirDoctor {
     }
 
     /**
-     * Every prep dir holding at least one file, as an immediate child of cullPrepRoot.
+     * Every prep dir holding at least one file, as an immediate child of siftPrepRoot.
      *
      * <p>Presence of a file is the occupancy test, not presence of index.json. A dir holding shards
      * an agent already produced, but whose index has since been lost, is still worth refusing to
@@ -341,21 +341,21 @@ public class PrepDirDoctor {
      * <p>A root that does not exist holds no runs, which is what a fresh install looks like. A root
      * that exists and could not be read holds an unknown number, and answers so.
      *
-     * @param cullPrepRoot {@link Path} the sift-prep root directory to enumerate
+     * @param siftPrepRoot {@link Path} the sift-prep root directory to enumerate
      * @return {@link Listing} every prep dir found and ordered by name, or the read failure
      */
-    private Listing listingUnder(final Path cullPrepRoot) {
+    private Listing listingUnder(final Path siftPrepRoot) {
         try {
-            if (!this.mediaStore.exists(cullPrepRoot)) {
+            if (!this.mediaStore.exists(siftPrepRoot)) {
                 return new Listing.Found(List.of());
             }
-            return new Listing.Found(this.mediaStore.listChildDirectories(cullPrepRoot).stream()
+            return new Listing.Found(this.mediaStore.listChildDirectories(siftPrepRoot).stream()
                     .filter(this::holdsAFile)
                     .sorted()
                     .toList());
         } catch (final RuntimeException e) {
             log.warn("Could not list {}, so what it holds is unknown this pass: {}",
-                    cullPrepRoot, e.toString());
+                    siftPrepRoot, e.toString());
             return new Listing.Unlistable(e);
         }
     }

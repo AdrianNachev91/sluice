@@ -17,7 +17,7 @@ import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.adapter.ui.SettingsView;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.VisionProviderCatalog;
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.ModelOption;
 import photos.sluice.application.port.out.PathSettings;
@@ -26,7 +26,7 @@ import photos.sluice.application.port.out.ProviderSetting;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.util.List;
 import java.util.Map;
@@ -596,7 +596,7 @@ class VisionProviderCardTest {
     private static VisionProviderPresenter checkingVisionProviderOn(final String provider,
                                                                      final Function<String, ProviderCheck> checkById) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
-                provider, Map.of(provider, new CullProviderSettings("a-model", null, 2)), List.of(),
+                provider, Map.of(provider, new SiftProviderSettings("a-model", null, 2)), List.of(),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         return new VisionProviderPresenter(oneStoredKey(), checkingThreeProviders(checkById),
                 settingsUseCase(settings));
@@ -621,7 +621,7 @@ class VisionProviderCardTest {
             }
 
             @Override
-            public ProviderCheck check(final String id, final CullProviderSettings candidate) {
+            public ProviderCheck check(final String id, final SiftProviderSettings candidate) {
                 return checkById.apply(id);
             }
         };
@@ -635,7 +635,7 @@ class VisionProviderCardTest {
                 new ModelOption("recommended-model", "Recommended model"),
                 new ModelOption("other-model", "Other model")), "recommended-model");
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
-                "anthropic", Map.of("anthropic", new CullProviderSettings("other-model", null, 2)), List.of(),
+                "anthropic", Map.of("anthropic", new SiftProviderSettings("other-model", null, 2)), List.of(),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         final List<VisionProviderDescriptor> all = List.of(
                 new VisionProviderDescriptor("anthropic", "Anthropic",
@@ -660,7 +660,7 @@ class VisionProviderCardTest {
             }
 
             @Override
-            public ProviderCheck check(final String id, final CullProviderSettings candidate) {
+            public ProviderCheck check(final String id, final SiftProviderSettings candidate) {
                 throw new AssertionError("no test here presses a credential check");
             }
         };

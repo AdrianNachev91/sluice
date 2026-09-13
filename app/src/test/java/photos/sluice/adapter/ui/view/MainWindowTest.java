@@ -36,7 +36,7 @@ import photos.sluice.application.port.in.ReviewListing;
 import photos.sluice.application.port.in.SortedTally;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.in.VisionProviderCatalog;
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.ModelOption;
@@ -48,14 +48,14 @@ import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
-import photos.sluice.domain.cull.CullCategory;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.sift.SiftCategory;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PrepDirHealth.State;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.model.SortSummary;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.MontageConfig;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.paths.PathViolation.NotConfigured;
@@ -193,7 +193,7 @@ class MainWindowTest {
     @Test
     void theRunsEntryCountsWhatIsOutstandingWithoutWaitingForANavPress() throws Exception {
         final Pipeline pipeline = mock(Pipeline.class);
-        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
+        when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(
                 unfinishedRun("2019"), unfinishedRun("2018"))));
         final BorderPane root = onFxThread(() ->
                 built(firstRunPresenter(false), settingsPresenter(), runsPresenter(pipeline)));
@@ -410,8 +410,8 @@ class MainWindowTest {
         return (BorderPane) scene.getRoot();
     }
 
-    private static CullRunSummary unfinishedRun(final String scope) {
-        return new CullRunSummary(scope, Path.of("logs", "sift-prep", scope),
+    private static SiftRunSummary unfinishedRun(final String scope) {
+        return new SiftRunSummary(scope, Path.of("logs", "sift-prep", scope),
                 new PrepDirHealth(State.WAITING, List.of()), new ShardTally(1, 1, 2), Instant.now());
     }
 
@@ -435,7 +435,7 @@ class MainWindowTest {
         final Pipeline pipeline = mock(Pipeline.class);
         when(pipeline.inboxTally()).thenReturn(new InboxTally(1204, 4_000_000_000L));
         when(pipeline.sortedTally()).thenReturn(new SortedTally(List.of(), 0));
-        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of()));
+        when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of()));
         final JobHandle<SortSummary> handle = mock(JobHandle.class);
         this.sortJob = new CompletableFuture<>();
         when(handle.onComplete()).thenReturn(this.sortJob);
@@ -452,10 +452,10 @@ class MainWindowTest {
                 List.of(), Set.of(2019), List.of(), false, 0);
     }
 
-    // A mock answers cullRuns() with null, so it is given an empty listing instead.
+    // A mock answers siftRuns() with null, so it is given an empty listing instead.
     private static RunsPresenter runsPresenter() {
         final Pipeline pipeline = mock(Pipeline.class);
-        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of()));
+        when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of()));
         return runsPresenter(pipeline);
     }
 
@@ -500,7 +500,7 @@ class MainWindowTest {
     private static final class MovingRoots implements PathValidationUseCase, SettingsUseCase {
 
         private final Settings settings = new Settings(new PathSettings("D:\\repo", "D:\\library", null),
-                "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
+                "anthropic", Map.of("anthropic", new SiftProviderSettings("a-model", null, 2)), List.of(),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         private List<PathViolation> inForce;
 
@@ -603,7 +603,7 @@ class MainWindowTest {
     // One card is enough: what this needs is a real pane, not any particular thing inside it.
     private static PhotoCategoriesPresenter photoCategoriesPresenter() {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
-                "anthropic", Map.of(), List.of(CullCategory.of("blurry", "Not worth keeping")),
+                "anthropic", Map.of(), List.of(SiftCategory.of("blurry", "Not worth keeping")),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         return new PhotoCategoriesPresenter(new SettingsUseCase() {
             @Override
@@ -625,7 +625,7 @@ class MainWindowTest {
 
     private static Presenters settingsPresenter(final Consumer<String> onCheck) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
-                "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
+                "anthropic", Map.of("anthropic", new SiftProviderSettings("a-model", null, 2)), List.of(),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         return settingsPresenter(onCheck, new SettingsUseCase() {
             @Override
@@ -702,7 +702,7 @@ class MainWindowTest {
             }
 
             @Override
-            public ProviderCheck check(final String id, final CullProviderSettings candidate) {
+            public ProviderCheck check(final String id, final SiftProviderSettings candidate) {
                 throw new AssertionError("no test here tries an endpoint the screen has not saved");
             }
         };

@@ -2,9 +2,9 @@ package photos.sluice.adapter.cli;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import org.jspecify.annotations.Nullable;
-import photos.sluice.domain.cull.DiscardReport;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PurgeReport;
+import photos.sluice.domain.sift.DiscardReport;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PurgeReport;
 
 import java.nio.file.Path;
 import java.util.List;

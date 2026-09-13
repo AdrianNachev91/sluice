@@ -12,13 +12,13 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import photos.sluice.adapter.fs.YamlSettingsStore;
-import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.SiftJobOutcome;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.SettingsStore;
 import photos.sluice.application.port.out.WorkingRootLock;
-import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.sift.SiftScope;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -75,7 +75,7 @@ class FolderRootsSaveCompositionTest {
     @Test
     void savingTheWorkingRootElsewhereRetiresTheWatchersItStranded() throws IOException {
         writePhoto(sortedPhotosDir(workingRoot, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        final var waiting = (CullJobOutcome.Waiting) this.pipeline.cull(new CullScope.Year(2019, null)).join();
+        final var waiting = (SiftJobOutcome.Waiting) this.pipeline.sift(new SiftScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
         assertThat(this.pipeline.isWatchActive(prepDir)).isTrue();
 

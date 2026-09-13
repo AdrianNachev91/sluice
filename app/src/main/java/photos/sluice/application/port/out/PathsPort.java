@@ -66,11 +66,11 @@ public interface PathsPort {
     Path logs();
 
     /**
-     * Where cull runs are prepared, one directory per run.
+     * Where sift runs are prepared, one directory per run.
      *
      * @return {@link Path} the sift-prep directory
      */
-    Path cullPrep();
+    Path siftPrep();
 
     /**
      * Where artifacts nobody could salvage are filed instead of deleted.

@@ -71,14 +71,14 @@ class DisasterDrawerTest {
 
     @Test
     void sweepExpiredDeletesOnlyDrawerEntriesOlderThanThirtyDays(@TempDir final Path root) throws IOException {
-        final Path cullPrepRoot = root.resolve("logs/sift-prep");
-        final Path drawer1 = cullPrepRoot.resolve("2019-06/disasters");
+        final Path siftPrepRoot = root.resolve("logs/sift-prep");
+        final Path drawer1 = siftPrepRoot.resolve("2019-06/disasters");
         final Path oldEntry = writeFile(drawer1.resolve("2019-01-01_00-00-00-move-records-log.log"), "old");
         final Path freshEntry = writeFile(drawer1.resolve(recentStampedName()), "fresh");
         // A sibling non-drawer file at the same nesting depth.
-        final Path unrelated = writeFile(cullPrepRoot.resolve("2019-06/index.json"), "{}");
+        final Path unrelated = writeFile(siftPrepRoot.resolve("2019-06/index.json"), "{}");
 
-        final int deleted = drawer().sweepExpired(cullPrepRoot);
+        final int deleted = drawer().sweepExpired(siftPrepRoot);
 
         assertThat(deleted).isEqualTo(1);
         assertThat(Files.exists(oldEntry)).isFalse();
@@ -88,10 +88,10 @@ class DisasterDrawerTest {
 
     @Test
     void sweepExpiredLeavesAnUnparseableFilenameAloneRatherThanGuessing(@TempDir final Path root) throws IOException {
-        final Path cullPrepRoot = root.resolve("logs/sift-prep");
-        final Path unparseable = writeFile(cullPrepRoot.resolve("2019-06/disasters/not-a-timestamped-name.log"), "?");
+        final Path siftPrepRoot = root.resolve("logs/sift-prep");
+        final Path unparseable = writeFile(siftPrepRoot.resolve("2019-06/disasters/not-a-timestamped-name.log"), "?");
 
-        final int deleted = drawer().sweepExpired(cullPrepRoot);
+        final int deleted = drawer().sweepExpired(siftPrepRoot);
 
         assertThat(deleted).isZero();
         assertThat(Files.exists(unparseable)).isTrue();

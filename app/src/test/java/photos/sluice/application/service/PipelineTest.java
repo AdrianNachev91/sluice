@@ -2,20 +2,20 @@ package photos.sluice.application.service;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.SiftJobOutcome;
 import photos.sluice.application.port.in.RescueRoot;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
-import photos.sluice.domain.cull.AnswerSource;
-import photos.sluice.domain.cull.ChoiceAnswer;
-import photos.sluice.domain.cull.CorruptSidecarResolution;
-import photos.sluice.domain.cull.CullScope;
-import photos.sluice.domain.cull.DiscardReport;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.OverlapResolution;
-import photos.sluice.domain.cull.PrepDirHealth.State;
-import photos.sluice.domain.cull.PurgeReport;
-import photos.sluice.domain.cull.TroubleshootReport;
+import photos.sluice.domain.sift.AnswerSource;
+import photos.sluice.domain.sift.ChoiceAnswer;
+import photos.sluice.domain.sift.CorruptSidecarResolution;
+import photos.sluice.domain.sift.SiftScope;
+import photos.sluice.domain.sift.DiscardReport;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.OverlapResolution;
+import photos.sluice.domain.sift.PrepDirHealth.State;
+import photos.sluice.domain.sift.PurgeReport;
+import photos.sluice.domain.sift.TroubleshootReport;
 import photos.sluice.domain.imports.ImportKind;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
@@ -35,17 +35,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingMoves;
 import static photos.sluice.application.service.PipelineTestSupport.FailingMoves;
-import static photos.sluice.application.service.PipelineTestSupport.AutoApproveCuller;
-import static photos.sluice.application.service.PipelineTestSupport.ManualModeCuller;
+import static photos.sluice.application.service.PipelineTestSupport.AutoApproveSieve;
+import static photos.sluice.application.service.PipelineTestSupport.ManualModeSieve;
 import static photos.sluice.application.service.PipelineTestSupport.RecordingProgressPort;
-import static photos.sluice.application.service.PipelineTestSupport.autoApproveCullSettings;
+import static photos.sluice.application.service.PipelineTestSupport.autoApproveSiftSettings;
 import static photos.sluice.application.service.PipelineTestSupport.classificationJson;
-import static photos.sluice.application.service.PipelineTestSupport.cullPipeline;
+import static photos.sluice.application.service.PipelineTestSupport.siftPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.inboxOf;
 import static photos.sluice.application.service.PipelineTestSupport.padded;
 import static photos.sluice.application.service.PipelineTestSupport.pipeline;
 import static photos.sluice.application.service.PipelineTestSupport.sortedPhotosDir;
-import static photos.sluice.application.service.PipelineTestSupport.defaultCullSettings;
+import static photos.sluice.application.service.PipelineTestSupport.defaultSiftSettings;
 import static photos.sluice.application.service.PipelineTestSupport.watchPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.writeFile;
 import static photos.sluice.application.service.PipelineTestSupport.writePhoto;
@@ -82,14 +82,14 @@ class PipelineTest {
     void aScopeCostsNothingToSiftThroughAProviderThatCallsNoModel(@TempDir final Path root) {
         final var progress = new RecordingProgressPort();
 
-        assertThat(cullPipeline(root, progress).estimateFor(100).totalTokens()).isZero();
+        assertThat(siftPipeline(root, progress).estimateFor(100).totalTokens()).isZero();
     }
 
     @Test
     void aScopeSiftedThroughAProviderThatCallsAModelIsSizedOnItsPhotoCount(@TempDir final Path root) {
         final var progress = new RecordingProgressPort();
         final Pipeline pipeline =
-                cullPipeline(root, progress, autoApproveCullSettings(), List.of(new AutoApproveCuller()));
+                siftPipeline(root, progress, autoApproveSiftSettings(), List.of(new AutoApproveSieve()));
 
         final long hundred = pipeline.estimateFor(100).totalTokens();
 
@@ -101,14 +101,14 @@ class PipelineTest {
     void aProviderThatCallsNoModelIsReportedAsSpendingNothing(@TempDir final Path root) {
         final var progress = new RecordingProgressPort();
 
-        assertThat(cullPipeline(root, progress).configuredProviderSpends()).isFalse();
+        assertThat(siftPipeline(root, progress).configuredProviderSpends()).isFalse();
     }
 
     @Test
     void aProviderThatCallsAModelIsReportedAsAbleToSpend(@TempDir final Path root) {
         final var progress = new RecordingProgressPort();
 
-        assertThat(cullPipeline(root, progress, autoApproveCullSettings(), List.of(new AutoApproveCuller()))
+        assertThat(siftPipeline(root, progress, autoApproveSiftSettings(), List.of(new AutoApproveSieve()))
                 .configuredProviderSpends()).isTrue();
     }
 
@@ -336,8 +336,8 @@ class PipelineTest {
         final var progress = new RecordingProgressPort();
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
                 ":00:00Z"));
-        final var pipeline = cullPipeline(root, progress);
-        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final var pipeline = siftPipeline(root, progress);
+        final var waiting = (SiftJobOutcome.Waiting) pipeline.sift(new SiftScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         pipeline.resume(prepDir, false).join();
@@ -353,8 +353,8 @@ class PipelineTest {
         final var progress = new RecordingProgressPort();
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
                 Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = cullPipeline(root, progress);
-        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final var pipeline = siftPipeline(root, progress);
+        final var waiting = (SiftJobOutcome.Waiting) pipeline.sift(new SiftScope.Year(2019, null)).join();
         writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
         pipeline.resume(waiting.job().prepDir(), false).join();
         progress.events.clear();
@@ -369,11 +369,11 @@ class PipelineTest {
             throws IOException {
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
                 Instant.parse("2019-06-01T10:00:00Z"));
-        final var preparing = cullPipeline(root, new RecordingProgressPort());
-        final var waiting = (CullJobOutcome.Waiting) preparing.cull(new CullScope.Year(2019, null)).join();
+        final var preparing = siftPipeline(root, new RecordingProgressPort());
+        final var waiting = (SiftJobOutcome.Waiting) preparing.sift(new SiftScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-        final var moved = cullPipeline(movedTo, new RecordingProgressPort());
+        final var moved = siftPipeline(movedTo, new RecordingProgressPort());
 
         assertThatThrownBy(() -> moved.troubleshoot(prepDir).join())
                 .isInstanceOf(CompletionException.class)
@@ -386,8 +386,8 @@ class PipelineTest {
         final var progress = new RecordingProgressPort();
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
                 ":00:00Z"));
-        final var pipeline = cullPipeline(root, progress);
-        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final var pipeline = siftPipeline(root, progress);
+        final var waiting = (SiftJobOutcome.Waiting) pipeline.sift(new SiftScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         pipeline.resume(prepDir, false).join();
@@ -403,8 +403,8 @@ class PipelineTest {
         final var progress = new RecordingProgressPort();
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
                 Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = cullPipeline(root, progress);
-        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final var pipeline = siftPipeline(root, progress);
+        final var waiting = (SiftJobOutcome.Waiting) pipeline.sift(new SiftScope.Year(2019, null)).join();
         writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
         pipeline.resume(waiting.job().prepDir(), false).join();
         progress.events.clear();
@@ -418,9 +418,9 @@ class PipelineTest {
     // wired to the wrong remedy would still compile.
     @Test
     void everyAnswerReachesTheRemedyItNames(@TempDir final Path root) throws IOException {
-        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var pipeline = siftPipeline(root, new RecordingProgressPort());
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final var waiting = (SiftJobOutcome.Waiting) pipeline.sift(new SiftScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
         final Path gone = root.resolve("Sorted/Photos/2019/06/gone.jpg");
         final Path overlapping = root.resolve("Sorted/Photos/2019/06/overlapping.jpg");
@@ -496,8 +496,8 @@ class PipelineTest {
     void discardRunsAsABackgroundJobAndFilesEverythingIntoTheGraveyard(@TempDir final Path root) throws IOException {
         final var progress = new RecordingProgressPort();
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = cullPipeline(root, progress);
-        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final var pipeline = siftPipeline(root, progress);
+        final var waiting = (SiftJobOutcome.Waiting) pipeline.sift(new SiftScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
 
         final DiscardReport report = pipeline.discard(prepDir).join();
@@ -511,8 +511,8 @@ class PipelineTest {
     void discardAnnouncesItsOnePhaseAndThenReportsIt(@TempDir final Path root) throws IOException {
         final var progress = new RecordingProgressPort();
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = cullPipeline(root, progress);
-        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final var pipeline = siftPipeline(root, progress);
+        final var waiting = (SiftJobOutcome.Waiting) pipeline.sift(new SiftScope.Year(2019, null)).join();
         progress.events.clear();
 
         pipeline.discard(waiting.job().prepDir()).join();
@@ -528,8 +528,8 @@ class PipelineTest {
         final var progress = new RecordingProgressPort();
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
                 ":00:00Z"));
-        final var pipeline = cullPipeline(root, progress);
-        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final var pipeline = siftPipeline(root, progress);
+        final var waiting = (SiftJobOutcome.Waiting) pipeline.sift(new SiftScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         pipeline.resume(prepDir, false).join();
@@ -544,10 +544,10 @@ class PipelineTest {
     void discardRefusesARunOutsideTheWorkingRootInForce(@TempDir final Path root, @TempDir final Path movedTo)
             throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        final var preparing = cullPipeline(root, new RecordingProgressPort());
-        final var waiting = (CullJobOutcome.Waiting) preparing.cull(new CullScope.Year(2019, null)).join();
+        final var preparing = siftPipeline(root, new RecordingProgressPort());
+        final var waiting = (SiftJobOutcome.Waiting) preparing.sift(new SiftScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
-        final var moved = cullPipeline(movedTo, new RecordingProgressPort());
+        final var moved = siftPipeline(movedTo, new RecordingProgressPort());
 
         assertThatThrownBy(() -> moved.discard(prepDir).join())
                 .isInstanceOf(CompletionException.class)
@@ -558,9 +558,9 @@ class PipelineTest {
     @Test
     void discardDisarmsAnAlreadyArmedWatcher(@TempDir final Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
-                List.of(new ManualModeCuller()), Duration.ofSeconds(30));
-        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultSiftSettings(),
+                List.of(new ManualModeSieve()), Duration.ofSeconds(30));
+        final var waiting = (SiftJobOutcome.Waiting) pipeline.sift(new SiftScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
         assertThat(pipeline.isWatchActive(prepDir)).isTrue();
 

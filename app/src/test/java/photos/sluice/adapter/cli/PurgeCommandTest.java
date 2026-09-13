@@ -8,10 +8,10 @@ import photos.sluice.application.port.out.WorkingRootLock;
 import photos.sluice.application.service.JobRunner;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.config.SettingsFixture;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PurgeReport;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PurgeReport;
 import photos.sluice.domain.paths.PathViolation;
 
 import java.io.ByteArrayInputStream;
@@ -40,7 +40,7 @@ class PurgeCommandTest {
 
     @Test
     void withAFinishedRunAndNoYesItRefusesAndNamesTheScope() {
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(complete("2019"), blocked("2020"))));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(complete("2019"), blocked("2020"))));
 
         final CliHarness.Result result = this.run("purge");
 
@@ -50,7 +50,7 @@ class PurgeCommandTest {
 
     @Test
     void withNothingFinishedItRunsStraightThroughWithNoYes() {
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(blocked("2020"))));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(blocked("2020"))));
         when(this.pipeline.purgeCompleted())
                 .thenAnswer(_ -> this.runner.submit(_ -> new PurgeReport(List.of(), Map.of(), Map.of(), null)));
 
@@ -62,7 +62,7 @@ class PurgeCommandTest {
 
     @Test
     void withYesItPurgesAndReportsWhatWasCleared() {
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(complete("2019"))));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(complete("2019"))));
         when(this.pipeline.purgeCompleted()).thenAnswer(_ -> this.runner.submit(_ ->
                 new PurgeReport(List.of("2019"), Map.of("2020", PrepDirHealth.State.BLOCKED), Map.of(), null)));
 
@@ -77,7 +77,7 @@ class PurgeCommandTest {
     // unwatched harness a purge stays silent whether or not the offer is guarded.
     @Test
     void aPurgeOffersNoStopBecauseItCannotHonourOne() {
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(complete("2019"))));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(complete("2019"))));
         when(this.pipeline.purgeCompleted()).thenAnswer(_ -> this.runner.submit(_ ->
                 new PurgeReport(List.of("2019"), Map.of(), Map.of(), null)));
         final var reported = new ByteArrayOutputStream();
@@ -89,7 +89,7 @@ class PurgeCommandTest {
 
     @Test
     void anOrdinarySweepLeavesTheUnreadableRootOutRatherThanWritingItAsNull() {
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(complete("2019"))));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(complete("2019"))));
         when(this.pipeline.purgeCompleted()).thenAnswer(_ -> this.runner.submit(_ ->
                 new PurgeReport(List.of("2019"), Map.of(), Map.of(), null)));
 
@@ -103,7 +103,7 @@ class PurgeCommandTest {
     @Test
     void anUnreadableRootIsRefusedRatherThanReportingAnEmptyCount() {
         final var root = Path.of("D:", "Sift", "logs", "sift-prep");
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Unlistable(root));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Unlistable(root));
 
         final CliHarness.Result result = this.run("purge");
 
@@ -116,7 +116,7 @@ class PurgeCommandTest {
     // sweep runs.
     @Test
     void aRootThatBecomesUnreadableDuringTheJobReportsItRatherThanFailing() {
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of()));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of()));
         final var root = Path.of("D:", "Sift", "logs", "sift-prep");
         when(this.pipeline.purgeCompleted())
                 .thenAnswer(_ -> this.runner.submit(_ -> new PurgeReport(List.of(), Map.of(), Map.of(), root)));
@@ -128,13 +128,13 @@ class PurgeCommandTest {
                 .contains("No Sluice process is holding it");
     }
 
-    private static CullRunSummary complete(final String scope) {
-        return new CullRunSummary(scope, PREP_DIR.resolveSibling(scope),
+    private static SiftRunSummary complete(final String scope) {
+        return new SiftRunSummary(scope, PREP_DIR.resolveSibling(scope),
                 new PrepDirHealth(PrepDirHealth.State.COMPLETE, List.of()), null, Instant.EPOCH);
     }
 
-    private static CullRunSummary blocked(final String scope) {
-        return new CullRunSummary(scope, PREP_DIR.resolveSibling(scope),
+    private static SiftRunSummary blocked(final String scope) {
+        return new SiftRunSummary(scope, PREP_DIR.resolveSibling(scope),
                 new PrepDirHealth(PrepDirHealth.State.BLOCKED, List.of()), null, Instant.EPOCH);
     }
 

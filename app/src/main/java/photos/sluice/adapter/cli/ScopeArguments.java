@@ -2,7 +2,7 @@ package photos.sluice.adapter.cli;
 
 import org.jspecify.annotations.Nullable;
 import photos.sluice.domain.commit.CommitScope;
-import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.sift.SiftScope;
 import photos.sluice.domain.model.MonthRange;
 import photos.sluice.domain.model.SortScope;
 
@@ -87,20 +87,20 @@ public record ScopeArguments(@Nullable String year, @Nullable String months, @Nu
      * named rather than guessed at.
      *
      * @param verb {@link String} the verb asking, as the person typed it
-     * @return {@link CullScope} what to sift
+     * @return {@link SiftScope} what to sift
      * @throws ScopeRefusedException when the arguments name no scope this verb can build
      */
-    public CullScope cullScope(final String verb) {
+    public SiftScope siftScope(final String verb) {
         this.refuseTwoWays(verb);
         this.refuseUndated(verb, "A sift looks at photos filed under a year, and " + UNDATED
                 + " names the ones nothing could date");
         if (this.oldest != null) {
-            return new CullScope.OldestN(count(this.oldest));
+            return new SiftScope.OldestN(count(this.oldest));
         }
         if (this.year == null) {
             throw missing(verb, "Name a year, like " + verb + " 2019, or " + OLDEST + " 30.");
         }
-        return new CullScope.Year(yearOf(this.year, null),
+        return new SiftScope.Year(yearOf(this.year, null),
                 this.months == null ? null : Months.of(this.months));
     }
 

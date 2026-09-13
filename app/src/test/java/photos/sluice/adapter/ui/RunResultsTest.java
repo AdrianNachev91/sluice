@@ -6,18 +6,18 @@ import org.junit.jupiter.api.Test;
 import photos.sluice.adapter.ui.RunResultView.CardAction;
 import photos.sluice.adapter.ui.RunResultView.Count;
 import photos.sluice.adapter.ui.RunResultView.Tone;
-import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.SiftJobOutcome;
 import photos.sluice.application.port.in.WaitingReason;
-import photos.sluice.application.port.out.CullException;
-import photos.sluice.application.port.out.CullReport;
+import photos.sluice.application.port.out.SiftException;
+import photos.sluice.application.port.out.SiftReport;
 import photos.sluice.application.port.out.TokenSpend;
 import photos.sluice.domain.commit.CommitSummary;
-import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.sift.ApplyReport;
 import photos.sluice.domain.commit.LibraryBucket;
-import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.sift.Finding;
 import photos.sluice.domain.imports.ImportSummary;
 import photos.sluice.domain.job.ShardTally;
-import photos.sluice.domain.job.WaitingCullJob;
+import photos.sluice.domain.job.WaitingSiftJob;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.model.SortSummary.LowConfidenceCounts;
 import photos.sluice.domain.rescue.RescueSummary;
@@ -72,9 +72,9 @@ class RunResultsTest {
 
         @Test
         void aRunBlockedByItsOwnValidationSaysWhereThePhotosStillAre() {
-            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
+            final RunResultView card = card(RunMode.SIFT, new SiftJobOutcome.Blocked(
                     waitingJob(new ShardTally(28, 28, 28)), List.of(new Finding.MissingMontageField("montage-003")),
-                    CullReport.nothingSpent("anthropic", 0), null));
+                    SiftReport.nothingSpent("anthropic", 0), null));
 
             assertThat(card.heading()).isEqualTo("Sifting stopped and needs a look.");
             assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
@@ -84,9 +84,9 @@ class RunResultsTest {
 
         @Test
         void aBlockedRunStillAccountsForTheSheetsItJudged() {
-            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
+            final RunResultView card = card(RunMode.SIFT, new SiftJobOutcome.Blocked(
                     waitingJob(new ShardTally(28, 28, 28)), List.of(),
-                    CullReport.nothingSpent("anthropic", 0), null));
+                    SiftReport.nothingSpent("anthropic", 0), null));
 
             assertThat(labelled(card, "Sheets judged")).isEqualTo("28 of 28");
         }
@@ -95,8 +95,8 @@ class RunResultsTest {
         // reading the report's own figure fails here.
         @Test
         void aFinishedRunCountsEveryTokenItSpentRatherThanTheLastCallsOwn() {
-            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Applied(
-                    new CullReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false),
+            final RunResultView card = card(RunMode.SIFT, new SiftJobOutcome.Applied(
+                    new SiftReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false),
                     new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), null, 31_400L));
 
             assertThat(labelled(card, "Tokens used")).isEqualTo("31,400");
@@ -104,8 +104,8 @@ class RunResultsTest {
 
         @Test
         void aRunThatReachedNoModelCountsNoTokensRatherThanZero() {
-            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Applied(
-                    CullReport.nothingSpent("external-agent", 0),
+            final RunResultView card = card(RunMode.SIFT, new SiftJobOutcome.Applied(
+                    SiftReport.nothingSpent("external-agent", 0),
                     new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), null, 0L));
 
             assertThat(card.counts()).extracting(Count::label).doesNotContain("Tokens used");
@@ -113,8 +113,8 @@ class RunResultsTest {
 
         @Test
         void aRunWhoseSpendCouldNotBeReadBackCountsNoTokensAtAll() {
-            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Applied(
-                    new CullReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false),
+            final RunResultView card = card(RunMode.SIFT, new SiftJobOutcome.Applied(
+                    new SiftReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false),
                     new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), null, null));
 
             assertThat(card.counts()).extracting(Count::label).doesNotContain("Tokens used");
@@ -123,7 +123,7 @@ class RunResultsTest {
         @Test
         void aRunCancelledBeforeItsSheetsWereBuiltCountsNoneOfThem() {
             final RunResultView card = card(RunMode.SIFT,
-                    new CullJobOutcome.Cancelled(CullReport.nothingSpent("anthropic", 0), null));
+                    new SiftJobOutcome.Cancelled(SiftReport.nothingSpent("anthropic", 0), null));
 
             assertThat(card.heading()).isEqualTo("Sifting stopped.");
             assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
@@ -133,7 +133,7 @@ class RunResultsTest {
         @Test
         void aRunCancelledBeforeItsSheetsWereBuiltPromisesNoWayToContinue() {
             final RunResultView card = card(RunMode.SIFT,
-                    new CullJobOutcome.Cancelled(CullReport.nothingSpent("anthropic", 0), null));
+                    new SiftJobOutcome.Cancelled(SiftReport.nothingSpent("anthropic", 0), null));
 
             assertThat(card.action()).isNull();
             assertThat(card.detail())
@@ -156,16 +156,16 @@ class RunResultsTest {
             final Path graveyard = Path.of("logs", "sift-prep", "graveyard", "2019");
 
             assertThat(List.of(
-                    card(RunMode.SIFT, new CullJobOutcome.Applied(
-                            CullReport.nothingSpent("anthropic", 0),
+                    card(RunMode.SIFT, new SiftJobOutcome.Applied(
+                            SiftReport.nothingSpent("anthropic", 0),
                             new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), graveyard, null)),
-                    card(RunMode.SIFT, new CullJobOutcome.Waiting(waitingJob(new ShardTally(0, 0, 28)),
-                            WaitingReason.SHARDS_OUTSTANDING, CullReport.nothingSpent("anthropic", 28),
+                    card(RunMode.SIFT, new SiftJobOutcome.Waiting(waitingJob(new ShardTally(0, 0, 28)),
+                            WaitingReason.SHARDS_OUTSTANDING, SiftReport.nothingSpent("anthropic", 28),
                             graveyard)),
-                    card(RunMode.SIFT, new CullJobOutcome.Blocked(waitingJob(new ShardTally(28, 28, 28)),
-                            List.of(), CullReport.nothingSpent("anthropic", 0), graveyard)),
-                    card(RunMode.SIFT, new CullJobOutcome.Cancelled(
-                            CullReport.nothingSpent("anthropic", 0), graveyard))))
+                    card(RunMode.SIFT, new SiftJobOutcome.Blocked(waitingJob(new ShardTally(28, 28, 28)),
+                            List.of(), SiftReport.nothingSpent("anthropic", 0), graveyard)),
+                    card(RunMode.SIFT, new SiftJobOutcome.Cancelled(
+                            SiftReport.nothingSpent("anthropic", 0), graveyard))))
                     .allSatisfy(card -> assertThat(String.valueOf(card.detail()))
                             .doesNotContain(graveyard.toString()));
         }
@@ -174,9 +174,9 @@ class RunResultsTest {
         // missing sheets.
         @Test
         void aRunBlockedWithSheetsStillOwedDoesNotClaimTheyAllCameBack() {
-            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
+            final RunResultView card = card(RunMode.SIFT, new SiftJobOutcome.Blocked(
                     waitingJob(new ShardTally(26, 26, 28)), List.of(),
-                    CullReport.nothingSpent("anthropic", 0), null));
+                    SiftReport.nothingSpent("anthropic", 0), null));
 
             assertThat(requireNonNull(card.detail()))
                     .startsWith("2 sheets never came back")
@@ -187,9 +187,9 @@ class RunResultsTest {
         // and 24 of 28 passed. Any two of them being equal would let a wrong reading look right.
         @Test
         void aBlockedRunSeparatesTheSheetsThatNeverCameFromTheOnesThatCameBackWrong() {
-            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
+            final RunResultView card = card(RunMode.SIFT, new SiftJobOutcome.Blocked(
                     waitingJob(new ShardTally(27, 24, 28)), List.of(),
-                    CullReport.nothingSpent("anthropic", 0), null));
+                    SiftReport.nothingSpent("anthropic", 0), null));
 
             assertThat(requireNonNull(card.detail())).startsWith("1 sheet never came back");
             assertThat(labelled(card, "Sheets judged")).isEqualTo("24 of 28");
@@ -197,9 +197,9 @@ class RunResultsTest {
 
         @Test
         void aRunBlockedWithEverySheetInSaysSo() {
-            final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
+            final RunResultView card = card(RunMode.SIFT, new SiftJobOutcome.Blocked(
                     waitingJob(new ShardTally(28, 28, 28)), List.of(),
-                    CullReport.nothingSpent("anthropic", 0), null));
+                    SiftReport.nothingSpent("anthropic", 0), null));
 
             assertThat(requireNonNull(card.detail())).startsWith("Every sheet came back");
         }
@@ -207,9 +207,9 @@ class RunResultsTest {
         // A failed card counts nothing, so what the run did reach would appear on no screen at all.
         @Test
         void aRunTheProviderGaveUpOnStillCountsWhatItSpent() {
-            final RunResultView card = RunResults.incompleteResult(RunMode.SIFT, new CullException(
+            final RunResultView card = RunResults.incompleteResult(RunMode.SIFT, new SiftException(
                     "sheet 3 came back wrong twice",
-                    new CullReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false)));
+                    new SiftReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false)));
 
             assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
             assertThat(card.location()).isEqualTo(Location.RUNS);
@@ -221,7 +221,7 @@ class RunResultsTest {
         @Test
         void aRunTheProviderGaveUpOnDoesNotQuoteTheReportItRaised() {
             final RunResultView card = RunResults.incompleteResult(RunMode.SIFT,
-                    new CullException("montage-003: 26 verdicts for 25 tiles", (CullReport) null));
+                    new SiftException("montage-003: 26 verdicts for 25 tiles", (SiftReport) null));
 
             assertThat(requireNonNull(card.detail()))
                     .doesNotContain("montage-003")
@@ -528,9 +528,9 @@ class RunResultsTest {
                 .orElseThrow(() -> new AssertionError("no row labelled " + label + " on " + card.counts()));
     }
 
-    private static CullJobOutcome waiting(final WaitingReason reason) {
-        return new CullJobOutcome.Waiting(waitingJob(new ShardTally(0, 0, 28)), reason,
-                CullReport.nothingSpent("anthropic", 28), null);
+    private static SiftJobOutcome waiting(final WaitingReason reason) {
+        return new SiftJobOutcome.Waiting(waitingJob(new ShardTally(0, 0, 28)), reason,
+                SiftReport.nothingSpent("anthropic", 28), null);
     }
 
     // A run nobody narrowed.
@@ -538,8 +538,8 @@ class RunResultsTest {
         return RunResults.of(ran, outcome, null);
     }
 
-    private static WaitingCullJob waitingJob(final ShardTally sheets) {
-        return new WaitingCullJob("2019", PREP_DIR, sheets, Instant.EPOCH);
+    private static WaitingSiftJob waitingJob(final ShardTally sheets) {
+        return new WaitingSiftJob("2019", PREP_DIR, sheets, Instant.EPOCH);
     }
 
     private static SortSummary sortSummary(final List<String> warnings) {

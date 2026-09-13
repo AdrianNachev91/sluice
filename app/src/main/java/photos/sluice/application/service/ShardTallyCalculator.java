@@ -3,12 +3,12 @@ package photos.sluice.application.service;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import photos.sluice.application.port.out.CullPrepPort;
+import photos.sluice.application.port.out.SiftPrepPort;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
-import photos.sluice.domain.cull.PrepDir;
-import photos.sluice.domain.cull.SidecarPhotoEntry;
-import photos.sluice.domain.cull.ShardValidator;
-import photos.sluice.domain.cull.ShardValidator.ShardFile;
+import photos.sluice.domain.sift.PrepDir;
+import photos.sluice.domain.sift.SidecarPhotoEntry;
+import photos.sluice.domain.sift.ShardValidator;
+import photos.sluice.domain.sift.ShardValidator.ShardFile;
 import photos.sluice.domain.job.ShardTally;
 
 import java.nio.file.Path;
@@ -20,7 +20,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Computes a waiting cull job's present/valid shard counts from its prep dir, and answers whether
+ * Computes a waiting sift job's present/valid shard counts from its prep dir, and answers whether
  * that prep dir is worth resuming yet.
  *
  * <p>Neither answer is a verdict on shard content. The tally is a display number, computed one
@@ -34,7 +34,7 @@ final class ShardTallyCalculator {
 
     private static final Logger log = LoggerFactory.getLogger(ShardTallyCalculator.class);
 
-    private final CullPrepPort cullPrepPort;
+    private final SiftPrepPort siftPrepPort;
     private final ApplyPlanner applyPlanner;
     private final LedgerReader ledgerReader;
     private final ShardValidator shardValidator = new ShardValidator();
@@ -48,13 +48,13 @@ final class ShardTallyCalculator {
     /**
      * Creates a calculator backed by the given prep-dir reader and apply gate.
      *
-     * @param cullPrepPort {@link CullPrepPort} reads prep-dir index, sidecars, and shards
+     * @param siftPrepPort {@link SiftPrepPort} reads prep-dir index, sidecars, and shards
      * @param applyPlanner {@link ApplyPlanner} resolves the unreviewable list against the ledger
      * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that validator honours
      */
-    ShardTallyCalculator(final CullPrepPort cullPrepPort, final ApplyPlanner applyPlanner,
+    ShardTallyCalculator(final SiftPrepPort siftPrepPort, final ApplyPlanner applyPlanner,
                          final LedgerReader ledgerReader) {
-        this.cullPrepPort = cullPrepPort;
+        this.siftPrepPort = siftPrepPort;
         this.applyPlanner = applyPlanner;
         this.ledgerReader = ledgerReader;
     }
@@ -89,7 +89,7 @@ final class ShardTallyCalculator {
      */
     Reading poll(final Path prepDir) {
         try {
-            return this.readingOf(this.cullPrepPort.readIndex(prepDir));
+            return this.readingOf(this.siftPrepPort.readIndex(prepDir));
         } catch (final MalformedPrepJsonException e) {
             warnBriefly(notReady(prepDir), e);
             return new Reading(false, null);
@@ -136,7 +136,7 @@ final class ShardTallyCalculator {
 
     /**
      * A sidecar this app wrote itself during prep should always be readable. A transiently unreadable
-     * one (mid-write by a concurrent cull job) degrades to "contributes no in-scope files" here,
+     * one (mid-write by a concurrent sift job) degrades to "contributes no in-scope files" here,
      * rather than failing the whole tally. That's the same tolerance montageShardStatus() already
      * gives an unparseable shard below.
      *
@@ -146,7 +146,7 @@ final class ShardTallyCalculator {
      */
     private List<SidecarPhotoEntry> readSidecar(final PrepDir prep, final String montage) {
         try {
-            return this.cullPrepPort.readSidecar(prep.prepDir(), montage);
+            return this.siftPrepPort.readSidecar(prep.prepDir(), montage);
         } catch (final MalformedPrepJsonException e) {
             warnBriefly(noFilesFrom(prep, montage), e);
             return List.of();
@@ -190,10 +190,10 @@ final class ShardTallyCalculator {
                                                   final List<Path> sidecarSrcs,
                                                   final List<Path> unreviewable) {
         try {
-            if (!this.cullPrepPort.hasShard(prep.prepDir(), montage)) {
+            if (!this.siftPrepPort.hasShard(prep.prepDir(), montage)) {
                 return new MontageShardStatus(false, false, false);
             }
-            final var shardFile = new ShardFile(montage, this.cullPrepPort.readShard(prep.prepDir(), montage),
+            final var shardFile = new ShardFile(montage, this.siftPrepPort.readShard(prep.prepDir(), montage),
                     sheetSrcs);
             final var report = this.shardValidator.validate(List.of(shardFile), sidecarSrcs, prep.categoryNames(),
                     unreviewable);

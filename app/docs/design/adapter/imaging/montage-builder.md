@@ -100,7 +100,7 @@ metrics vary slightly between them.
   expected to occur in normal operation.
 - **This class never filters by `TileResult.unreviewable`.** `MontageTile` has no such field.
   Excluding unreviewable tiles (no decode at all, or real pixels below 640px) before batching is the
-  caller's job, not this class's - see `CullMontageRenderer` below. If one leaked through anyway,
+  caller's job, not this class's - see `SiftMontageRenderer` below. If one leaked through anyway,
   `TileRenderer.placeholder()`'s `#444444` background still stays visually distinct from this
   class's own `#111111` grid background, so it wouldn't silently blend in.
 - **Pixel-based tests deliberately avoid exact glyph colors.** They check only that label-band
@@ -112,9 +112,9 @@ metrics vary slightly between them.
 - `adapter/imaging/TileRenderer` - supplies the images this class composes; not called directly by
   `MontageBuilder` itself (the caller renders tiles first, then hands the results here). See
   [`tile-renderer.md`](tile-renderer.md).
-- `domain/cull/MontageConfig` - supplies `tileSize`/`tilesPerRow`.
-- `adapter/imaging/CullMontageRenderer` - implements `MontageRenderer` on top of this class. It
+- `domain/sift/MontageConfig` - supplies `tileSize`/`tilesPerRow`.
+- `adapter/imaging/SiftMontageRenderer` - implements `MontageRenderer` on top of this class. It
   batches photos, calls `TileRenderer` per photo, calls this class per batch, then writes the
   composed image and sidecar JSON to disk. This is also where `TileResult.unreviewable` filtering
-  happens - this class doesn't do it. See [`cull-montage-renderer.md`](cull-montage-renderer.md) for
+  happens - this class doesn't do it. See [`sift-montage-renderer.md`](sift-montage-renderer.md) for
   the full design.

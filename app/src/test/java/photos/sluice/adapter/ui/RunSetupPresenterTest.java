@@ -15,11 +15,11 @@ import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.port.in.SpendEstimate;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.commit.CommitScope;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.CullScope;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.SiftScope;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PrepDirHealth.State;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
 
@@ -66,7 +66,7 @@ class RunSetupPresenterTest {
         // A spending provider is the fixture, so every test below is about the figure rather than
         // about whether there is one at all.
         when(this.pipeline.configuredProviderSpends()).thenReturn(true);
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of()));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of()));
         this.presenter.refreshCounts();
     }
 
@@ -1181,7 +1181,7 @@ class RunSetupPresenterTest {
         this.choose(RunMode.SIFT, "2019");
 
         final String refused = RunRefusals.refuseSentence(new Pipeline.ScopeOverlapsException(
-                new CullScope.Year(2019, null), List.of(aRun("2019-06", State.WAITING))));
+                new SiftScope.Year(2019, null), List.of(aRun("2019-06", State.WAITING))));
 
         assertThat(refused).isEqualTo(this.presenter.view().scopeRefusal());
     }
@@ -1237,7 +1237,7 @@ class RunSetupPresenterTest {
 
     @Test
     void aRunsFolderThatCouldNotBeReadMarksNothing() {
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Unlistable(Path.of("p")));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Unlistable(Path.of("p")));
         this.presenter.refreshCounts();
 
         assertThat(this.presenter.view().years()).noneMatch(YearChoice::hasUnfinishedSift);
@@ -1268,18 +1268,18 @@ class RunSetupPresenterTest {
     }
 
     private void anUnfinishedSiftOf(final String scope, final State state) {
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(aRun(scope, state))));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(aRun(scope, state))));
         this.presenter.refreshCounts();
     }
 
     private void unfinishedSiftsOf(final String... scopes) {
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                 Arrays.stream(scopes).map(scope -> aRun(scope, State.WAITING)).toList()));
         this.presenter.refreshCounts();
     }
 
-    private static CullRunSummary aRun(final String scope, final State state) {
-        return new CullRunSummary(scope, Path.of("logs", "sift-prep", scope),
+    private static SiftRunSummary aRun(final String scope, final State state) {
+        return new SiftRunSummary(scope, Path.of("logs", "sift-prep", scope),
                 new PrepDirHealth(state, List.of()), null, Instant.now());
     }
 

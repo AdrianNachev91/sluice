@@ -4,14 +4,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import photos.sluice.application.service.JobRunner;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.AnswerSource;
-import photos.sluice.domain.cull.ChoiceAnswer;
-import photos.sluice.domain.cull.CorruptSidecarResolution;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.DiscardReport;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.PrepDirHealth;
+import photos.sluice.domain.sift.AnswerSource;
+import photos.sluice.domain.sift.ChoiceAnswer;
+import photos.sluice.domain.sift.CorruptSidecarResolution;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.DiscardReport;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.PrepDirHealth;
 
 import org.junit.jupiter.api.io.TempDir;
 
@@ -67,8 +67,8 @@ class AnswerCommandTest {
     @Test
     void discardWithoutYesIsRefusedAndNamesWhatIsLost() {
         when(this.address.folderFor(eq("2019"))).thenReturn(PREP_DIR);
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
-                new CullRunSummary("2019", PREP_DIR, health(new Finding.CorruptIndex(Path.of("index.json"))), null,
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(
+                new SiftRunSummary("2019", PREP_DIR, health(new Finding.CorruptIndex(Path.of("index.json"))), null,
                         Instant.EPOCH))));
 
         final CliHarness.Result result = this.run("answer", "2019", "index.json", "DISCARD");
@@ -80,8 +80,8 @@ class AnswerCommandTest {
     @Test
     void discardWithYesDiscardsTheRunThroughTheSameFacadeCall() {
         when(this.address.folderFor(eq("2019"))).thenReturn(PREP_DIR);
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
-                new CullRunSummary("2019", PREP_DIR, health(new Finding.CorruptIndex(Path.of("index.json"))), null,
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(
+                new SiftRunSummary("2019", PREP_DIR, health(new Finding.CorruptIndex(Path.of("index.json"))), null,
                         Instant.EPOCH))));
         final var graveyard = Path.of("D:", "Sift", "archives", "2019-graveyard");
         when(this.pipeline.discard(eq(PREP_DIR))).thenAnswer(_ -> this.runner.submit(_ -> new DiscardReport(
@@ -97,8 +97,8 @@ class AnswerCommandTest {
     @Test
     void discardWithYesAndQuietSuppressesProgress() {
         when(this.address.folderFor(eq("2019"))).thenReturn(PREP_DIR);
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
-                new CullRunSummary("2019", PREP_DIR, health(new Finding.CorruptIndex(Path.of("index.json"))), null,
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(
+                new SiftRunSummary("2019", PREP_DIR, health(new Finding.CorruptIndex(Path.of("index.json"))), null,
                         Instant.EPOCH))));
         when(this.pipeline.discard(eq(PREP_DIR))).thenAnswer(_ -> this.runner.submit(_ -> new DiscardReport(
                 Path.of("D:", "Sift", "archives", "2019-graveyard"), 0)));
@@ -114,7 +114,7 @@ class AnswerCommandTest {
     void aKeyAndOptionMatchOneFindingAmongSeveralOpen() {
         final Finding.CorruptSidecar sidecar = new Finding.CorruptSidecar("montage-002");
         when(this.address.folderFor(eq("2019"))).thenReturn(PREP_DIR);
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019", PREP_DIR,
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(new SiftRunSummary("2019", PREP_DIR,
                 new PrepDirHealth(PrepDirHealth.State.BLOCKED,
                         List.of(new Finding.StrayShard("decisions-999.json"), sidecar)),
                 null, Instant.EPOCH))));
@@ -157,8 +157,8 @@ class AnswerCommandTest {
 
     private void answering(final Finding finding) {
         when(this.address.folderFor(eq("2019"))).thenReturn(PREP_DIR);
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
-                new CullRunSummary("2019", PREP_DIR, health(finding), null, Instant.EPOCH))));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(
+                new SiftRunSummary("2019", PREP_DIR, health(finding), null, Instant.EPOCH))));
     }
 
     private static PrepDirHealth health(final Finding finding) {

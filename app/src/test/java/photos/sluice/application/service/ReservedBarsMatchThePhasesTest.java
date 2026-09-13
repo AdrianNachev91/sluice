@@ -12,14 +12,14 @@ class ReservedBarsMatchThePhasesTest {
 
     @Test
     void aSiftReservesRoomForEveryPhaseItAnnounces() {
-        assertThat(RunMode.SIFT.phases()).isEqualTo(CullEngine.FRESH_PHASES.size());
+        assertThat(RunMode.SIFT.phases()).isEqualTo(SiftEngine.FRESH_PHASES.size());
     }
 
     // A resume announces fewer, having already read the prep dir. The reservation is a ceiling, so
     // it is the longer of the two that has to fit.
     @Test
     void aResumeAnnouncesNoMorePhasesThanASiftReservesRoomFor() {
-        assertThat(CullEngine.RESUME_PHASES.size()).isLessThanOrEqualTo(RunMode.SIFT.phases());
+        assertThat(SiftEngine.RESUME_PHASES.size()).isLessThanOrEqualTo(RunMode.SIFT.phases());
     }
 
     @Test

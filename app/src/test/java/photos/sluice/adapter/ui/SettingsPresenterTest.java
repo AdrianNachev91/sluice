@@ -17,7 +17,7 @@ import photos.sluice.application.port.in.LibraryRootUseCase;
 import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.in.VisionProviderCatalog;
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.ModelOption;
@@ -30,8 +30,8 @@ import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.JobRunner;
-import photos.sluice.domain.cull.CullCategory;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.SiftCategory;
+import photos.sluice.domain.sift.MontageConfig;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
@@ -135,7 +135,7 @@ class SettingsPresenterTest {
 
     @Test
     void saveKeepsTheCategoriesAlreadyConfiguredSinceThisScreenDoesNotEditThem() {
-        final var category = CullCategory.of("blurry", "not worth keeping");
+        final var category = SiftCategory.of("blurry", "not worth keeping");
         final var settingsUseCase = new FixedSettingsUseCase(new Settings(new PathSettings(null, null, null),
                 "anthropic", Map.of(), List.of(category),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM));
@@ -152,7 +152,7 @@ class SettingsPresenterTest {
     void savingOneProvidersSettingsLeavesAnothersAlone() {
         final var settingsUseCase = new FixedSettingsUseCase(new Settings(new PathSettings(null, null, null),
                 "external-agent",
-                Map.of("anthropic", new CullProviderSettings("claude-opus-5", null, 3)),
+                Map.of("anthropic", new SiftProviderSettings("claude-opus-5", null, 3)),
                 List.of(), new MontageConfig(224, 5),
                 ThemeChoice.SYSTEM));
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
@@ -168,7 +168,7 @@ class SettingsPresenterTest {
     @Test
     void savingWritesTheEditedValuesUnderTheProviderBeingSaved() {
         final var configured = new Settings(new PathSettings(null, null, null), "anthropic",
-                Map.of("anthropic", new CullProviderSettings("claude-opus-5", null, 3)), List.of(),
+                Map.of("anthropic", new SiftProviderSettings("claude-opus-5", null, 3)), List.of(),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         final var settingsUseCase = new FixedSettingsUseCase(configured);
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
@@ -180,13 +180,13 @@ class SettingsPresenterTest {
         assertThat(saved.providerSettingsById()).containsOnlyKeys("anthropic");
         // The retry count carries through untouched: this screen never asks about it.
         assertThat(saved.providerSettings("anthropic"))
-                .isEqualTo(new CullProviderSettings("claude-haiku-4-5", "https://mine.invalid", 3));
+                .isEqualTo(new SiftProviderSettings("claude-haiku-4-5", "https://mine.invalid", 3));
     }
 
     @Test
     void theFieldsShownBelongToTheProviderTheDropdownFellBackTo() {
         final var settings = new Settings(new PathSettings(null, null, null), "gone-provider",
-                Map.of("gone-provider", new CullProviderSettings("a-model-of-theirs", null, null)),
+                Map.of("gone-provider", new SiftProviderSettings("a-model-of-theirs", null, null)),
                 List.of(), new MontageConfig(224, 5),
                 ThemeChoice.SYSTEM);
 
@@ -659,7 +659,7 @@ class SettingsPresenterTest {
     @Test
     void savingFolderRootsLeavesEverySettingItDoesNotAskAboutAsItWas() {
         final var configured = new Settings(new PathSettings(null, null, null), "external-agent",
-                Map.of("external-agent", new CullProviderSettings(null, "https://proxy.test", 7)), List.of(),
+                Map.of("external-agent", new SiftProviderSettings(null, "https://proxy.test", 7)), List.of(),
                 new MontageConfig(320, 4), ThemeChoice.DARK);
         final var settingsUseCase = new FixedSettingsUseCase(configured);
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
@@ -901,7 +901,7 @@ class SettingsPresenterTest {
             }
 
             @Override
-            public ProviderCheck check(final String id, final CullProviderSettings candidate) {
+            public ProviderCheck check(final String id, final SiftProviderSettings candidate) {
                 return checkById.apply(id);
             }
         };
@@ -956,7 +956,7 @@ class SettingsPresenterTest {
             }
 
             @Override
-            public ProviderCheck check(final String id, final CullProviderSettings candidate) {
+            public ProviderCheck check(final String id, final SiftProviderSettings candidate) {
                 throw new AssertionError("no test here presses a credential check");
             }
         };
@@ -1000,7 +1000,7 @@ class SettingsPresenterTest {
     private static Settings settings(final @Nullable String workingRoot, final @Nullable String libraryRoot,
                                      final @Nullable String inbox) {
         return new Settings(new PathSettings(workingRoot, libraryRoot, inbox), "anthropic",
-                Map.of("anthropic", new CullProviderSettings("claude-opus-5", null, null)), List.of(),
+                Map.of("anthropic", new SiftProviderSettings("claude-opus-5", null, null)), List.of(),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM);
     }
 

@@ -3,11 +3,11 @@ package photos.sluice.application.service;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
-import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.SiftJobOutcome;
 import photos.sluice.application.port.in.CurateOutcome;
 import photos.sluice.application.port.out.MissingCredentialException;
-import photos.sluice.domain.cull.CullScope;
-import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.sift.SiftScope;
+import photos.sluice.domain.sift.Finding;
 import photos.sluice.domain.model.MonthRange;
 import photos.sluice.domain.model.SortScope;
 
@@ -26,12 +26,12 @@ import static photos.sluice.application.service.PipelineTestSupport.BlockingList
 import static photos.sluice.application.service.PipelineTestSupport.BlockingMoves;
 import static photos.sluice.application.service.PipelineTestSupport.FixedSecretStore;
 import static photos.sluice.application.service.PipelineTestSupport.MANUAL_PROVIDER_KEY;
-import static photos.sluice.application.service.PipelineTestSupport.ManualModeCuller;
-import static photos.sluice.application.service.PipelineTestSupport.OutOfScopeCuller;
+import static photos.sluice.application.service.PipelineTestSupport.ManualModeSieve;
+import static photos.sluice.application.service.PipelineTestSupport.OutOfScopeSieve;
 import static photos.sluice.application.service.PipelineTestSupport.RecordingProgressPort;
-import static photos.sluice.application.service.PipelineTestSupport.autoApproveCullSettings;
+import static photos.sluice.application.service.PipelineTestSupport.autoApproveSiftSettings;
 import static photos.sluice.application.service.PipelineTestSupport.credentialPipeline;
-import static photos.sluice.application.service.PipelineTestSupport.cullPipeline;
+import static photos.sluice.application.service.PipelineTestSupport.siftPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.curatePipeline;
 import static photos.sluice.application.service.PipelineTestSupport.inboxOf;
 import static photos.sluice.application.service.PipelineTestSupport.pipeline;
@@ -42,7 +42,7 @@ import static photos.sluice.application.service.PipelineTestSupport.writePhoto;
 class CurateEngineTest {
 
     @Test
-    void curateSortsThenCullsInOneJobEndToEnd(@TempDir final Path root) throws IOException {
+    void curateSortsThenSiftsInOneJobEndToEnd(@TempDir final Path root) throws IOException {
         final Path photo = writeInboxPhoto(root, "20190601_photo.jpg");
         final var progress = new RecordingProgressPort();
 
@@ -52,10 +52,10 @@ class CurateEngineTest {
         assertThat(Files.exists(photo)).isFalse();
         final Path sorted = root.resolve("Sorted/Photos/2019/06/20190601_photo.jpg");
         assertThat(Files.exists(sorted)).isTrue();
-        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
-        final var applied = (CullJobOutcome.Applied) Objects.requireNonNull(outcome.cullOutcome());
+        assertThat(outcome.siftOutcome()).isInstanceOf(SiftJobOutcome.Applied.class);
+        final var applied = (SiftJobOutcome.Applied) Objects.requireNonNull(outcome.siftOutcome());
         assertThat(applied.applyReport().reviewed()).isEqualTo(1);
-        // Untouched: AutoApproveCuller's shard keeps it, and a keep moves nothing.
+        // Untouched: AutoApproveSieve's shard keeps it, and a keep moves nothing.
         assertThat(Files.exists(sorted)).isTrue();
         assertThat(progress.events).containsExactly(
                 "planned:Finding dates..., Checking for duplicates..., Sorting..., "
@@ -74,7 +74,7 @@ class CurateEngineTest {
             throws IOException {
         final Path photo = writeInboxPhoto(root, "20190601_photo.jpg");
         final var pipeline = credentialPipeline(root, new RecordingProgressPort(),
-                List.of(new ManualModeCuller(MANUAL_PROVIDER_KEY)), new FixedSecretStore(null));
+                List.of(new ManualModeSieve(MANUAL_PROVIDER_KEY)), new FixedSecretStore(null));
 
         assertThatThrownBy(() -> pipeline.curate(new SortScope.Year(2019, null)))
                 .isInstanceOf(MissingCredentialException.class);
@@ -82,54 +82,54 @@ class CurateEngineTest {
         assertThat(Files.exists(photo)).isTrue();
     }
 
-    // The sort summary still describes what already moved, so a refused cull stage must not throw
+    // The sort summary still describes what already moved, so a refused sift stage must not throw
     // the sort's own result away.
     @Test
-    void curateReportsBlockedWithItsFindingsWhenTheCullStagesApplyRefuses(@TempDir final Path root) throws IOException {
+    void curateReportsBlockedWithItsFindingsWhenTheSiftStagesApplyRefuses(@TempDir final Path root) throws IOException {
         writeInboxPhoto(root, "20190601_photo.jpg");
         final var pipeline = pipeline(root, new RecordingProgressPort(), new NioMediaStore(),
-                autoApproveCullSettings(), List.of(new OutOfScopeCuller()));
+                autoApproveSiftSettings(), List.of(new OutOfScopeSieve()));
 
         final CurateOutcome outcome = pipeline.curate(new SortScope.Year(2019, null)).join();
 
         assertThat(outcome.sortSummary().photosSorted()).isEqualTo(1);
-        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Blocked.class);
-        final var blocked = (CullJobOutcome.Blocked) Objects.requireNonNull(outcome.cullOutcome());
+        assertThat(outcome.siftOutcome()).isInstanceOf(SiftJobOutcome.Blocked.class);
+        final var blocked = (SiftJobOutcome.Blocked) Objects.requireNonNull(outcome.siftOutcome());
         assertThat(blocked.findings()).singleElement().isInstanceOf(Finding.FileOutOfScope.class);
         // The sorted keeper stays put: a refused apply moves nothing at all.
         assertThat(Files.exists(root.resolve("Sorted/Photos/2019/06/20190601_photo.jpg"))).isTrue();
     }
 
     @Test
-    void curateWithOldestYearScopeResolvesAndCullsTheYearTheSortPicked(@TempDir final Path root) throws IOException {
+    void curateWithOldestYearScopeResolvesAndSiftsTheYearTheSortPicked(@TempDir final Path root) throws IOException {
         writeInboxPhoto(root, "20190601_photo.jpg");
 
         final CurateOutcome outcome =
                 curatePipeline(root, new RecordingProgressPort()).curate(new SortScope.OldestYear()).join();
 
         assertThat(outcome.sortSummary().yearsSorted()).containsExactly(2019);
-        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
+        assertThat(outcome.siftOutcome()).isInstanceOf(SiftJobOutcome.Applied.class);
         assertThat(Files.exists(root.resolve("logs/sift-prep/2019/index.json"))).isTrue();
     }
 
-    // A null cullOutcome alone would also hold for a cull stage that ran over an empty default
+    // A null siftOutcome alone would also hold for a sift stage that ran over an empty default
     // scope. The absence of a sift-prep dir is what rules that out.
     @Test
-    void curateSkipsCullWhenAnOldestYearSortFindsNothingToSort(@TempDir final Path root) throws IOException {
+    void curateSkipsSiftWhenAnOldestYearSortFindsNothingToSort(@TempDir final Path root) throws IOException {
         Files.createDirectories(inboxOf(root));
 
         final CurateOutcome outcome =
                 curatePipeline(root, new RecordingProgressPort()).curate(new SortScope.OldestYear()).join();
 
         assertThat(outcome.sortSummary().processed()).isZero();
-        assertThat(outcome.cullOutcome()).isNull();
+        assertThat(outcome.siftOutcome()).isNull();
         assertThat(Files.exists(root.resolve("logs/sift-prep"))).isFalse();
     }
 
-    // Two photos in different years, so a sort restricted to fit the cull stage's one-scope shape
+    // Two photos in different years, so a sort restricted to fit the sift stage's one-scope shape
     // would show here.
     @Test
-    void curateWithOldestNScopeSortsAcrossYearsAndCullsTheSameCount(@TempDir final Path root) throws IOException {
+    void curateWithOldestNScopeSortsAcrossYearsAndSiftsTheSameCount(@TempDir final Path root) throws IOException {
         writeInboxPhoto(root, "20180601_a.jpg", 1);
         writeInboxPhoto(root, "20190601_b.jpg", 2);
 
@@ -138,8 +138,8 @@ class CurateEngineTest {
 
         assertThat(outcome.sortSummary().photosSorted()).isEqualTo(2);
         assertThat(outcome.sortSummary().yearsSorted()).containsExactlyInAnyOrder(2018, 2019);
-        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
-        final var applied = (CullJobOutcome.Applied) Objects.requireNonNull(outcome.cullOutcome());
+        assertThat(outcome.siftOutcome()).isInstanceOf(SiftJobOutcome.Applied.class);
+        final var applied = (SiftJobOutcome.Applied) Objects.requireNonNull(outcome.siftOutcome());
         assertThat(applied.applyReport().reviewed()).isEqualTo(2);
         assertThat(Files.exists(root.resolve("logs/sift-prep/oldest-2/index.json"))).isTrue();
     }
@@ -148,8 +148,8 @@ class CurateEngineTest {
     void curateRefusesAnOldestNScopeAlreadyWaitingOnShards(@TempDir final Path root) throws IOException {
         Files.createDirectories(inboxOf(root));
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = cullPipeline(root, new RecordingProgressPort());
-        pipeline.cull(new CullScope.OldestN(1)).join();
+        final var pipeline = siftPipeline(root, new RecordingProgressPort());
+        pipeline.sift(new SiftScope.OldestN(1)).join();
 
         assertThatThrownBy(() -> pipeline.curate(new SortScope.OldestN(1)))
                 .isInstanceOf(IllegalStateException.class)
@@ -157,7 +157,7 @@ class CurateEngineTest {
     }
 
     @Test
-    void curateWithAnExplicitMonthRangeNarrowsTheCullScopeToThoseMonths(@TempDir final Path root) throws IOException {
+    void curateWithAnExplicitMonthRangeNarrowsTheSiftScopeToThoseMonths(@TempDir final Path root) throws IOException {
         writeInboxPhoto(root, "20190601_june.jpg");
         writeInboxPhoto(root, "20190815_august.jpg", 3);
 
@@ -169,14 +169,14 @@ class CurateEngineTest {
         assertThat(Files.exists(root.resolve("Sorted/Photos/2019/06/20190601_june.jpg"))).isTrue();
         // August is out of the requested month range, so it's still sitting in Inbox, unsorted.
         assertThat(Files.exists(root.resolve("Inbox/20190815_august.jpg"))).isTrue();
-        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
+        assertThat(outcome.siftOutcome()).isInstanceOf(SiftJobOutcome.Applied.class);
         assertThat(Files.exists(root.resolve("logs/sift-prep/2019-06/index.json"))).isTrue();
     }
 
     // The Inbox is empty, so the sort finds nothing new. The photo already sitting in Sorted from
-    // an earlier run is what the cull stage has to reach.
+    // an earlier run is what the sift stage has to reach.
     @Test
-    void curateWithAnExplicitYearScopeCullsThatYearEvenWhenThisRunSortedNothingNew(@TempDir final Path root)
+    void curateWithAnExplicitYearScopeSiftsThatYearEvenWhenThisRunSortedNothingNew(@TempDir final Path root)
             throws IOException {
         Files.createDirectories(inboxOf(root));
         final Path existing =
@@ -187,13 +187,13 @@ class CurateEngineTest {
                 curatePipeline(root, new RecordingProgressPort()).curate(new SortScope.Year(2019, null)).join();
 
         assertThat(outcome.sortSummary().processed()).isZero();
-        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
+        assertThat(outcome.siftOutcome()).isInstanceOf(SiftJobOutcome.Applied.class);
         assertThat(Files.exists(existing)).isTrue();
     }
 
     // The same fixture, for the other scope whose target is known before curate() submits a job.
     @Test
-    void curateWithAnExplicitOldestNScopeCullsEvenWhenThisRunSortedNothingNew(@TempDir final Path root)
+    void curateWithAnExplicitOldestNScopeSiftsEvenWhenThisRunSortedNothingNew(@TempDir final Path root)
             throws IOException {
         Files.createDirectories(inboxOf(root));
         writePhoto(sortedPhotosDir(root, "2019", "06"), "already-sorted.jpg", Instant.parse("2019-06-01T10:00:00Z"));
@@ -202,7 +202,7 @@ class CurateEngineTest {
         final CurateOutcome outcome = curatePipeline(root, progress).curate(new SortScope.OldestN(1)).join();
 
         assertThat(outcome.sortSummary().processed()).isZero();
-        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
+        assertThat(outcome.siftOutcome()).isInstanceOf(SiftJobOutcome.Applied.class);
         assertThat(progress.events).contains("started:Sifting...");
         assertThat(Files.exists(root.resolve("logs/sift-prep/oldest-1/index.json"))).isTrue();
     }
@@ -213,8 +213,8 @@ class CurateEngineTest {
     void curateRefusesAnExplicitYearScopeAlreadyWaitingOnShards(@TempDir final Path root) throws IOException {
         Files.createDirectories(inboxOf(root));
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = cullPipeline(root, new RecordingProgressPort());
-        pipeline.cull(new CullScope.Year(2019, null)).join();
+        final var pipeline = siftPipeline(root, new RecordingProgressPort());
+        pipeline.sift(new SiftScope.Year(2019, null)).join();
 
         assertThatThrownBy(() -> pipeline.curate(new SortScope.Year(2019, null)))
                 .isInstanceOf(IllegalStateException.class)
@@ -227,8 +227,8 @@ class CurateEngineTest {
     void curateWrapsAPostSortConflictInCurateConflictExceptionCarryingTheSortSummary(@TempDir final Path root)
             throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "already-there.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = cullPipeline(root, new RecordingProgressPort());
-        pipeline.cull(new CullScope.Year(2019, null)).join();
+        final var pipeline = siftPipeline(root, new RecordingProgressPort());
+        pipeline.sift(new SiftScope.Year(2019, null)).join();
         final Path newPhoto = writeInboxPhoto(root, "20190815_new.jpg");
 
         final var handle = curatePipeline(root, new RecordingProgressPort()).curate(new SortScope.OldestYear());
@@ -238,7 +238,7 @@ class CurateEngineTest {
                 .extracting(Throwable::getCause)
                 .isInstanceOfSatisfying(Pipeline.CurateConflictException.class,
                         conflict -> assertThat(conflict.sortSummary().photosSorted()).isEqualTo(1));
-        // The sort's own effect survives the refused cull stage - the new photo really did move.
+        // The sort's own effect survives the refused sift stage - the new photo really did move.
         assertThat(Files.exists(newPhoto)).isFalse();
         assertThat(Files.exists(root.resolve("Sorted/Photos/2019/08/20190815_new.jpg"))).isTrue();
     }
@@ -247,7 +247,7 @@ class CurateEngineTest {
     // requested before the post-sort check runs rather than at a guessed moment. The sort itself
     // still completes in full, its own single move() call delayed rather than interrupted.
     @Test
-    void curateSkipsTheCullStageWhenCancellationIsRequestedBetweenStages(@TempDir final Path root) throws Exception {
+    void curateSkipsTheSiftStageWhenCancellationIsRequestedBetweenStages(@TempDir final Path root) throws Exception {
         writeInboxPhoto(root, "20190601_photo.jpg");
         final var moveStarted = new CountDownLatch(1);
         final var releaseMove = new CountDownLatch(1);
@@ -261,14 +261,14 @@ class CurateEngineTest {
         final CurateOutcome outcome = handle.join();
 
         assertThat(outcome.sortSummary().photosSorted()).isEqualTo(1);
-        assertThat(outcome.cullOutcome()).isNull();
+        assertThat(outcome.siftOutcome()).isNull();
         assertThat(Files.exists(root.resolve("logs/sift-prep"))).isFalse();
     }
 
     // The sort stage never calls listFiles, so BlockingListFiles only blocks once the sort has
-    // finished and the cull stage's render pass starts scanning Sorted for candidates.
+    // finished and the sift stage's render pass starts scanning Sorted for candidates.
     @Test
-    void curateCancelledMidRenderDuringItsCullStageResolvesToCancelled(@TempDir final Path root) throws Exception {
+    void curateCancelledMidRenderDuringItsSiftStageResolvesToCancelled(@TempDir final Path root) throws Exception {
         writeInboxPhoto(root, "20190601_photo.jpg");
         final var listStarted = new CountDownLatch(1);
         final var releaseList = new CountDownLatch(1);
@@ -282,7 +282,7 @@ class CurateEngineTest {
         final CurateOutcome outcome = handle.join();
 
         assertThat(outcome.sortSummary().photosSorted()).isEqualTo(1);
-        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Cancelled.class);
+        assertThat(outcome.siftOutcome()).isInstanceOf(SiftJobOutcome.Cancelled.class);
         assertThat(Files.exists(root.resolve("logs/sift-prep/2019"))).isFalse();
     }
 }

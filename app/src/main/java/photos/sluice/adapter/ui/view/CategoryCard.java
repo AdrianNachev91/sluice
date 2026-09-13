@@ -19,7 +19,7 @@ import java.util.List;
 
 /**
  * One category card on the Photo categories screen. What it is called, what belongs in it, and the
- * examples that go to a vision model beside that. Its switch says whether a cull routes to it.
+ * examples that go to a vision model beside that. Its switch says whether a sift routes to it.
  */
 final class CategoryCard {
 

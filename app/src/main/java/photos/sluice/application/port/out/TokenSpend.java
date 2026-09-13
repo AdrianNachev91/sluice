@@ -3,11 +3,11 @@ package photos.sluice.application.port.out;
 import org.jspecify.annotations.Nullable;
 
 /**
- * What one cull run consumed, measured in tokens and attributed to the provider and model that
+ * What one sift run consumed, measured in tokens and attributed to the provider and model that
  * consumed them.
  *
  * <p>Tokens rather than currency, deliberately. A price would be a per-provider obligation, so every
- * provider added later would have to ship a pricing model as well as a culler. It would also make
+ * provider added later would have to ship a pricing model as well as a sieve. It would also make
  * any vendor's rate change a release trigger here. The counts below are first-party and per-request;
  * only the conversion to money is optional.
  *

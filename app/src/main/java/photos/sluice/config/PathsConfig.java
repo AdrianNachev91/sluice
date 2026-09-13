@@ -123,7 +123,7 @@ public class PathsConfig implements PathsPort {
      * @return {@link Path} the sift-prep directory path
      */
     @Override
-    public Path cullPrep() {
+    public Path siftPrep() {
         return this.logs().resolve("sift-prep");
     }
 

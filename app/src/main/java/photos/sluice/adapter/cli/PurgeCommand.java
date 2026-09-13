@@ -4,10 +4,10 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PurgeReport;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PurgeReport;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
@@ -132,12 +132,12 @@ public class PurgeCommand implements Callable<Integer> {
      * @throws ScopeRefusedException when the sift-prep root cannot be read
      */
     private List<String> completedScopes() {
-        return switch (this.pipeline.cullRuns()) {
-            case CullRuns.Listed(final List<CullRunSummary> runs) -> runs.stream()
+        return switch (this.pipeline.siftRuns()) {
+            case SiftRuns.Listed(final List<SiftRunSummary> runs) -> runs.stream()
                     .filter(run -> run.health().state() == PrepDirHealth.State.COMPLETE)
-                    .map(CullRunSummary::scope)
+                    .map(SiftRunSummary::scope)
                     .toList();
-            case CullRuns.Unlistable(final Path root) -> throw new ScopeRefusedException(
+            case SiftRuns.Unlistable(final Path root) -> throw new ScopeRefusedException(
                     RunsRefusals.unreadable(root));
         };
     }

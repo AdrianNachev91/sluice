@@ -4,8 +4,8 @@ import org.jspecify.annotations.Nullable;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
-import photos.sluice.domain.cull.CullCategory;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.SiftCategory;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -46,12 +46,12 @@ public final class SettingsFixture {
         return pathsConfig(workingRoot, workingRoot.resolve("Library"), workingRoot.resolve("Inbox"));
     }
 
-    // The given roots, on the cull defaults a fresh install starts with.
+    // The given roots, on the sift defaults a fresh install starts with.
     public static Settings settings(final PathSettings paths) {
         return new Settings(paths, "external-agent", Map.of(),
-                List.of(CullCategory.of("scenery", "scenery description"),
-                        CullCategory.of("food", "food description"),
-                        CullCategory.of("funny", "funny description")),
+                List.of(SiftCategory.of("scenery", "scenery description"),
+                        SiftCategory.of("food", "food description"),
+                        SiftCategory.of("funny", "funny description")),
                 MontageConfig.defaults(), ThemeChoice.SYSTEM);
     }
 }

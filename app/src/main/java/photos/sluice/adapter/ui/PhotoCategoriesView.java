@@ -39,7 +39,7 @@ public record PhotoCategoriesView(List<CategoryRow> categories, String dispositi
      * @param name {@link String} the card's name, which also names the folder its photos go to
      * @param description {@link String} the "what belongs here" prose
      * @param examples a {@link List} of {@link String} sample subjects, empty when it offers none
-     * @param enabled boolean whether a cull routes to this card
+     * @param enabled boolean whether a sift routes to this card
      * @param fixedReason why this card cannot be renamed or deleted, or null for an ordinary card
      */
     public record CategoryRow(String name, String description, List<String> examples, boolean enabled,

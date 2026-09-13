@@ -12,12 +12,12 @@ import photos.sluice.adapter.ui.FxProgressPort;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.SettingsUseCase;
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -135,7 +135,7 @@ class AppearanceCardTest {
 
     private static Presenters presenterOver(final Consumer<Settings> save) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
-                "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
+                "anthropic", Map.of("anthropic", new SiftProviderSettings("a-model", null, 2)), List.of(),
                 new MontageConfig(224, 5), ThemeChoice.DARK);
         final var useCase = new SettingsUseCase() {
             @Override

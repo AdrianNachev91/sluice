@@ -22,7 +22,7 @@ import photos.sluice.application.port.in.LibraryRootUseCase;
 import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.in.VisionProviderCatalog;
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.ModelOption;
 import photos.sluice.application.port.out.PathSettings;
@@ -32,7 +32,7 @@ import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.MontageConfig;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
@@ -162,7 +162,7 @@ final class SettingsPaneTestSupport {
 
     private static Settings settingsFor(final String provider) {
         return new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
-                provider, Map.of(provider, new CullProviderSettings("a-model", null, 2)), List.of(),
+                provider, Map.of(provider, new SiftProviderSettings("a-model", null, 2)), List.of(),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM);
     }
 
@@ -320,7 +320,7 @@ final class SettingsPaneTestSupport {
             }
 
             @Override
-            public ProviderCheck check(final String id, final CullProviderSettings candidate) {
+            public ProviderCheck check(final String id, final SiftProviderSettings candidate) {
                 throw new AssertionError("no test here presses a credential check");
             }
         };

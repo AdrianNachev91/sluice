@@ -1,9 +1,9 @@
 package photos.sluice.domain.job;
 
-import photos.sluice.domain.cull.ShardValidator;
+import photos.sluice.domain.sift.ShardValidator;
 
 /**
- * A waiting cull's shard progress.
+ * A waiting sift's shard progress.
  *
  * <p>{@code present} counts every {@code decisions-NNN.json} file found in the prep dir, whether
  * or not it parses.

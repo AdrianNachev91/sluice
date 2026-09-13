@@ -1,11 +1,11 @@
 # Adding a vision provider
 
-What a new `VisionCuller` implementation has to satisfy, and the two rules that are not obvious from
+What a new `VisionSieve` implementation has to satisfy, and the two rules that are not obvious from
 reading an existing one. Written for somebody forking Sluice or building their own provider, which
 the license already permits without asking.
 
-The mechanics are small. `CullDispatcher` discovers providers by list injection, so a new one is a
-single `@Component` class implementing `VisionCuller` and nothing else to wire. The rules below are
+The mechanics are small. `SiftDispatcher` discovers providers by list injection, so a new one is a
+single `@Component` class implementing `VisionSieve` and nothing else to wire. The rules below are
 the part that costs money to learn the hard way.
 
 ## A provider must constrain its output, or be able to iterate for free
@@ -13,12 +13,12 @@ the part that costs money to learn the hard way.
 `ProviderType` splits providers by how they arrive at a judgement, and the split decides what a
 refusal costs.
 
-Under `API` the app calls a model and writes shards from the answer. A `CullException` is a genuine
+Under `API` the app calls a model and writes shards from the answer. A `SiftException` is a genuine
 failure, and the call that produced it has already been paid for. Under `MANUAL` something outside
 the app writes the shards. The same exception is an ordinary pause, it costs nothing, and whatever
 is doing the work can try again.
 
-`ShardValidator` is the single authority on a well-formed cull, and it was written for the second
+`ShardValidator` is the single authority on a well-formed sift, and it was written for the second
 kind. Its own documentation says it reports every problem at once "so the vision agent gets its
 whole to-fix list in one pass instead of one error per re-run". That is a different mechanism from
 a schema rather than a weaker one: a schema constrains generation, a validator explains a
@@ -111,7 +111,7 @@ working.
 
 **`SecretId.name` is a second id namespace and nothing polices it.** It becomes the credential's
 filename and its entry name in the OS keyring. The dispatcher's duplicate-id check covers only the
-id a culler describes itself with. Two providers whose culler ids differ but whose `SecretId.name`
+id a sieve describes itself with. Two providers whose sieve ids differ but whose `SecretId.name`
 both read `anthropic` would silently share one credential, where saving either key overwrites the
 other. Keep a provider's `SecretId.name` equal to the id in its own description.
 
@@ -120,9 +120,9 @@ of them are required, its credential and the models it offers, so a provider add
 complete and nothing outside it needs editing for it to appear. Anything that would require a
 central registry to be edited belongs in the provider instead.
 
-## Copying the Anthropic culler
+## Copying the Anthropic sieve
 
-`AnthropicCuller` is the structural template: its wiring, its credential lookup through
+`AnthropicSieve` is the structural template: its wiring, its credential lookup through
 `SecretStore`, its per-montage loop and its one-retry cap. Copy that shape.
 
 Its response schema is strict as of 2026-08-22: a discriminated union on `action`, one branch per
@@ -134,5 +134,5 @@ starts. The defect that prompted this page was exactly that gap going unnoticed.
 
 ## Related
 
-- The template itself, in full: [`anthropic-culler.md`](anthropic-culler.md), same folder. Its
+- The template itself, in full: [`anthropic-sieve.md`](anthropic-sieve.md), same folder. Its
   request loop, credential check and response validation are the shape this page tells you to copy.

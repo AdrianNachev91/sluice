@@ -1,6 +1,6 @@
 package photos.sluice.application.port.out;
 
-import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.sift.Finding;
 
 import java.util.List;
 
@@ -14,7 +14,7 @@ import java.util.List;
  * surface that renders them rather than the message.
  *
  * <p>Checked, because this is an expected, recoverable outcome: fix the shards (or re-run the
- * culler) and apply again. Zero files are ever moved when this is thrown.
+ * sieve) and apply again. Zero files are ever moved when this is thrown.
  */
 public class ApplyException extends Exception {
 

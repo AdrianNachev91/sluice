@@ -2,8 +2,8 @@ package photos.sluice.adapter.imaging;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import photos.sluice.domain.cull.CullCategory;
-import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.sift.SiftCategory;
+import photos.sluice.domain.sift.PrepDir;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -23,15 +23,15 @@ import static org.mockito.Mockito.mock;
 
 class PrepIndexWriterTest {
 
-    private static final CullCategory JUNK = CullCategory.of("junk", "objectively worthless");
-    private static final CullCategory SCENERY = CullCategory.of("scenery", "landscapes with nobody in them");
+    private static final SiftCategory JUNK = SiftCategory.of("junk", "objectively worthless");
+    private static final SiftCategory SCENERY = SiftCategory.of("scenery", "landscapes with nobody in them");
 
     private final PrepIndexWriter writer = new PrepIndexWriter();
 
     @Test
     void aCardsExamplesAreRecordedAndACardWithoutThemWritesNoKey(@TempDir final Path dir) throws IOException {
         final Path indexPath = dir.resolve("index.json");
-        final var food = new CullCategory("food", "meals", List.of("plates", "menus"), Boolean.TRUE);
+        final var food = new SiftCategory("food", "meals", List.of("plates", "menus"), Boolean.TRUE);
         final var prep = new PrepDir("2023", List.of(food, JUNK), dir, 1, List.of(), 1, dir,
                 List.of("montage-001"));
 

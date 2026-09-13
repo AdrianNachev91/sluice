@@ -5,7 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
-import photos.sluice.application.port.out.CullPrepPort;
+import photos.sluice.application.port.out.SiftPrepPort;
 import photos.sluice.application.port.out.HashIndexPort;
 import photos.sluice.application.port.out.MediaReader;
 import photos.sluice.application.port.out.MediaStore;
@@ -16,15 +16,15 @@ import photos.sluice.application.service.ApplyPlanner.FileStatus;
 import photos.sluice.application.service.ApplyPlanner.Status;
 import photos.sluice.application.service.MoveLedger.Ledger;
 import photos.sluice.application.service.MoveLedger.MoveRecord;
-import photos.sluice.domain.cull.ApplyReport;
-import photos.sluice.domain.cull.Decision;
-import photos.sluice.domain.cull.Decision.Classification;
-import photos.sluice.domain.cull.Decision.NearDupChosen;
-import photos.sluice.domain.cull.Decision.NearDupReject;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.MontageNaming;
-import photos.sluice.domain.cull.PrepDir;
-import photos.sluice.domain.cull.ValidationReport;
+import photos.sluice.domain.sift.ApplyReport;
+import photos.sluice.domain.sift.Decision;
+import photos.sluice.domain.sift.Decision.Classification;
+import photos.sluice.domain.sift.Decision.NearDupChosen;
+import photos.sluice.domain.sift.Decision.NearDupReject;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.MontageNaming;
+import photos.sluice.domain.sift.PrepDir;
+import photos.sluice.domain.sift.ValidationReport;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.IndexEntry;
@@ -43,11 +43,11 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Carries a prep directory's culling decisions out against the filesystem. This is the only class
- * that moves, copies, or deletes anything a cull decided on.
+ * Carries a prep directory's sifting decisions out against the filesystem. This is the only class
+ * that moves, copies, or deletes anything a sift decided on.
  *
  * <p>It decides nothing itself. {@link ApplyPlanner} says which decisions are still pending and
- * which an earlier run already finished. {@link CullDestinations} says where each one belongs.
+ * which an earlier run already finished. {@link SiftDestinations} says where each one belongs.
  * {@link MoveLedger} records what happened. What is left here is the carrying out, plus the two
  * finalizers that close a completed run.
  *
@@ -66,10 +66,10 @@ public class ApplyEngine {
     private static final String REASON_UNREVIEWABLE = "could not be seen clearly enough to judge";
 
     private final MediaStore mediaStore;
-    private final CullPrepPort cullPrepPort;
+    private final SiftPrepPort siftPrepPort;
     private final Sha256Port sha256Port;
     private final HashIndexPort hashIndexPort;
-    private final CullDestinations cullDestinations;
+    private final SiftDestinations siftDestinations;
     private final MoveLedger moveLedger;
     private final ApplyPlanner applyPlanner;
 
@@ -77,22 +77,22 @@ public class ApplyEngine {
      * Creates an engine wired to its ports and collaborators.
      *
      * @param mediaStore {@link MediaStore} filesystem effects (move, copy, read, write)
-     * @param cullPrepPort {@link CullPrepPort} reads the prep-dir index and writes merged decisions
+     * @param siftPrepPort {@link SiftPrepPort} reads the prep-dir index and writes merged decisions
      * @param sha256Port {@link Sha256Port} hashes a source before its move is recorded
      * @param hashIndexPort {@link HashIndexPort} reads/appends the library hash index
-     * @param cullDestinations {@link CullDestinations} resolves where each decision's file belongs
+     * @param siftDestinations {@link SiftDestinations} resolves where each decision's file belongs
      * @param moveLedger {@link MoveLedger} records each move before it runs
      * @param applyPlanner {@link ApplyPlanner} validates the batch and classifies each decision
      */
-    public ApplyEngine(final MediaStore mediaStore, final CullPrepPort cullPrepPort, final Sha256Port sha256Port,
-                       final HashIndexPort hashIndexPort, final CullDestinations cullDestinations,
+    public ApplyEngine(final MediaStore mediaStore, final SiftPrepPort siftPrepPort, final Sha256Port sha256Port,
+                       final HashIndexPort hashIndexPort, final SiftDestinations siftDestinations,
                        final MoveLedger moveLedger,
                        final ApplyPlanner applyPlanner) {
         this.mediaStore = mediaStore;
-        this.cullPrepPort = cullPrepPort;
+        this.siftPrepPort = siftPrepPort;
         this.sha256Port = sha256Port;
         this.hashIndexPort = hashIndexPort;
-        this.cullDestinations = cullDestinations;
+        this.siftDestinations = siftDestinations;
         this.moveLedger = moveLedger;
         this.applyPlanner = applyPlanner;
     }
@@ -149,7 +149,7 @@ public class ApplyEngine {
     ApplyEnding apply(final Path prepDirPath, final ApplyOptions options,
                       final ProgressCallback progress,
                       final CancellationSignal cancellation) throws ApplyException {
-        final PrepDir prepDir = this.cullPrepPort.readIndex(prepDirPath);
+        final PrepDir prepDir = this.siftPrepPort.readIndex(prepDirPath);
         // One snapshot for this whole run, taken before anything below could append to the ledger.
         final Ledger ledger = this.moveLedger.read(prepDirPath);
         final ValidationReport validation = this.applyPlanner.validate(prepDirPath, prepDir, options, ledger);
@@ -178,7 +178,7 @@ public class ApplyEngine {
         }
 
         final Map<String, List<Decision>> nearDupGroups = groupNearDups(validation.decisions());
-        final Map<String, Path> nearDupAnchors = CullDestinations.nearDupAnchors(validation.decisions());
+        final Map<String, Path> nearDupAnchors = SiftDestinations.nearDupAnchors(validation.decisions());
         final var outcome = new ApplyOutcome();
         // Both loops below can move a file, so both count toward the total a caller is told about.
         // Otherwise progress would reach 100% while unreviewable files are still being moved.
@@ -213,7 +213,7 @@ public class ApplyEngine {
                 switch (status) {
                     case final FileStatus.Pending pending -> {
                         final Path file = pending.file();
-                        final Path destDir = this.cullDestinations.unreviewableDir(file);
+                        final Path destDir = this.siftDestinations.unreviewableDir(file);
                         final MoveOutcome moved = this.recordThenMove(file, destDir, prepDirPath,
                                 cancellation, TransferProgress.within(progress, current, total));
                         this.note(file, destDir, moved.dest(), REASON_UNREVIEWABLE);
@@ -238,7 +238,7 @@ public class ApplyEngine {
                 outcome.nearDupGroupsChosen.size(), outcome.nearDupRejects, validation.heals());
         final ApplyReport persistedSummary = summarize(validation.decisions(), prepDir, unreviewableFiles.size(),
                 validation.heals());
-        this.cullPrepPort.writeMergedDecisions(prepDirPath, prepDir.scope(), validation.decisions(), persistedSummary);
+        this.siftPrepPort.writeMergedDecisions(prepDirPath, prepDir.scope(), validation.decisions(), persistedSummary);
         this.cleanupIntermediates(prepDirPath);
         return new ApplyEnding.Finished(report);
     }
@@ -317,8 +317,8 @@ public class ApplyEngine {
      * @param record {@link MoveRecord} the verified move record
      */
     private void backfillClassificationWrite(final Classification c, final MoveRecord record) {
-        if (c.category().equals(CullDestinations.FUNNY_CATEGORY)) {
-            this.cullDestinations.requireUnderLibrary(record.dest());
+        if (c.category().equals(SiftDestinations.FUNNY_CATEGORY)) {
+            this.siftDestinations.requireUnderLibrary(record.dest());
             // HashIndexPort.contains(hash) alone isn't enough. The index legitimately allows several
             // paths under one hash (byte-identical files kept in more than one place). Another entry
             // sharing this hash would wrongly read as "this decision's own row is already there" -
@@ -330,7 +330,7 @@ public class ApplyEngine {
                 this.hashIndexPort.append(List.of(new IndexEntry(record.hash(), record.dest())));
             }
         } else {
-            this.noteUnlessListed(c.file(), this.cullDestinations.destinationDirFor(c), record.dest(), c.reason());
+            this.noteUnlessListed(c.file(), this.siftDestinations.destinationDirFor(c), record.dest(), c.reason());
         }
     }
 
@@ -343,7 +343,7 @@ public class ApplyEngine {
      * @param done {@link FileStatus.Done} the already-moved file and the record proving it
      */
     private void backfillUnreviewableNote(final FileStatus.Done done) {
-        this.noteUnlessListed(done.file(), this.cullDestinations.unreviewableDir(done.file()),
+        this.noteUnlessListed(done.file(), this.siftDestinations.unreviewableDir(done.file()),
                 done.record().dest(), REASON_UNREVIEWABLE);
     }
 
@@ -434,10 +434,10 @@ public class ApplyEngine {
      */
     private void applyClassification(final Classification c, final Path prepDirPath, final ApplyOutcome outcome,
                                      final CancellationSignal cancellation, final TransferProgress transferProgress) {
-        final Path destDir = this.cullDestinations.destinationDirFor(c);
+        final Path destDir = this.siftDestinations.destinationDirFor(c);
         final MoveOutcome moved = this.recordThenMove(c.file(), destDir, prepDirPath, cancellation, transferProgress);
         outcome.byCategory.merge(c.category(), 1, Integer::sum);
-        if (c.category().equals(CullDestinations.FUNNY_CATEGORY)) {
+        if (c.category().equals(SiftDestinations.FUNNY_CATEGORY)) {
             this.hashIndexPort.append(List.of(new IndexEntry(moved.hash(), moved.dest())));
         } else {
             this.note(c.file(), destDir, moved.dest(), c.reason());
@@ -469,7 +469,7 @@ public class ApplyEngine {
      * @return {@link String} the line
      */
     private String noteLine(final Path filedUnder, final String name, final String reason) {
-        return this.cullDestinations.monthFiledUnder(filedUnder)
+        return this.siftDestinations.monthFiledUnder(filedUnder)
                 .map(month -> ReasonNotes.line(name, month, reason))
                 .orElseGet(() -> ReasonNotes.line(name, reason));
     }
@@ -495,7 +495,7 @@ public class ApplyEngine {
                     .filter(NearDupChosen.class::isInstance)
                     .map(NearDupChosen.class::cast)
                     .forEach(chosen -> this.mediaStore.write(
-                            this.cullDestinations.duplicatesDir(chosen.file(), group)
+                            this.siftDestinations.duplicatesDir(chosen.file(), group)
                                     .resolve(chosen.file().getFileName() + ReasonNotes.SUFFIX),
                             this.chosenNote(chosen, members, outcome)));
         }
@@ -523,8 +523,8 @@ public class ApplyEngine {
                                     final CancellationSignal cancellation, final TransferProgress transferProgress) {
         // A copy rather than a move, so it takes the source check directly. Every other decision
         // type picks it up from recordThenMove.
-        this.cullDestinations.requireUnderSorted(c.file());
-        final Path dupDir = this.cullDestinations.duplicatesDir(c.file(), c.group());
+        this.siftDestinations.requireUnderSorted(c.file());
+        final Path dupDir = this.siftDestinations.duplicatesDir(c.file(), c.group());
         final Path dest = dupDir.resolve(c.file().getFileName().toString());
         if (!this.mediaStore.exists(dest)) {
             this.mediaStore.copy(c.file(), dupDir, cancellation, transferProgress);
@@ -535,7 +535,7 @@ public class ApplyEngine {
     /**
      * Moves a rejected near-dup file into its duplicates group folder. The folder is resolved from
      * the group's chosen keeper, not from reject's own file - see
-     * {@link CullDestinations#duplicatesDir}.
+     * {@link SiftDestinations#duplicatesDir}.
      *
      * @param reject {@link NearDupReject} the rejected near-dup decision
      * @param groupAnchor {@link Path} the group's chosen keeper file
@@ -549,7 +549,7 @@ public class ApplyEngine {
                                     final ApplyOutcome outcome, final CancellationSignal cancellation,
                                     final TransferProgress transferProgress) {
         final MoveOutcome moved = this.recordThenMove(reject.file(),
-                this.cullDestinations.duplicatesDir(groupAnchor, reject.group()), prepDirPath,
+                this.siftDestinations.duplicatesDir(groupAnchor, reject.group()), prepDirPath,
                 cancellation, transferProgress);
         outcome.landedRejects.put(reject.file(), moved.dest());
         outcome.nearDupRejects++;
@@ -574,7 +574,7 @@ public class ApplyEngine {
     private MoveOutcome recordThenMove(final Path source, final Path destDir, final Path prepDirPath,
                                        final CancellationSignal cancellation,
                                        final TransferProgress transferProgress) {
-        this.cullDestinations.requireUnderSorted(source);
+        this.siftDestinations.requireUnderSorted(source);
         final Path dest = this.mediaStore.resolveDestination(source, destDir);
         final String hash = this.sha256Port.hash(source);
         this.moveLedger.recordMove(prepDirPath, source, dest, hash);

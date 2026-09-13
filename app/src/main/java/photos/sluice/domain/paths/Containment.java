@@ -3,7 +3,7 @@ package photos.sluice.domain.paths;
 import java.nio.file.Path;
 
 /**
- * Whether one path lies inside another, for the refusals that bound what a cull may take files from
+ * Whether one path lies inside another, for the refusals that bound what a sift may take files from
  * and where it may put them. Other containment questions in this codebase set their own terms, so
  * this is not the one definition of "inside" that everything asks.
  *

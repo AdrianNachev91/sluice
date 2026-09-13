@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class TileRendererTest {
 
-    private static final Path FIXTURES = Path.of("src/test/resources/cull");
+    private static final Path FIXTURES = Path.of("src/test/resources/sift");
     private static final int TILE_SIZE = 224;
 
     private final TileRenderer renderer = new TileRenderer(_ -> Optional.empty());

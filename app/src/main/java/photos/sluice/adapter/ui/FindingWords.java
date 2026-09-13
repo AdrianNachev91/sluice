@@ -3,9 +3,9 @@ package photos.sluice.adapter.ui;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.RunSetupPresenter.Confirmation;
 import photos.sluice.adapter.ui.TroubleshootView.Answer;
-import photos.sluice.domain.cull.Decision;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.Verdict;
+import photos.sluice.domain.sift.Decision;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.Verdict;
 
 import java.util.List;
 import java.util.regex.Matcher;

@@ -5,14 +5,14 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.imaging.PrepIndexWriter;
 import photos.sluice.adapter.imaging.SidecarWriter;
 import photos.sluice.application.port.out.ApplyException;
-import photos.sluice.domain.cull.AnswerSource;
-import photos.sluice.domain.cull.Finding.CorruptIndex;
-import photos.sluice.domain.cull.Finding.MissingSource;
-import photos.sluice.domain.cull.Finding.StrayShard;
-import photos.sluice.domain.cull.PrepDir;
-import photos.sluice.domain.cull.PrepDirHealth.State;
-import photos.sluice.domain.cull.SidecarPhotoEntry;
-import photos.sluice.domain.cull.TroubleshootReport;
+import photos.sluice.domain.sift.AnswerSource;
+import photos.sluice.domain.sift.Finding.CorruptIndex;
+import photos.sluice.domain.sift.Finding.MissingSource;
+import photos.sluice.domain.sift.Finding.StrayShard;
+import photos.sluice.domain.sift.PrepDir;
+import photos.sluice.domain.sift.PrepDirHealth.State;
+import photos.sluice.domain.sift.SidecarPhotoEntry;
+import photos.sluice.domain.sift.TroubleshootReport;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -21,7 +21,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static photos.sluice.application.service.CullPrepTestSupport.fixedCategories;
+import static photos.sluice.application.service.SiftPrepTestSupport.fixedCategories;
 
 class TroubleshooterTest {
 
@@ -64,15 +64,15 @@ class TroubleshooterTest {
     void aWaitingPrepDirIsReportedUnchangedWithNoReconcileAttempted(@TempDir final Path root) throws IOException,
             ApplyException {
         final Path prepDir = prepDir(root);
-        final Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path sifted = root.resolve("Sorted/Photos/2019/06/a.jpg");
         final Path uncalled = root.resolve("Sorted/Photos/2019/06/b.jpg");
-        writeFile(culled, "x");
+        writeFile(sifted, "x");
         writeFile(uncalled, "y");
         writeIndex(prepDir, 2, List.of("montage-001", "montage-002"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(sifted));
         writeSidecar(prepDir, "montage-002", sidecarEntry(uncalled));
-        writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
-        // montage-002 has no shard yet - still being culled.
+        writeShard(prepDir, "montage-001", classificationJson(sifted, "junk", "blurry"));
+        // montage-002 has no shard yet - still being sifted.
 
         final TroubleshootReport report = troubleshooter(root).troubleshoot(prepDir);
 
@@ -269,7 +269,7 @@ class TroubleshooterTest {
         writeShard(prepDir, "montage-001",
                 classificationJson(alreadyMoved, "junk", "blurry"),
                 classificationJson(givenUpOn, "junk", "also blurry"));
-        CullPrepTestSupport.prepDirRemedies(root, root.resolve("Library"))
+        SiftPrepTestSupport.prepDirRemedies(root, root.resolve("Library"))
                 .skipMissingSource(prepDir, givenUpOn, AnswerSource.DESKTOP);
         final List<String> choicesBefore = Files.readAllLines(prepDir.resolve("choices.log"));
 
@@ -292,7 +292,7 @@ class TroubleshooterTest {
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-        CullPrepTestSupport.writeUndecodable(prepDir.resolve("choices.log"));
+        SiftPrepTestSupport.writeUndecodable(prepDir.resolve("choices.log"));
 
         final TroubleshootReport report = troubleshooter(root).troubleshoot(prepDir);
 
@@ -339,6 +339,6 @@ class TroubleshooterTest {
     }
 
     private static Troubleshooter troubleshooter(final Path root) {
-        return CullPrepTestSupport.troubleshooter(root, root.resolve("Library"));
+        return SiftPrepTestSupport.troubleshooter(root, root.resolve("Library"));
     }
 }

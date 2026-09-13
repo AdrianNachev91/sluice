@@ -1,6 +1,6 @@
 package photos.sluice.application.service;
 
-import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.sift.ApplyReport;
 
 /**
  * How one apply ended, and what it moved either way.

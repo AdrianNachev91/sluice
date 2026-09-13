@@ -44,6 +44,6 @@ class UnconfiguredStartupTest {
 
     @Test
     void theFacadeRefusesWorkRatherThanFailingDeeperDown() {
-        assertThatThrownBy(this.pipeline::cullRuns).isInstanceOf(PathsMisconfiguredException.class);
+        assertThatThrownBy(this.pipeline::siftRuns).isInstanceOf(PathsMisconfiguredException.class);
     }
 }

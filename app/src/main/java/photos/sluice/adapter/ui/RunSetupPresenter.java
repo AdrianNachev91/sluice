@@ -17,9 +17,9 @@ import photos.sluice.application.port.in.SortedTally.MonthRow;
 import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.port.in.SpendEstimate;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullScope;
-import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftScope;
+import photos.sluice.domain.sift.PrepDirHealth.State;
 import photos.sluice.domain.paths.SortFolderNames;
 
 import java.nio.file.Path;
@@ -192,18 +192,18 @@ public class RunSetupPresenter {
      *
      * @param inbox {@link InboxTally} what is waiting, or null where the read failed
      * @param sorted {@link SortedTally} what is staged, or null where the read failed
-     * @param unfinished a {@link List} of {@link CullRunSummary} the sifts left part way through
+     * @param unfinished a {@link List} of {@link SiftRunSummary} the sifts left part way through
      * @param unreadable boolean whether the last read failed
      */
     public record Counts(@Nullable InboxTally inbox, @Nullable SortedTally sorted,
-                         List<CullRunSummary> unfinished, boolean unreadable) {
+                         List<SiftRunSummary> unfinished, boolean unreadable) {
 
         /**
          * Defensively copies the mutable list.
          *
          * @param inbox {@link InboxTally} what is waiting, or null
          * @param sorted {@link SortedTally} what is staged, or null
-         * @param unfinished a {@link List} of {@link CullRunSummary} the sifts left part way through
+         * @param unfinished a {@link List} of {@link SiftRunSummary} the sifts left part way through
          * @param unreadable boolean whether the last read failed
          */
         public Counts {
@@ -1080,7 +1080,7 @@ public class RunSetupPresenter {
      *
      * <p>The screen's half of a guard the facade also makes. This one greys Start while somebody
      * types, off the last reading of the folder. So it can be a moment out of date, and the worst
-     * it can do is fail to warn. {@code CullEngine.refuseIfScopeOverlaps} reads freshly and is the
+     * it can do is fail to warn. {@code SiftEngine.refuseIfScopeOverlaps} reads freshly and is the
      * guarantee. Both word it through {@link RunRefusals#overlapUnfinishedRefusal}, so the sentence on the
      * screen and the sentence in the refusal cannot drift apart.
      *
@@ -1089,14 +1089,14 @@ public class RunSetupPresenter {
      *         overlaps
      */
     private RunRefusals.@Nullable Refusal overlapRefusal(final RunScope scope) {
-        final CullScope.Year chosenYear = this.siftedYear(scope);
+        final SiftScope.Year chosenYear = this.siftedYear(scope);
         if (chosenYear == null) {
             return null;
         }
-        final String exact = CullScope.tag(chosenYear);
-        final List<CullScope.Year> across = this.folders.unfinished().stream()
+        final String exact = SiftScope.tag(chosenYear);
+        final List<SiftScope.Year> across = this.folders.unfinished().stream()
                 .filter(run -> !run.scope().equals(exact))
-                .map(run -> CullScope.yearScopeOf(run.scope()))
+                .map(run -> SiftScope.yearScopeOf(run.scope()))
                 .filter(Objects::nonNull)
                 .filter(chosenYear::overlaps)
                 .toList();
@@ -1107,14 +1107,14 @@ public class RunSetupPresenter {
      * The year a sift of this scope would cover, or null where this is not a sift of one.
      *
      * @param scope {@link RunScope} what the field and mode come to
-     * @return {@link CullScope.Year} the year and months, or null
+     * @return {@link SiftScope.Year} the year and months, or null
      */
-    private CullScope.@Nullable Year siftedYear(final RunScope scope) {
+    private SiftScope.@Nullable Year siftedYear(final RunScope scope) {
         if (this.chosen != RunMode.SIFT || !(scope instanceof RunScope.OfYear(final int year,
                 final List<Integer> months))) {
             return null;
         }
-        return new CullScope.Year(year, months.isEmpty() ? null : months);
+        return new SiftScope.Year(year, months.isEmpty() ? null : months);
     }
 
     /**
@@ -1128,11 +1128,11 @@ public class RunSetupPresenter {
      * @return {@link StartAction} what the press should do
      */
     private StartAction startAction(final RunScope scope) {
-        final CullScope.Year chosenYear = this.siftedYear(scope);
+        final SiftScope.Year chosenYear = this.siftedYear(scope);
         if (chosenYear == null) {
             return new StartAction.StartFresh();
         }
-        final String exact = CullScope.tag(chosenYear);
+        final String exact = SiftScope.tag(chosenYear);
         return this.folders.unfinished().stream()
                 .filter(run -> run.scope().equals(exact))
                 .findFirst()
@@ -1186,8 +1186,8 @@ public class RunSetupPresenter {
      * @return a {@link Set} of {@link Integer} the months covered, empty where none are
      */
     private Set<Integer> siftedMonthsOf(final int year) {
-        final List<CullScope.Year> covering = this.folders.unfinished().stream()
-                .map(run -> CullScope.yearScopeOf(run.scope()))
+        final List<SiftScope.Year> covering = this.folders.unfinished().stream()
+                .map(run -> SiftScope.yearScopeOf(run.scope()))
                 .filter(Objects::nonNull)
                 .filter(scope -> scope.year() == year)
                 .toList();

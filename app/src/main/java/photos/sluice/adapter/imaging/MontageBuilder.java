@@ -1,7 +1,7 @@
 package photos.sluice.adapter.imaging;
 
 import org.springframework.stereotype.Component;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.awt.Color;
 import java.awt.Font;
@@ -32,7 +32,7 @@ public class MontageBuilder {
     /**
      * A rendering artifact holding a decoded tile image and its caption label, not a domain
      * concept. This mirrors {@link TileRenderer.TileResult} being nested in
-     * {@code adapter.imaging} rather than {@code domain.cull}.
+     * {@code adapter.imaging} rather than {@code domain.sift}.
      */
     public record MontageTile(BufferedImage image, String label) {
     }

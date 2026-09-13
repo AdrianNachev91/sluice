@@ -18,7 +18,7 @@ import photos.sluice.application.port.in.RunsUnreadableException;
 import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.in.UnfinishedRunsException;
 import photos.sluice.application.port.out.ApplyException;
-import photos.sluice.application.port.out.CullException;
+import photos.sluice.application.port.out.SiftException;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MalformedSettingsException;
 import photos.sluice.application.port.out.MissingCredentialException;
@@ -28,11 +28,11 @@ import photos.sluice.application.port.out.UnusableSettingsException;
 import photos.sluice.application.port.out.WorkingRootBusyException;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullScope;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftScope;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PrepDirHealth.State;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.model.SortSummary.LowConfidenceCounts;
 import photos.sluice.domain.paths.PathRole;
@@ -159,7 +159,7 @@ class RefusalCoverageTest {
                 worded(new Pipeline.ScopeOccupiedException(aRun("2019")), "has not finished"),
                 worded(new Pipeline.CurateConflictException(aRun("2019"), aSortThatFilledIt()),
                         "has not finished"),
-                worded(new Pipeline.ScopeOverlapsException(new CullScope.Year(2019, null),
+                worded(new Pipeline.ScopeOverlapsException(new SiftScope.Year(2019, null),
                         List.of(aRun("2019-06"))), "overlaps"),
                 worded(new Pipeline.NothingToRedoException(aPrepDir()), "waiting to be judged again"),
                 worded(new Pipeline.ScopeUnreadableException(aPrepDir(), new IOException("held")),
@@ -186,7 +186,7 @@ class RefusalCoverageTest {
                         "There is no vision provider called 'antropic'"),
 
                 // Read ahead of both switches, because it is not a refusal.
-                elsewhere(new CullException("sheet 3 came back wrong twice"),
+                elsewhere(new SiftException("sheet 3 came back wrong twice"),
                         "RunLauncherPresenter.cardFor and CommandReports.reading read it first"),
 
                 // A save that moves a folder root claims the new one. So the command line meets this
@@ -261,8 +261,8 @@ class RefusalCoverageTest {
         return new Refusal(thrown, Handling.unreachable(where), Handling.unreachable(where));
     }
 
-    private static CullRunSummary aRun(final String scope) {
-        return new CullRunSummary(scope, Path.of("logs", "sift-prep", scope),
+    private static SiftRunSummary aRun(final String scope) {
+        return new SiftRunSummary(scope, Path.of("logs", "sift-prep", scope),
                 new PrepDirHealth(State.WAITING, List.of()), null, Instant.EPOCH);
     }
 

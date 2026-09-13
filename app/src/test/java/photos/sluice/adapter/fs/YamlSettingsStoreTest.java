@@ -7,17 +7,17 @@ import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.core.env.MutablePropertySources;
 import org.springframework.core.env.PropertySource;
 import org.springframework.core.io.FileSystemResource;
-import photos.sluice.config.CullConfig;
+import photos.sluice.config.SiftConfig;
 import org.junit.jupiter.api.io.TempDir;
 import org.yaml.snakeyaml.Yaml;
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.MalformedSettingsException;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.config.SettingsFixture;
-import photos.sluice.domain.cull.CullCategory;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.SiftCategory;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -301,16 +301,16 @@ class YamlSettingsStoreTest {
 
         new YamlSettingsStore(file).save(noProviderConfigured);
 
-        assertThat(boundCull(file).providerSettings()).isEmpty();
+        assertThat(boundSift(file).providerSettings()).isEmpty();
     }
 
     /**
      * Binds a saved file the way the app binds it at launch.
      *
      * @param file {@link Path} the config file to read
-     * @return {@link CullConfig} the cull settings it carries
+     * @return {@link SiftConfig} the sift settings it carries
      */
-    private static CullConfig boundCull(final Path file) {
+    private static SiftConfig boundSift(final Path file) {
         final List<PropertySource<?>> sources;
         try {
             sources = new YamlPropertySourceLoader().load("config.yml", new FileSystemResource(file));
@@ -320,17 +320,17 @@ class YamlSettingsStoreTest {
         final var propertySources = new MutablePropertySources();
         sources.forEach(propertySources::addLast);
         return new Binder(ConfigurationPropertySources.from(propertySources))
-                .bind("sluice.sift", CullConfig.class)
+                .bind("sluice.sift", SiftConfig.class)
                 .orElseThrow(() -> new AssertionError("the saved file carries no sluice.sift block"));
     }
 
     private static Settings settings() {
         return new Settings(new PathSettings("/photos/work", "/photos/library", "/photos/work/Inbox"),
                 "anthropic", Map.of("anthropic",
-                        new CullProviderSettings("claude-sonnet-5", "https://example.invalid", 4)),
-                List.of(CullCategory.of("receipts", "photographed paperwork"),
-                        new CullCategory("food", "meals and menus", List.of("plates", "menus"), Boolean.TRUE),
-                        new CullCategory("scenery", "landscapes", List.of(), Boolean.FALSE)),
+                        new SiftProviderSettings("claude-sonnet-5", "https://example.invalid", 4)),
+                List.of(SiftCategory.of("receipts", "photographed paperwork"),
+                        new SiftCategory("food", "meals and menus", List.of("plates", "menus"), Boolean.TRUE),
+                        new SiftCategory("scenery", "landscapes", List.of(), Boolean.FALSE)),
                 new MontageConfig(96, 7), ThemeChoice.DARK);
     }
 
@@ -346,20 +346,20 @@ class YamlSettingsStoreTest {
         final var sluice = asMap(loaded.get("sluice"));
         final var paths = asMap(sluice.get("paths"));
         final var montage = asMap(sluice.get("montage"));
-        final var cull = asMap(sluice.get("sift"));
+        final var sift = asMap(sluice.get("sift"));
         final var ui = asMap(sluice.get("ui"));
-        final var providerSettings = asMap(cull.get("provider-settings"));
+        final var providerSettings = asMap(sift.get("provider-settings"));
         final var anthropic = asMap(providerSettings.get("anthropic"));
-        final List<CullCategory> categories = ((List<?>) cull.get("categories")).stream()
+        final List<SiftCategory> categories = ((List<?>) sift.get("categories")).stream()
                 .map(YamlSettingsStoreTest::asMap)
-                .map(card -> new CullCategory((String) card.get("name"), (String) card.get("description"),
+                .map(card -> new SiftCategory((String) card.get("name"), (String) card.get("description"),
                         exampleLines(card.get("examples")), (Boolean) card.get("enabled")))
                 .toList();
         return new Settings(
                 new PathSettings((String) paths.get("working-root"), (String) paths.get("library-root"),
                         (String) paths.get("inbox")),
-                (String) cull.get("provider"),
-                Map.of("anthropic", new CullProviderSettings((String) anthropic.get("model"),
+                (String) sift.get("provider"),
+                Map.of("anthropic", new SiftProviderSettings((String) anthropic.get("model"),
                         (String) anthropic.get("endpoint"), (Integer) anthropic.get("max-retries"))),
                 categories,
                 new MontageConfig((Integer) montage.get("tile-size"), (Integer) montage.get("tiles-per-row")),

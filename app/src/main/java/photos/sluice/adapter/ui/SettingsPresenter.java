@@ -12,7 +12,7 @@ import photos.sluice.application.port.in.LibraryRootUseCase;
 import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.in.VisionProviderCatalog;
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.ProviderSetting;
@@ -22,7 +22,7 @@ import photos.sluice.application.port.out.SettingOverride.ByAnotherSource;
 import photos.sluice.application.port.out.SettingOverride.ByEnvironmentVariable;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.MontageConfig;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
@@ -155,7 +155,7 @@ public class SettingsPresenter {
                 montage.tileSize(), TILE_SIZE_RANGE, this.overrideNote("sluice.montage.tile-size"),
                 montage.tilesPerRow(), TILES_PER_ROW_RANGE, this.overrideNote("sluice.montage.tiles-per-row"),
                 settings.theme().name(), THEMES, this.overrideNote("sluice.ui.theme"),
-                CullProviderSettings.maxEndpoint(), PathSettings.maxRoot(), SecretStore.maxSecret());
+                SiftProviderSettings.maxEndpoint(), PathSettings.maxRoot(), SecretStore.maxSecret());
     }
 
     /**
@@ -337,7 +337,7 @@ public class SettingsPresenter {
             final Integer maxRetries = this.settingsUseCase.settings().providerSettings(provider).maxRetries();
             settings = new Settings(paths, provider,
                     this.providerSettingsWith(provider,
-                            new CullProviderSettings(blankToNull(model), blankToNull(endpoint), maxRetries)),
+                            new SiftProviderSettings(blankToNull(model), blankToNull(endpoint), maxRetries)),
                     this.settingsUseCase.settings().categories(),
                     new MontageConfig(tileSize, tilesPerRow), theme);
         } catch (final RuntimeException e) {
@@ -435,7 +435,7 @@ public class SettingsPresenter {
     public SaveOutcome saveFolderRootsAndProvider(final String workingRoot, final String libraryRoot,
                                                   final String inbox, final String providerId) {
         final Settings settings = this.settingsUseCase.settings();
-        final CullProviderSettings provider = settings.providerSettings(providerId);
+        final SiftProviderSettings provider = settings.providerSettings(providerId);
         final String endpoint = provider.endpoint() == null ? "" : provider.endpoint();
         return this.save(workingRoot, libraryRoot, inbox, providerId, this.modelToCarryFor(providerId), endpoint,
                 settings.montage().tileSize(),
@@ -530,7 +530,7 @@ public class SettingsPresenter {
      * run without, and is meaningless to one whose judgement comes from an agent the user runs. So
      * the same blank field refuses one save and is correct in the other.
      *
-     * <p>Caught here rather than at cull time, which is where the provider itself would raise it.
+     * <p>Caught here rather than at sift time, which is where the provider itself would raise it.
      * That is a run the user has already started, against settings they last saw accepted.
      *
      * <p>Two states produce a blank model, and each gets its own words. A picker offering anything
@@ -669,7 +669,7 @@ public class SettingsPresenter {
      * keeps that choice a decision this class makes, not a search-and-guess the view performs.
      *
      * <p>The fallback prefers a provider that needs no credential. Whoever lands here has a setting
-     * naming something this build cannot cull with, and the next thing they do is likely to be
+     * naming something this build cannot sift with, and the next thing they do is likely to be
      * Save. Preselecting one that spends their money is the outcome worth ruling out. Left to
      * ordering it would be decided by a label's first letter.
      *
@@ -987,12 +987,12 @@ public class SettingsPresenter {
      * would lose the model they had configured for the one they left.
      *
      * @param providerId {@link String} the provider being saved
-     * @param edited {@link CullProviderSettings} the values that provider is being saved with
-     * @return a {@link Map} of {@link String} to {@link CullProviderSettings} every provider's
+     * @param edited {@link SiftProviderSettings} the values that provider is being saved with
+     * @return a {@link Map} of {@link String} to {@link SiftProviderSettings} every provider's
      *         settings, with this one's replaced
      */
-    private Map<String, CullProviderSettings> providerSettingsWith(final String providerId,
-                                                                   final CullProviderSettings edited) {
+    private Map<String, SiftProviderSettings> providerSettingsWith(final String providerId,
+                                                                   final SiftProviderSettings edited) {
         final var merged = new LinkedHashMap<>(this.settingsUseCase.settings().providerSettingsById());
         merged.put(providerId, edited);
         return merged;
@@ -1049,7 +1049,7 @@ public class SettingsPresenter {
      * @return {@link String} the model id to save, empty for a provider that runs no model
      */
     private String modelToCarryFor(final String providerId) {
-        final CullProviderSettings saved = this.settingsUseCase.settings().providerSettings(providerId);
+        final SiftProviderSettings saved = this.settingsUseCase.settings().providerSettings(providerId);
         if (saved.model() != null && !saved.model().isBlank()) {
             return saved.model();
         }

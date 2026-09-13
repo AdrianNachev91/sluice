@@ -1,8 +1,8 @@
 package photos.sluice.application.service;
 
-import photos.sluice.application.port.out.CullPrepPort;
+import photos.sluice.application.port.out.SiftPrepPort;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
-import photos.sluice.domain.cull.SidecarPhotoEntry;
+import photos.sluice.domain.sift.SidecarPhotoEntry;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -29,14 +29,14 @@ final class Sidecars {
     /**
      * Reads one montage's sidecar and returns the source files it lists.
      *
-     * @param cullPrepPort {@link CullPrepPort} reads the sidecar
+     * @param siftPrepPort {@link SiftPrepPort} reads the sidecar
      * @param prepDirPath {@link Path} the prep directory holding the sidecar
      * @param montage {@link String} the montage whose sidecar to read
      * @return an {@link Optional} {@link List} of {@link Path}, the sidecar's own src files, or empty if damaged
      */
-    static Optional<List<Path>> srcsOf(final CullPrepPort cullPrepPort, final Path prepDirPath, final String montage) {
+    static Optional<List<Path>> srcsOf(final SiftPrepPort siftPrepPort, final Path prepDirPath, final String montage) {
         try {
-            return Optional.of(cullPrepPort.readSidecar(prepDirPath, montage).stream()
+            return Optional.of(siftPrepPort.readSidecar(prepDirPath, montage).stream()
                     .map(SidecarPhotoEntry::src)
                     .toList());
         } catch (final MalformedPrepJsonException e) {

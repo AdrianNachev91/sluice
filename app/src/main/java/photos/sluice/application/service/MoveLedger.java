@@ -2,9 +2,9 @@ package photos.sluice.application.service;
 
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.MediaStore;
-import photos.sluice.domain.cull.AnswerSource;
-import photos.sluice.domain.cull.CorruptSidecarResolution;
-import photos.sluice.domain.cull.OverlapResolution;
+import photos.sluice.domain.sift.AnswerSource;
+import photos.sluice.domain.sift.CorruptSidecarResolution;
+import photos.sluice.domain.sift.OverlapResolution;
 
 import java.io.UncheckedIOException;
 import java.nio.charset.CharacterCodingException;

@@ -5,7 +5,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.in.VisionProviderCatalog;
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderSetting;
@@ -51,7 +51,7 @@ public class VisionProviderPresenter {
     // can be watching it: a Settings screen opened at launch shows the picker as loading until this
     // runs out. So this is the ceiling on how long that screen is unusable, not a guess at the
     // service. Five seconds is several times what listing models takes on a working connection, and
-    // a connection slower than that cannot carry a cull either.
+    // a connection slower than that cannot carry a sift either.
     private static final Duration BOOT_CHECK_BUDGET = Duration.ofSeconds(5);
 
     // A store's own refusal is written for a log. It names the entry Sluice asked for and whatever
@@ -358,7 +358,7 @@ public class VisionProviderPresenter {
      */
     public ConnectionCheckResult testConnection(final String providerId, final String endpoint) {
         final ProviderCheck outcome = this.providers.check(providerId,
-                new CullProviderSettings(null, SettingsPresenter.blankToNull(endpoint), null));
+                new SiftProviderSettings(null, SettingsPresenter.blankToNull(endpoint), null));
         return new ConnectionCheckResult(checkOutcomeWording(outcome), outcome instanceof ProviderCheck.Accepted);
     }
 
@@ -404,7 +404,7 @@ public class VisionProviderPresenter {
     }
 
     /**
-     * Every provider this install can cull with, as a dropdown's own choices.
+     * Every provider this install can sift with, as a dropdown's own choices.
      *
      * @return a {@link List} of {@link SettingsView.ProviderChoice} one per registered provider
      */
@@ -491,9 +491,9 @@ public class VisionProviderPresenter {
                 .map(option -> new SettingsView.ModelChoice(option.id(), option.label(),
                         option.id().equals(catalog.recommended())))
                 .toList();
-        // What the picker shows is not what a cull would run. The saved value is what the provider
+        // What the picker shows is not what a sift would run. The saved value is what the provider
         // is asked for, right up until a save replaces it. A note claiming the substitute is
-        // already in force would send a user off to cull against a model that fails.
+        // already in force would send a user off to sift against a model that fails.
         final String caution = savedModel == null || savedModel.isBlank() || offered ? null
                 : "Your configuration asks for a model called '" + savedModel + "', which this provider does "
                         + "not offer. Save to replace it with the one picked above. Until you do, a run "

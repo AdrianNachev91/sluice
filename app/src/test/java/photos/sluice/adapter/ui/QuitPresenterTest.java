@@ -221,7 +221,7 @@ class QuitPresenterTest {
         launcher.setup().refreshCounts();
         when(this.pipeline.isBusy()).thenReturn(false);
         when(this.pipeline.sort(any())).thenReturn(retyped(sorting));
-        when(this.pipeline.cull(any())).thenReturn(retyped(sifting));
+        when(this.pipeline.sift(any())).thenReturn(retyped(sifting));
         when(this.pipeline.importFrom(any(), any())).thenReturn(retyped(importing));
         start.accept(launcher);
         when(this.pipeline.isBusy()).thenReturn(true);

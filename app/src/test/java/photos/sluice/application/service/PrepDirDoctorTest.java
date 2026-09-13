@@ -5,22 +5,22 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.adapter.imaging.PrepIndexWriter;
 import photos.sluice.adapter.imaging.SidecarWriter;
-import photos.sluice.adapter.vision.JsonCullPrepStore;
-import photos.sluice.application.port.out.CullPrepPort;
-import photos.sluice.domain.cull.ApplyReport;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.Decision;
-import photos.sluice.domain.cull.DecisionShard;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.Finding.InvalidCategory;
-import photos.sluice.domain.cull.Finding.MissingSource;
-import photos.sluice.domain.cull.Finding.StrayShard;
-import photos.sluice.domain.cull.PrepDir;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PrepDirHealth.State;
-import photos.sluice.domain.cull.PurgeReport;
-import photos.sluice.domain.cull.SidecarPhotoEntry;
+import photos.sluice.adapter.vision.JsonSiftPrepStore;
+import photos.sluice.application.port.out.SiftPrepPort;
+import photos.sluice.domain.sift.ApplyReport;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.Decision;
+import photos.sluice.domain.sift.DecisionShard;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.Finding.InvalidCategory;
+import photos.sluice.domain.sift.Finding.MissingSource;
+import photos.sluice.domain.sift.Finding.StrayShard;
+import photos.sluice.domain.sift.PrepDir;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PrepDirHealth.State;
+import photos.sluice.domain.sift.PurgeReport;
+import photos.sluice.domain.sift.SidecarPhotoEntry;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -31,7 +31,7 @@ import java.util.List;
 
 import static java.util.Map.entry;
 import static org.assertj.core.api.Assertions.assertThat;
-import static photos.sluice.application.service.CullPrepTestSupport.fixedCategories;
+import static photos.sluice.application.service.SiftPrepTestSupport.fixedCategories;
 import static photos.sluice.application.service.PipelineTestSupport.listed;
 
 // The never-throws tests share one stake, stated here rather than repeated on each. An escape from
@@ -187,7 +187,7 @@ class PrepDirDoctorTest {
     }
 
     // The healthy dir alongside it proves the scan carried on rather than ending there. Injected
-    // at the CullPrepPort seam, so the classification does not depend on how a given platform
+    // at the SiftPrepPort seam, so the classification does not depend on how a given platform
     // treats a directory standing in for a file.
     @Test
     void runsListsADirItCannotDiagnoseInsteadOfThrowing(@TempDir final Path root) throws IOException {
@@ -200,10 +200,10 @@ class PrepDirDoctorTest {
         final Path damaged = prepDir(root, "2020");
         writeIndex(damaged, 1, List.of("montage-001"));
 
-        final List<CullRunSummary> runs =
+        final List<SiftRunSummary> runs =
                 listed(doctor(root, new FailingIndexReadOf(damaged)).runs(root.resolve("logs/sift-prep")));
 
-        assertThat(runs).extracting(CullRunSummary::scope).containsExactly("2019", "2020");
+        assertThat(runs).extracting(SiftRunSummary::scope).containsExactly("2019", "2020");
         assertThat(runs.getLast().health().state()).isEqualTo(State.DAMAGED);
         assertThat(runs.getLast().shards()).isNull();
         assertThat(runs.getFirst().health().state()).isEqualTo(State.READY);
@@ -244,19 +244,19 @@ class PrepDirDoctorTest {
         assertThat(health.findings().getFirst().remedy()).isEqualTo(Finding.Remedy.NONE);
     }
 
-    // A montage with an unreadable sidecar and no shard looks like one still being culled and is
-    // not. A culler keys its verdicts against the sidecar, so it can never produce a shard here.
+    // A montage with an unreadable sidecar and no shard looks like one still being sifted and is
+    // not. A sieve keys its verdicts against the sidecar, so it can never produce a shard here.
     // Without the finding, a troubleshoot screen has nothing to offer and only a discard to escape
     // by.
     @Test
     void aCorruptSidecarForAMontageWithNoShardYetStillReportsItsFinding(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
-        final Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        writeFile(culled, "x");
+        final Path sifted = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(sifted, "x");
         writeIndex(prepDir, 1, List.of("montage-001", "montage-002", "montage-003"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
-        writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
-        // montage-002 has a readable sidecar and no shard: genuinely still being culled, and the
+        writeSidecar(prepDir, "montage-001", sidecarEntry(sifted));
+        writeShard(prepDir, "montage-001", classificationJson(sifted, "junk", "blurry"));
+        // montage-002 has a readable sidecar and no shard: genuinely still being sifted, and the
         // reason this dir is WAITING rather than BLOCKED. montage-003 has neither.
         writeSidecar(prepDir, "montage-002", sidecarEntry(root.resolve("Sorted/Photos/2019/06/b.jpg")));
 
@@ -269,15 +269,15 @@ class PrepDirDoctorTest {
     @Test
     void aMontageWithNoShardYetReportsWaitingWithoutAMissingShardFinding(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
-        final Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path sifted = root.resolve("Sorted/Photos/2019/06/a.jpg");
         final Path uncalled = root.resolve("Sorted/Photos/2019/06/b.jpg");
-        writeFile(culled, "x");
+        writeFile(sifted, "x");
         writeFile(uncalled, "y");
         writeIndex(prepDir, 2, List.of("montage-001", "montage-002"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(sifted));
         writeSidecar(prepDir, "montage-002", sidecarEntry(uncalled));
-        writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
-        // montage-002 has no shard yet - still being culled.
+        writeShard(prepDir, "montage-001", classificationJson(sifted, "junk", "blurry"));
+        // montage-002 has no shard yet - still being sifted.
 
         final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
@@ -402,7 +402,7 @@ class PrepDirDoctorTest {
         writeShard(complete, "montage-001", classificationJson(photo, "junk", "blurry"));
         Files.writeString(complete.resolve("decisions.json"), "{}");
         final Path waiting = prepDir(root, "waiting1");
-        writeIndex(waiting, 1, List.of("montage-001")); // no shard yet - still culling
+        writeIndex(waiting, 1, List.of("montage-001")); // no shard yet - still sifting
 
         final PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/sift-prep"));
 
@@ -454,7 +454,7 @@ class PrepDirDoctorTest {
     // Both fixtures below would produce a spurious extra entry if either exclusion were dropped.
     @Test
     void runsCountsNeitherALooseRootFileNorASubdirectoryAsItsOwnRun(@TempDir final Path root) throws IOException {
-        final Path cullPrepRoot = root.resolve("logs/sift-prep");
+        final Path siftPrepRoot = root.resolve("logs/sift-prep");
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         final Path real = prepDir(root, "2019");
@@ -462,15 +462,15 @@ class PrepDirDoctorTest {
         writeSidecar(real, "montage-001", sidecarEntry(photo));
         writeShard(real, "montage-001", classificationJson(photo, "junk", "blurry"));
         writeFile(real.resolve("drawer/corrupt-sidecar-montage-001.json"), "{}");
-        writeFile(cullPrepRoot.resolve("stray-note.txt"), "not part of any run");
+        writeFile(siftPrepRoot.resolve("stray-note.txt"), "not part of any run");
 
-        final List<CullRunSummary> runs = listed(doctor(root).runs(cullPrepRoot));
+        final List<SiftRunSummary> runs = listed(doctor(root).runs(siftPrepRoot));
 
-        assertThat(runs).singleElement().extracting(CullRunSummary::scope).isEqualTo("2019");
+        assertThat(runs).singleElement().extracting(SiftRunSummary::scope).isEqualTo("2019");
     }
 
     @Test
-    void purgeCompletedOnAMissingCullPrepRootReturnsAnEmptyReport(@TempDir final Path root) {
+    void purgeCompletedOnAMissingSiftPrepRootReturnsAnEmptyReport(@TempDir final Path root) {
         final PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/sift-prep"));
 
         assertThat(report.purged()).isEmpty();
@@ -492,7 +492,7 @@ class PrepDirDoctorTest {
         final var store = new FailingListingOf(unreadable);
 
         final PurgeReport report =
-                CullPrepTestSupport.prepDirDoctor(root, store).purgeCompleted(root.resolve("logs/sift-prep"));
+                SiftPrepTestSupport.prepDirDoctor(root, store).purgeCompleted(root.resolve("logs/sift-prep"));
 
         assertThat(report.purged()).containsExactly("complete1");
         assertThat(report.skipped()).isEmpty();
@@ -521,7 +521,7 @@ class PrepDirDoctorTest {
         final var store = new FailingDeleteUnder(first);
 
         final PurgeReport report =
-                CullPrepTestSupport.prepDirDoctor(root, store).purgeCompleted(root.resolve("logs/sift-prep"));
+                SiftPrepTestSupport.prepDirDoctor(root, store).purgeCompleted(root.resolve("logs/sift-prep"));
 
         assertThat(report.purged()).containsExactly("complete2");
         assertThat(report.skipped()).isEmpty();
@@ -551,18 +551,18 @@ class PrepDirDoctorTest {
 
     @Test
     void runsSaysTheRootCouldNotBeListedRatherThanReportingNoRuns(@TempDir final Path root) throws IOException {
-        final Path cullPrepRoot = root.resolve("logs/sift-prep");
-        writeFile(cullPrepRoot.resolve("2019-06/index.json"), "{}");
+        final Path siftPrepRoot = root.resolve("logs/sift-prep");
+        writeFile(siftPrepRoot.resolve("2019-06/index.json"), "{}");
 
-        assertThat(CullPrepTestSupport.prepDirDoctor(root, new FailingListing()).runs(cullPrepRoot))
-                .isEqualTo(new CullRuns.Unlistable(cullPrepRoot));
+        assertThat(SiftPrepTestSupport.prepDirDoctor(root, new FailingListing()).runs(siftPrepRoot))
+                .isEqualTo(new SiftRuns.Unlistable(siftPrepRoot));
     }
 
     @Test
     void runsOverARootHoldingNothingIsListedAndEmpty(@TempDir final Path root) {
-        final Path cullPrepRoot = root.resolve("logs/sift-prep");
+        final Path siftPrepRoot = root.resolve("logs/sift-prep");
 
-        assertThat(doctor(root).runs(cullPrepRoot)).isEqualTo(new CullRuns.Listed(List.of()));
+        assertThat(doctor(root).runs(siftPrepRoot)).isEqualTo(new SiftRuns.Listed(List.of()));
     }
 
     // The working-store assertion comes first, so this cannot pass with the guard gone.
@@ -572,7 +572,7 @@ class PrepDirDoctorTest {
         writeIndex(prepDir, 1, List.of("montage-001"));
 
         assertThat(doctor(root).summaryOf(prepDir).since()).isNotEqualTo(Instant.EPOCH);
-        assertThat(CullPrepTestSupport.prepDirDoctor(root, new FailingLastModified()).summaryOf(prepDir).since())
+        assertThat(SiftPrepTestSupport.prepDirDoctor(root, new FailingLastModified()).summaryOf(prepDir).since())
                 .isEqualTo(Instant.EPOCH);
     }
 
@@ -621,11 +621,11 @@ class PrepDirDoctorTest {
     @Test
     void runsSaysTheRootCouldNotBeReadWhenTheExistenceCheckItselfFails(@TempDir final Path root)
             throws IOException {
-        final Path cullPrepRoot = root.resolve("logs/sift-prep");
-        writeFile(cullPrepRoot.resolve("2019-06/index.json"), "{}");
+        final Path siftPrepRoot = root.resolve("logs/sift-prep");
+        writeFile(siftPrepRoot.resolve("2019-06/index.json"), "{}");
 
-        assertThat(CullPrepTestSupport.prepDirDoctor(root, new FailingExists()).runs(cullPrepRoot))
-                .isEqualTo(new CullRuns.Unlistable(cullPrepRoot));
+        assertThat(SiftPrepTestSupport.prepDirDoctor(root, new FailingExists()).runs(siftPrepRoot))
+                .isEqualTo(new SiftRuns.Unlistable(siftPrepRoot));
     }
 
     @Test
@@ -641,9 +641,9 @@ class PrepDirDoctorTest {
         writeIndex(unreadable, 1, List.of("montage-001"));
         final var store = new FailingListingOf(unreadable);
 
-        final List<CullRunSummary> runs = listed(CullPrepTestSupport.prepDirDoctor(root, store).runs(root.resolve("logs/sift-prep")));
+        final List<SiftRunSummary> runs = listed(SiftPrepTestSupport.prepDirDoctor(root, store).runs(root.resolve("logs/sift-prep")));
 
-        assertThat(runs).extracting(CullRunSummary::scope).containsExactly("2019", "2020");
+        assertThat(runs).extracting(SiftRunSummary::scope).containsExactly("2019", "2020");
         assertThat(runs.getFirst().health().state()).isEqualTo(State.READY);
         assertThat(runs.getLast().health().state()).isEqualTo(State.DAMAGED);
     }
@@ -664,11 +664,11 @@ class PrepDirDoctorTest {
     }
 
     private static PrepDirDoctor doctor(final Path root) {
-        return CullPrepTestSupport.prepDirDoctor(root);
+        return SiftPrepTestSupport.prepDirDoctor(root);
     }
 
-    private static PrepDirDoctor doctor(final Path root, final CullPrepPort cullPrepPort) {
-        return CullPrepTestSupport.prepDirDoctor(root, cullPrepPort);
+    private static PrepDirDoctor doctor(final Path root, final SiftPrepPort siftPrepPort) {
+        return SiftPrepTestSupport.prepDirDoctor(root, siftPrepPort);
     }
 
     // A plain unchecked exception rather than an I/O one. A port constrains nothing about what its
@@ -755,9 +755,9 @@ class PrepDirDoctorTest {
 
     // Passes every read and write through to a real store, so a subclass overrides only the one call
     // it wants to fail and everything else behaves normally.
-    private abstract static class DelegatingPrepStore implements CullPrepPort {
+    private abstract static class DelegatingPrepStore implements SiftPrepPort {
 
-        private final CullPrepPort delegate = new JsonCullPrepStore();
+        private final SiftPrepPort delegate = new JsonSiftPrepStore();
 
         @Override
         public PrepDir readIndex(final Path prepDir) {

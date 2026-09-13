@@ -1,8 +1,8 @@
 package photos.sluice.application.port.out;
 
 import org.junit.jupiter.api.Test;
-import photos.sluice.domain.cull.CullCategory;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.SiftCategory;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.util.List;
 import java.util.Map;
@@ -19,28 +19,28 @@ class SettingsBoundsTest {
 
     @Test
     void aModelIdPastItsCeilingIsRefused() {
-        final String tooLong = "m".repeat(CullProviderSettings.maxModel() + 1);
+        final String tooLong = "m".repeat(SiftProviderSettings.maxModel() + 1);
 
-        assertThatThrownBy(() -> new CullProviderSettings(tooLong, null, null))
+        assertThatThrownBy(() -> new SiftProviderSettings(tooLong, null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("model id");
-        assertThat(new CullProviderSettings("m".repeat(CullProviderSettings.maxModel()), null, null).model())
-                .hasSize(CullProviderSettings.maxModel());
+        assertThat(new SiftProviderSettings("m".repeat(SiftProviderSettings.maxModel()), null, null).model())
+                .hasSize(SiftProviderSettings.maxModel());
     }
 
     @Test
     void anEndpointPastItsCeilingIsRefused() {
-        final String tooLong = "e".repeat(CullProviderSettings.maxEndpoint() + 1);
+        final String tooLong = "e".repeat(SiftProviderSettings.maxEndpoint() + 1);
 
-        assertThatThrownBy(() -> new CullProviderSettings(null, tooLong, null))
+        assertThatThrownBy(() -> new SiftProviderSettings(null, tooLong, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("endpoint");
     }
 
     @Test
     void anUnsetProviderStaysLegal() {
-        assertThat(CullProviderSettings.unset().model()).isNull();
-        assertThat(CullProviderSettings.unset().endpoint()).isNull();
+        assertThat(SiftProviderSettings.unset().model()).isNull();
+        assertThat(SiftProviderSettings.unset().endpoint()).isNull();
     }
 
     // Each root is named in its own message, since a refusal that only says "a path" leaves the
@@ -66,8 +66,8 @@ class SettingsBoundsTest {
 
     @Test
     void moreCategoriesThanOneInstallMayHoldIsRefused() {
-        final List<CullCategory> tooMany = IntStream.rangeClosed(0, Settings.maxCategories())
-                .mapToObj(i -> CullCategory.of("card-" + i, "description " + i)).toList();
+        final List<SiftCategory> tooMany = IntStream.rangeClosed(0, Settings.maxCategories())
+                .mapToObj(i -> SiftCategory.of("card-" + i, "description " + i)).toList();
 
         assertThatThrownBy(() -> settingsWith(tooMany))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -76,8 +76,8 @@ class SettingsBoundsTest {
 
     @Test
     void aSetAtTheCeilingIsAccepted() {
-        final List<CullCategory> atTheLimit = IntStream.range(0, Settings.maxCategories())
-                .mapToObj(i -> CullCategory.of("card-" + i, "description " + i)).toList();
+        final List<SiftCategory> atTheLimit = IntStream.range(0, Settings.maxCategories())
+                .mapToObj(i -> SiftCategory.of("card-" + i, "description " + i)).toList();
 
         assertThat(settingsWith(atTheLimit).categories()).hasSize(Settings.maxCategories());
     }
@@ -85,21 +85,21 @@ class SettingsBoundsTest {
     @Test
     void twoCategoriesUnderOneNameAreRefusedAndTheRefusalNamesIt() {
         assertThatThrownBy(() -> settingsWith(List.of(
-                CullCategory.of("food", "meals"), CullCategory.of("food", "also meals"))))
+                SiftCategory.of("food", "meals"), SiftCategory.of("food", "also meals"))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("more than once: food.");
     }
 
     @Test
     void aCategoryCalledJunkIsRefusedWhereverItWasWritten() {
-        assertThatThrownBy(() -> settingsWith(List.of(CullCategory.of("junk", "mine"))))
+        assertThatThrownBy(() -> settingsWith(List.of(SiftCategory.of("junk", "mine"))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("may not hold one called 'junk'");
-        assertThat(settingsWith(List.of(CullCategory.of("junky", "not that one"))).categories())
+        assertThat(settingsWith(List.of(SiftCategory.of("junky", "not that one"))).categories())
                 .hasSize(1);
     }
 
-    private static Settings settingsWith(final List<CullCategory> categories) {
+    private static Settings settingsWith(final List<SiftCategory> categories) {
         return new Settings(ROOTS, "anthropic", Map.of(), categories,
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM);
     }

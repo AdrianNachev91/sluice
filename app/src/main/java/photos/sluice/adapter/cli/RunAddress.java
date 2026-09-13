@@ -4,8 +4,8 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
 
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -64,9 +64,9 @@ public class RunAddress {
      *         not be read
      */
     private Path tagged(final String tag) {
-        return switch (this.pipeline.cullRuns()) {
-            case CullRuns.Listed(final List<CullRunSummary> runs) -> matched(tag, runs);
-            case CullRuns.Unlistable(final Path root) -> throw new ScopeRefusedException(
+        return switch (this.pipeline.siftRuns()) {
+            case SiftRuns.Listed(final List<SiftRunSummary> runs) -> matched(tag, runs);
+            case SiftRuns.Unlistable(final Path root) -> throw new ScopeRefusedException(
                     RunsRefusals.unreadable(root));
         };
     }
@@ -75,15 +75,15 @@ public class RunAddress {
      * The folder of the one sift carrying this tag.
      *
      * @param tag {@link String} the scope tag the caller typed
-     * @param runs a {@link List} of {@link CullRunSummary} every sift that is there
+     * @param runs a {@link List} of {@link SiftRunSummary} every sift that is there
      * @return {@link Path} that sift's folder
      * @throws ScopeRefusedException when none of them carries the tag
      */
-    private static Path matched(final String tag, final List<CullRunSummary> runs) {
+    private static Path matched(final String tag, final List<SiftRunSummary> runs) {
         return runs.stream()
                 .filter(run -> run.scope().equals(tag))
                 .findFirst()
-                .map(CullRunSummary::prepDir)
+                .map(SiftRunSummary::prepDir)
                 .orElseThrow(() -> notFound(tag, runs));
     }
 
@@ -108,11 +108,11 @@ public class RunAddress {
      * The refusal for an address no sift answers to.
      *
      * @param tag {@link String} the scope tag the caller typed
-     * @param runs a {@link List} of {@link CullRunSummary} every sift that is there
+     * @param runs a {@link List} of {@link SiftRunSummary} every sift that is there
      * @return {@link ScopeRefusedException} the refusal to throw
      */
-    private static ScopeRefusedException notFound(final String tag, final List<CullRunSummary> runs) {
-        final List<String> tags = runs.stream().map(CullRunSummary::scope).toList();
+    private static ScopeRefusedException notFound(final String tag, final List<SiftRunSummary> runs) {
+        final List<String> tags = runs.stream().map(SiftRunSummary::scope).toList();
         final String remedy = tags.isEmpty() ? "There are none yet."
                 : "These are on disk: " + String.join(", ", tags) + ".";
         return new ScopeRefusedException(new Refusal(RefusalKind.RUN_NOT_FOUND,

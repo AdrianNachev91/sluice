@@ -119,7 +119,7 @@ A plain `tileSize x tileSize` image: solid `#444444` background, centered bold w
 `render()` never throws, so this is the value it returns when nothing could be decoded, always
 paired with `unreviewable=true`. Per this file's own routing rule, an unreviewable tile is expected
 to be routed away from montage assembly before a grid is ever built. A placeholder should not
-normally reach a montage a human or the culler actually sees. Its background is still styled
+normally reach a montage a human or the sieve actually sees. Its background is still styled
 distinctly from the montage grid's own `#111111` band regardless. So it stays legible as "no
 preview" rather than blending in if that routing is ever skipped or incomplete at a call site.
 

@@ -10,7 +10,7 @@ rebuilding a lost `index.json` from surviving sidecars. A CHOICE remedy costs th
 (work, money, or an audit trail), so it only ever runs on an explicit decision.
 
 Every CHOICE remedy records itself as a disposition-ledger entry. Neither a shard nor `index.json`
-is ever edited. Mutating a culler's own output would destroy the record of what it actually said,
+is ever edited. Mutating a sieve's own output would destroy the record of what it actually said,
 which is exactly what these repairs exist to reason about.
 
 ## 1. Disposition ledger and CHOICE remedies
@@ -33,7 +33,7 @@ ledger is split in two.
 An answer, once given, is permanent. It survives a reconcile, a troubleshoot and a restart, and
 nothing re-asks it. There is no un-answer affordance, deliberately. An answer only ever changes
 routing within its own run, and no CHOICE remedy here destroys media. A skipped or set-aside photo
-stays in `Sorted` for a future cull. `resolveCorruptSidecar` has the widest reach of the three,
+stays in `Sorted` for a future sift. `resolveCorruptSidecar` has the widest reach of the three,
 since it is keyed by montage rather than by file, so a `SET_ASIDE` settles a whole montage at once.
 
 Two things end an answer, neither of them an undo. A `choices.log` whose bytes do not decode loses
@@ -74,7 +74,7 @@ montage's sidecar. It renames the stray file into place (`decisions-NNN.json` fo
 montage) with no ledger entry needed, the rename itself is the fix. Anything else is left
 untouched: more than one montage unclaimed, or a decision naming a file the candidate's sidecar
 never showed. `setAsideStrayShard()` is the CHOICE fallback for that case. It files the stray
-file into the disaster drawer (never a true delete), so the culler can redo that montage from a
+file into the disaster drawer (never a true delete), so the sieve can redo that montage from a
 clean slate. `Troubleshooter` attempts this AUTO repair for every `StrayShard` finding it sees,
 regardless of overall prep-dir state. See [`troubleshooter.md`](troubleshooter.md).
 
@@ -87,7 +87,7 @@ read that merely failed - a lock, a permission denial - is not diagnosed here at
 uncaught, so a transient failure never triggers an AUTO rebuild against an index that was never
 actually broken. A montage's own sidecar (`montage-NNN.json`, its scope evidence) is read more
 broadly below. Any read failure routes it to the CHOICE remedy, since `Sidecars.srcsOf` doesn't yet
-make the same distinction. Neither missing nor malformed nor unreadable is a culling mistake. Every
+make the same distinction. Neither missing nor malformed nor unreadable is a sifting mistake. Every
 case index.json's AUTO remedy actually reaches, and every sidecar case, gets a remedy here instead
 of a bare crash.
 
@@ -116,7 +116,7 @@ logic ever consults it.
 
 The category set is unrecoverable the same way, and it does not degrade as quietly. A sidecar
 carries only `src`, `name`, `time` and `received`, so nothing left on disk remembers what this run
-was culled under. The currently configured set is substituted. A run repaired after a category edit
+was sifted under. The currently configured set is substituted. A run repaired after a category edit
 is therefore judged against today's rules, which is how every run behaved before the set was
 recorded at all. So the repair path is no worse than what it replaces, while the happy path stops
 drifting. This is the only place in the app that makes that substitution.
@@ -131,7 +131,7 @@ flowchart TD
     A["one montage"] --> B{"sidecar readable?"}
     B -- yes --> C(["contributes its srcs<br/>to the in-scope pool,<br/>and its shard too,<br/>if it has one"])
     B -- no --> D{"montage has<br/>a shard yet?"}
-    D -- no --> E(["silently skipped -<br/>not yet actionable,<br/>same as a still-culling<br/>montage generally"])
+    D -- no --> E(["silently skipped -<br/>not yet actionable,<br/>same as a still-sifting<br/>montage generally"])
     D -- yes --> F{"ledger resolution<br/>for this montage?"}
     F -- none yet --> G(["Finding.CorruptSidecar<br/>(CHOICE)"])
     F -- SET_ASIDE --> H(["montage dropped<br/>entirely - no shard,<br/>no srcs, its photos<br/>stay in Sorted"])
@@ -141,7 +141,7 @@ flowchart TD
 `resolveCorruptSidecar()` records the user's choice as one more disposition-ledger entry (the
 mechanism from section 1 above, keyed by montage id rather than a file path). It also files the
 sidecar itself into the disaster drawer if it's still present, its scope evidence is spent either
-way once a choice is made. `SET_ASIDE` means a future cull of the same scope sees those photos
+way once a choice is made. `SET_ASIDE` means a future sift of the same scope sees those photos
 fresh. `APPLY_ANYWAY` means every other safety net still applies: files must exist, categories must
 be ones index.json recorded, the cross-shard duplicate check runs, and nothing is overwritten. Only
 the membership cross-check is skipped.
@@ -154,12 +154,12 @@ consulted. Any second validator ahead of it works from raw disk state alone. It 
 re-derive verdicts the user has already answered, and refuse the run before their answer could
 count.
 
-The cull phase is the one step sitting ahead of that gate, so the vision cullers hold no opinion
+The sift phase is the one step sitting ahead of that gate, so the vision sieves hold no opinion
 about shard content. The external-agent provider asks only which montages have no shard file at
 all. The Anthropic provider validates the model's own response, because that response is its own
 output and the corrective retry needs the problem list. It skips a montage whose sidecar it cannot
 read rather than failing the run. Neither provider consults `index.json`'s unreviewable list. A
-resume whose montages all have shards enters no culler at all and goes straight to the gate.
+resume whose montages all have shards enters no sieve at all and goes straight to the gate.
 
 Both `resolveCorruptSidecar` resolutions depend on that. So does `resolveOverlap` with
 `TRUST_DECISION`. Each records an answer that only this gate can read, on a prep dir whose raw disk
@@ -169,7 +169,7 @@ A watcher's automatic resume reaches those answers the ordinary way. Its readine
 (`ShardTallyCalculator.isReadyToResume`) only asks whether every shard has arrived and parses, never
 whether the batch is any good. So a run whose remaining problem the user has already answered simply
 resumes, and the gate above honours the answer. Nothing between the two holds a second opinion. See
-[`cull-engine.md`](cull-engine.md) for why readiness is deliberately that narrow.
+[`sift-engine.md`](sift-engine.md) for why readiness is deliberately that narrow.
 
 ## 3. Last-resort discard
 
@@ -179,7 +179,7 @@ ledger files, and any disaster drawer, preserving its own relative layout) is mo
 into a global graveyard, `logs/disasters/<scope>-<timestamp>/`. The scope is read straight off the
 prep dir's own folder name, never `index.json`. The whole point of this remedy is that
 `index.json` (or anything else) might be unreadable. Only the montage/tile contact-sheet images
-are truly deleted, cents to re-render on a fresh cull of the same scope. Library media is never
+are truly deleted, cents to re-render on a fresh sift of the same scope. Library media is never
 touched. It returns a `DiscardReport` naming the graveyard directory and how many montage decision
 shards (`decisions-NNN.json`) were among the files filed there. That lets a caller tell the user
 how many already-paid vision-model calls this discard gives up on.
@@ -192,9 +192,9 @@ prep dir first (an auto-resume must never fire against a run mid-discard), and w
 `JobRunner` job. Both of this remedy's entry points - this last-resort CHOICE, and giving up on a
 still-waiting job - call that one `Pipeline.discard()` method.
 
-The cull engine's own scope claim requires exactly the opposite: `COMPLETE`, and nothing else. A
+The sift engine's own scope claim requires exactly the opposite: `COMPLETE`, and nothing else. A
 fresh run over a finished one archives that record here rather than letting prep overwrite it (see
-[`cull-engine.md`](cull-engine.md)). Same file moves, opposite preconditions, because the only
+[`sift-engine.md`](sift-engine.md)). Same file moves, opposite preconditions, because the only
 question either caller asks is whether the run being filed away is finished.
 
 ## Scenarios
@@ -210,16 +210,16 @@ question either caller asks is whether the run being filed away is finished.
 | index.json is corrupt or missing, every sidecar contiguous and parseable             | `rebuildIndex()` (AUTO) rebuilds it from the sidecars; original filed if present   |
 | index.json is corrupt or missing, a sidecar is also missing or unparseable           | Rebuild guard refuses - `CorruptIndex` finding stays open, no engine remedy left   |
 | index.json read fails but is not missing or malformed (a lock, a permission denial)  | Propagates uncaught - not diagnosed here, no AUTO remedy attempted                 |
-| A montage's sidecar is missing or corrupt, the montage has no shard yet              | Silently skipped - not yet actionable, same as any still-culling montage           |
+| A montage's sidecar is missing or corrupt, the montage has no shard yet              | Silently skipped - not yet actionable, same as any still-sifting montage           |
 | A montage's sidecar is missing or corrupt, the montage already has a shard           | `CorruptSidecar` finding (CHOICE)                                                  |
-| A `CorruptSidecar` finding resolved `SET_ASIDE`                                      | Montage dropped entirely; its photos stay in `Sorted` for a future cull            |
+| A `CorruptSidecar` finding resolved `SET_ASIDE`                                      | Montage dropped entirely; its photos stay in `Sorted` for a future sift            |
 | A `CorruptSidecar` finding resolved `APPLY_ANYWAY`                                   | Montage's own decisions trusted at face value; membership cross-check skipped      |
 | A prep dir mangled beyond every repair above                                         | `discard()` (last-resort CHOICE) graveyards its text artifacts, deletes its images |
 
 ## Related
 
 - The shard contract itself, and the auto-heal rule: `ShardValidator`'s own doc comment
-  (`app/src/main/java/photos/sluice/domain/cull/ShardValidator.java`).
+  (`app/src/main/java/photos/sluice/domain/sift/ShardValidator.java`).
 - The validation and classification that surface every finding resolved here, and that consult
   the ledger entries these remedies write: [`apply-planner.md`](apply-planner.md).
 - The move-record log's own file format, markers, and parsing rules:
@@ -232,6 +232,6 @@ question either caller asks is whether the run being filed away is finished.
   mechanism here: [`pipeline.md`](pipeline.md).
 - The single-button recovery that runs `rebuildIndex()`, `autoRepairStrayShard()`, and (via a
   separate reconcile call) resolves a lost move ledger: [`troubleshooter.md`](troubleshooter.md).
-- Where a repaired decision's file ends up once applied: `CullDestinations`
-  (`app/src/main/java/photos/sluice/application/service/CullDestinations.java`), described in
+- Where a repaired decision's file ends up once applied: `SiftDestinations`
+  (`app/src/main/java/photos/sluice/application/service/SiftDestinations.java`), described in
   [`apply-engine.md`](apply-engine.md).

@@ -1,8 +1,8 @@
 package photos.sluice.application.port.out;
 
-import photos.sluice.domain.cull.CullCategory;
-import photos.sluice.domain.cull.JunkCategory;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.SiftCategory;
+import photos.sluice.domain.sift.JunkCategory;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.util.List;
 import java.util.Map;
@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
  * Every setting a user can change, as one value. A settings screen edits one of these, the config
  * file is rewritten from one, and the running app reads the current one through {@link LiveSettings}.
  *
- * <p>It implements {@link CullSettings}, so the compiler proves it carries everything a cull needs
+ * <p>It implements {@link SiftSettings}, so the compiler proves it carries everything a sift needs
  * to read. The folder roots sit in their own component instead, since they are edited and checked
  * as a group.
  *
@@ -20,12 +20,12 @@ import java.util.stream.Collectors;
  * never hold half of one save and half of another.
  */
 public record Settings(PathSettings paths, String provider,
-                       Map<String, CullProviderSettings> providerSettingsById,
-                       List<CullCategory> categories,
-                       MontageConfig montage, ThemeChoice theme) implements CullSettings {
+                       Map<String, SiftProviderSettings> providerSettingsById,
+                       List<SiftCategory> categories,
+                       MontageConfig montage, ThemeChoice theme) implements SiftSettings {
 
     // Bounded here for the reason the duplicate-name check is: this is the one value every category
-    // set the app runs on arrives as. Each card is a folder and a section of every culling prompt,
+    // set the app runs on arrives as. Each card is a folder and a section of every sifting prompt,
     // so an unbounded list is an unbounded prompt. The app ships four, and twenty is far past any
     // set a person would keep.
     private static final int MAX_CATEGORIES = 20;
@@ -44,11 +44,11 @@ public record Settings(PathSettings paths, String provider,
      * the same name. Two such cards would silently alias one category.
      *
      * @param paths {@link PathSettings} the three configured folder roots
-     * @param provider {@link String} id of the vision provider a cull routes through
-     * @param providerSettingsById a {@link Map} of {@link String} to {@link CullProviderSettings}
+     * @param provider {@link String} id of the vision provider a sift routes through
+     * @param providerSettingsById a {@link Map} of {@link String} to {@link SiftProviderSettings}
      *     the connection settings each API-backed provider is configured with, keyed by provider id
-     * @param categories a {@link List} of {@link CullCategory} the classification cards a cull routes to
-     * @param montage {@link MontageConfig} the contact-sheet grid a cull renders
+     * @param categories a {@link List} of {@link SiftCategory} the classification cards a sift routes to
+     * @param montage {@link MontageConfig} the contact-sheet grid a sift renders
      * @param theme {@link ThemeChoice} the look the user asked for, or to follow the desktop
      */
     public Settings {
@@ -59,7 +59,7 @@ public record Settings(PathSettings paths, String provider,
                     + " photo categories one install may hold: " + categories.size() + ".");
         }
         final List<String> duplicates = categories.stream()
-                .collect(Collectors.groupingBy(CullCategory::name, Collectors.counting()))
+                .collect(Collectors.groupingBy(SiftCategory::name, Collectors.counting()))
                 .entrySet().stream()
                 .filter(entry -> entry.getValue() > 1)
                 .map(Map.Entry::getKey)
@@ -70,7 +70,7 @@ public record Settings(PathSettings paths, String provider,
                     + (duplicates.size() == 1 ? "This one is used" : "These are used")
                     + " more than once: " + String.join(", ", duplicates) + ".");
         }
-        if (categories.stream().map(CullCategory::name).anyMatch(JunkCategory::isJunkName)) {
+        if (categories.stream().map(SiftCategory::name).anyMatch(JunkCategory::isJunkName)) {
             throw new UnusableSettingsException("Photo categories may not hold one called '"
                     + JunkCategory.NAME + "'. Sluice supplies that one itself, and it is always on.");
         }
@@ -80,7 +80,7 @@ public record Settings(PathSettings paths, String provider,
      * {@inheritDoc}
      */
     @Override
-    public CullProviderSettings providerSettings() {
+    public SiftProviderSettings providerSettings() {
         return this.providerSettings(this.provider);
     }
 
@@ -88,7 +88,7 @@ public record Settings(PathSettings paths, String provider,
      * {@inheritDoc}
      */
     @Override
-    public CullProviderSettings providerSettings(final String providerId) {
-        return this.providerSettingsById.getOrDefault(providerId, CullProviderSettings.unset());
+    public SiftProviderSettings providerSettings(final String providerId) {
+        return this.providerSettingsById.getOrDefault(providerId, SiftProviderSettings.unset());
     }
 }

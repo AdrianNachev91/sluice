@@ -2,7 +2,7 @@ package photos.sluice.adapter.ui;
 
 import org.jspecify.annotations.Nullable;
 import photos.sluice.domain.commit.CommitScope;
-import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.sift.SiftScope;
 import photos.sluice.domain.model.MonthRange;
 import photos.sluice.domain.model.SortScope;
 
@@ -87,14 +87,14 @@ sealed interface RunScope {
     }
 
     /**
-     * The cull scope this one stands for.
+     * The sift scope this one stands for.
      *
      * @param scope {@link RunScope} the parsed scope
-     * @return {@link CullScope} what the engine is asked for
+     * @return {@link SiftScope} what the engine is asked for
      */
-    static CullScope asCull(final RunScope scope) {
+    static SiftScope asSift(final RunScope scope) {
         if (scope instanceof OfYear(final int year, final List<Integer> months)) {
-            return new CullScope.Year(year, months.isEmpty() ? null : months);
+            return new SiftScope.Year(year, months.isEmpty() ? null : months);
         }
         throw new IllegalStateException("A sift is only ever started against a year");
     }

@@ -1,11 +1,11 @@
 package photos.sluice.adapter.cli;
 
 import org.junit.jupiter.api.Test;
-import photos.sluice.domain.cull.ChoiceAnswer;
-import photos.sluice.domain.cull.CorruptSidecarResolution;
-import photos.sluice.domain.cull.Decision;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.OverlapResolution;
+import photos.sluice.domain.sift.ChoiceAnswer;
+import photos.sluice.domain.sift.CorruptSidecarResolution;
+import photos.sluice.domain.sift.Decision;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.OverlapResolution;
 
 import java.nio.file.Path;
 import java.util.List;

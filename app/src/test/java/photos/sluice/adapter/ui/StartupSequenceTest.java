@@ -236,7 +236,7 @@ class StartupSequenceTest {
         }
 
         @Override
-        public Path cullPrep() {
+        public Path siftPrep() {
             return this.logs().resolve("sift-prep");
         }
 

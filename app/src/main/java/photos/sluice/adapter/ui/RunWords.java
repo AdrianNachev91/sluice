@@ -1,7 +1,7 @@
 package photos.sluice.adapter.ui;
 
 import org.jspecify.annotations.Nullable;
-import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.sift.SiftScope;
 
 import java.nio.file.Path;
 import java.time.Duration;
@@ -32,10 +32,10 @@ final class RunWords {
     /**
      * A year scope as a sentence names it.
      *
-     * @param scope {@link CullScope.Year} the scope, or null where its own tag names no year
+     * @param scope {@link SiftScope.Year} the scope, or null where its own tag names no year
      * @return {@link String} what to call it
      */
-    static String spelledScope(final CullScope.@Nullable Year scope) {
+    static String spelledScope(final SiftScope.@Nullable Year scope) {
         if (scope == null) {
             return "another timeframe";
         }

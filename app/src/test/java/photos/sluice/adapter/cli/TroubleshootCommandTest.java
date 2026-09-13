@@ -8,10 +8,10 @@ import photos.sluice.application.port.out.WorkingRootLock;
 import photos.sluice.application.service.JobRunner;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.config.SettingsFixture;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PrepDirHealth.State;
-import photos.sluice.domain.cull.TroubleshootReport;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PrepDirHealth.State;
+import photos.sluice.domain.sift.TroubleshootReport;
 import photos.sluice.domain.paths.PathViolation;
 
 import java.io.ByteArrayInputStream;

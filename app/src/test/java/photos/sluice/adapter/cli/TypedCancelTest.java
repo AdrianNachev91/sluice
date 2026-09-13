@@ -69,7 +69,7 @@ class TypedCancelTest {
         final CountDownLatch release = new CountDownLatch(1);
         final JobHandle<String> job = this.jobUntilReleased(release);
 
-        try (final var _ = new TypedCancel(typed("cull\nnot c\n", drained), this.progress).watch(job)) {
+        try (final var _ = new TypedCancel(typed("curate\nnot c\n", drained), this.progress).watch(job)) {
             assertThat(drained.await(PATIENCE, TimeUnit.SECONDS)).isTrue();
             assertThat(job.isCancellationRequested()).isFalse();
         } finally {

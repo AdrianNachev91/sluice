@@ -5,7 +5,7 @@ import org.jspecify.annotations.Nullable;
 import java.time.Instant;
 
 /**
- * One cull run, as the spend ledger records it. However it ended: a run that was cancelled,
+ * One sift run, as the spend ledger records it. However it ended: a run that was cancelled,
  * stopped at its ceiling or abandoned was still billed for whatever it sent.
  *
  * @param endedAt {@link Instant} when the run ended
@@ -14,7 +14,7 @@ import java.time.Instant;
  * @param modelId {@link String} the exact model id that ran, or null for a provider that calls no model
  * @param tileSize the pixel size of each montage tile
  * @param tilesPerRow how many tiles formed a montage row
- * @param montagesCulled how many montages the run obtained fresh judgement for
+ * @param montagesSifted how many montages the run obtained fresh judgement for
  * @param montagesSkipped how many montages the run got no judgement for
  * @param apiCalls how many calls the run made against the provider's model
  * @param inputTokens how many input tokens the run consumed
@@ -22,7 +22,7 @@ import java.time.Instant;
  * @param ending {@link RunEnding} how the run ended
  */
 public record SpendLedgerEntry(Instant endedAt, String scope, String providerId, @Nullable String modelId,
-                               int tileSize, int tilesPerRow, int montagesCulled, int montagesSkipped,
+                               int tileSize, int tilesPerRow, int montagesSifted, int montagesSkipped,
                                int apiCalls, long inputTokens, long outputTokens, RunEnding ending) {
 
     /**
@@ -39,7 +39,7 @@ public record SpendLedgerEntry(Instant endedAt, String scope, String providerId,
      * @param modelId {@link String} the exact model id that ran, or null
      * @param tileSize the pixel size of each montage tile
      * @param tilesPerRow how many tiles formed a montage row
-     * @param montagesCulled how many montages the run obtained fresh judgement for
+     * @param montagesSifted how many montages the run obtained fresh judgement for
      * @param montagesSkipped how many montages the run got no judgement for
      * @param apiCalls how many calls the run made
      * @param inputTokens how many input tokens the run consumed
@@ -51,10 +51,10 @@ public record SpendLedgerEntry(Instant endedAt, String scope, String providerId,
             throw new IllegalArgumentException("a run's montage grid must be positive: tileSize=%d, tilesPerRow=%d"
                     .formatted(tileSize, tilesPerRow));
         }
-        if (montagesCulled < 0 || montagesSkipped < 0 || apiCalls < 0 || inputTokens < 0 || outputTokens < 0) {
-            throw new IllegalArgumentException(("a run's counts cannot be negative: montagesCulled=%d, "
+        if (montagesSifted < 0 || montagesSkipped < 0 || apiCalls < 0 || inputTokens < 0 || outputTokens < 0) {
+            throw new IllegalArgumentException(("a run's counts cannot be negative: montagesSifted=%d, "
                     + "montagesSkipped=%d, apiCalls=%d, inputTokens=%d, outputTokens=%d")
-                    .formatted(montagesCulled, montagesSkipped, apiCalls, inputTokens, outputTokens));
+                    .formatted(montagesSifted, montagesSkipped, apiCalls, inputTokens, outputTokens));
         }
     }
 }

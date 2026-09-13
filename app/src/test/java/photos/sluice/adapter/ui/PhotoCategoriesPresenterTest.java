@@ -7,13 +7,13 @@ import photos.sluice.adapter.ui.PhotoCategoriesView.CategoryEdit;
 import photos.sluice.adapter.ui.PhotoCategoriesView.CategoryRow;
 import photos.sluice.adapter.ui.PhotoCategoriesView.SaveOutcome;
 import photos.sluice.application.port.in.SettingsUseCase;
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
-import photos.sluice.domain.cull.CullCategory;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.SiftCategory;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -27,8 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class PhotoCategoriesPresenterTest {
 
-    private static final CullCategory BLURRY = CullCategory.of("blurry", "Not worth keeping");
-    private static final CullCategory FUNNY = CullCategory.of("funny", "Worth a laugh later");
+    private static final SiftCategory BLURRY = SiftCategory.of("blurry", "Not worth keeping");
+    private static final SiftCategory FUNNY = SiftCategory.of("funny", "Worth a laugh later");
 
     @Test
     void drawsTheBuiltInCardFirstWhereverItIsConfigured() {
@@ -40,8 +40,8 @@ class PhotoCategoriesPresenterTest {
     @Test
     void everyOtherCardKeepsTheOrderItIsConfiguredIn() {
         final PhotoCategoriesView view = presenterOver(
-                CullCategory.of("scenery", "Worth a second look"), FUNNY,
-                CullCategory.of("food", "Meals and menus"), BLURRY).view();
+                SiftCategory.of("scenery", "Worth a second look"), FUNNY,
+                SiftCategory.of("food", "Meals and menus"), BLURRY).view();
 
         assertThat(view.categories()).extracting(CategoryRow::name)
                 .containsExactly("funny", "scenery", "food", "blurry");
@@ -85,8 +85,8 @@ class PhotoCategoriesPresenterTest {
         assertThat(outcome).isInstanceOf(SaveOutcome.Saved.class);
         assertThat(store.saved).isNotNull();
         assertThat(store.saved.categories()).containsExactly(
-                new CullCategory("blurry", "Blurry and accidental", List.of("pocket shots"), Boolean.FALSE),
-                new CullCategory("funny", "Worth a laugh later", List.of(), Boolean.TRUE));
+                new SiftCategory("blurry", "Blurry and accidental", List.of("pocket shots"), Boolean.FALSE),
+                new SiftCategory("funny", "Worth a laugh later", List.of(), Boolean.TRUE));
         assertThat(store.saved.provider()).isEqualTo("anthropic");
         assertThat(store.saved.montage()).isEqualTo(new MontageConfig(224, 5));
         assertThat(store.saved.theme()).isEqualTo(ThemeChoice.SYSTEM);
@@ -206,7 +206,7 @@ class PhotoCategoriesPresenterTest {
 
         final SaveOutcome outcome = new PhotoCategoriesPresenter(store).save(List.of(
                 new CategoryEdit("blurry", "Not worth keeping",
-                        List.of("x".repeat(CullCategory.maxExample() + 1)), true),
+                        List.of("x".repeat(SiftCategory.maxExample() + 1)), true),
                 new CategoryEdit("funny", "Worth a laugh later", List.of(), true)));
 
         assertThat(store.saved).isNull();
@@ -216,7 +216,7 @@ class PhotoCategoriesPresenterTest {
     @Test
     void aSaveWithMoreExamplesThanACardMayCarryIsRefused() {
         final var store = new RecordingSettings(BLURRY, FUNNY);
-        final List<String> tooMany = IntStream.rangeClosed(0, CullCategory.maxExamples())
+        final List<String> tooMany = IntStream.rangeClosed(0, SiftCategory.maxExamples())
                 .mapToObj(i -> "example " + i).toList();
 
         final SaveOutcome outcome = new PhotoCategoriesPresenter(store).save(List.of(
@@ -237,7 +237,7 @@ class PhotoCategoriesPresenterTest {
 
         assertThat(outcome).isInstanceOf(SaveOutcome.Saved.class);
         assertThat(store.saved).isNotNull();
-        assertThat(store.saved.categories()).extracting(CullCategory::enabled)
+        assertThat(store.saved.categories()).extracting(SiftCategory::enabled)
                 .containsExactly(false, false);
     }
 
@@ -250,7 +250,7 @@ class PhotoCategoriesPresenterTest {
 
         assertThat(outcome).isInstanceOf(SaveOutcome.Saved.class);
         assertThat(store.saved).isNotNull();
-        assertThat(store.saved.categories()).extracting(CullCategory::name).containsExactly("blurry");
+        assertThat(store.saved.categories()).extracting(SiftCategory::name).containsExactly("blurry");
     }
 
     @Test
@@ -285,7 +285,7 @@ class PhotoCategoriesPresenterTest {
     @Test
     void reorderedCardsAreSomethingToLose() {
         final PhotoCategoriesPresenter presenter = presenterOver(BLURRY, FUNNY,
-                CullCategory.of("food", "Meals and menus"));
+                SiftCategory.of("food", "Meals and menus"));
         final List<CategoryEdit> typed = new ArrayList<>(asEdits(presenter));
         typed.add(typed.remove(1));
 
@@ -306,7 +306,7 @@ class PhotoCategoriesPresenterTest {
     @Test
     void anEmptyRowInAnExamplesBoxIsNothingToLose() {
         final PhotoCategoriesPresenter presenter =
-                presenterOver(FUNNY, new CullCategory("blurry", "Not worth keeping", List.of("blurry"), true));
+                presenterOver(FUNNY, new SiftCategory("blurry", "Not worth keeping", List.of("blurry"), true));
         final List<CategoryEdit> typed = new ArrayList<>(asEdits(presenter));
         final CategoryEdit last = typed.getLast();
         typed.set(typed.size() - 1, new CategoryEdit(last.name(), last.description(),
@@ -318,7 +318,7 @@ class PhotoCategoriesPresenterTest {
     @Test
     void anAddedExampleIsSomethingToLose() {
         final PhotoCategoriesPresenter presenter =
-                presenterOver(FUNNY, new CullCategory("blurry", "Not worth keeping", List.of("blurry"), true));
+                presenterOver(FUNNY, new SiftCategory("blurry", "Not worth keeping", List.of("blurry"), true));
         final List<CategoryEdit> typed = new ArrayList<>(asEdits(presenter));
         final CategoryEdit last = typed.getLast();
         typed.set(typed.size() - 1, new CategoryEdit(last.name(), last.description(),
@@ -337,25 +337,25 @@ class PhotoCategoriesPresenterTest {
                 .toList();
     }
 
-    private static PhotoCategoriesPresenter presenterOver(final CullCategory... cards) {
+    private static PhotoCategoriesPresenter presenterOver(final SiftCategory... cards) {
         return new PhotoCategoriesPresenter(new RecordingSettings(cards));
     }
 
     private static final class RecordingSettings implements SettingsUseCase {
 
-        private final List<CullCategory> cards;
+        private final List<SiftCategory> cards;
 
         private @Nullable Settings saved;
         private @Nullable RuntimeException refusal;
 
-        private RecordingSettings(final CullCategory... cards) {
+        private RecordingSettings(final SiftCategory... cards) {
             this.cards = new ArrayList<>(List.of(cards));
         }
 
         @Override
         public Settings settings() {
             return new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"), "anthropic",
-                    Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), this.cards,
+                    Map.of("anthropic", new SiftProviderSettings("a-model", null, 2)), this.cards,
                     new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         }
 

@@ -10,7 +10,7 @@ import java.util.Set;
  * uses, which of those it cannot run without, the credential it authenticates with, and the models
  * it offers.
  *
- * <p>A culler answers with one of these from {@link VisionCuller#describe()}.
+ * <p>A sieve answers with one of these from {@link VisionSieve#describe()}.
  *
  * <p>A surface may draw a web address inside {@code setupGuide} as a link somebody can press. So
  * that sentence is a place this app takes a reader to, not only words it shows them. A provider

@@ -5,13 +5,13 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
-import photos.sluice.domain.cull.AnswerSource;
-import photos.sluice.domain.cull.ApplyReport;
-import photos.sluice.domain.cull.CorruptSidecarResolution;
-import photos.sluice.domain.cull.DiscardReport;
-import photos.sluice.domain.cull.Finding.StrayShard;
-import photos.sluice.domain.cull.OverlapResolution;
-import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.sift.AnswerSource;
+import photos.sluice.domain.sift.ApplyReport;
+import photos.sluice.domain.sift.CorruptSidecarResolution;
+import photos.sluice.domain.sift.DiscardReport;
+import photos.sluice.domain.sift.Finding.StrayShard;
+import photos.sluice.domain.sift.OverlapResolution;
+import photos.sluice.domain.sift.PrepDir;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -22,21 +22,21 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static photos.sluice.application.service.CullPrepTestSupport.FailingSidecarRead;
-import static photos.sluice.application.service.CullPrepTestSupport.applyEngine;
-import static photos.sluice.application.service.CullPrepTestSupport.classificationJson;
-import static photos.sluice.application.service.CullPrepTestSupport.fixedCategories;
-import static photos.sluice.application.service.CullPrepTestSupport.nearDupChosenJson;
-import static photos.sluice.application.service.CullPrepTestSupport.nearDupRejectJson;
-import static photos.sluice.application.service.CullPrepTestSupport.prepDir;
-import static photos.sluice.application.service.CullPrepTestSupport.prepDirRemedies;
-import static photos.sluice.application.service.CullPrepTestSupport.readIndex;
-import static photos.sluice.application.service.CullPrepTestSupport.sidecarEntry;
-import static photos.sluice.application.service.CullPrepTestSupport.writeFile;
-import static photos.sluice.application.service.CullPrepTestSupport.writeIndex;
-import static photos.sluice.application.service.CullPrepTestSupport.writeMoveRecord;
-import static photos.sluice.application.service.CullPrepTestSupport.writeShard;
-import static photos.sluice.application.service.CullPrepTestSupport.writeSidecar;
+import static photos.sluice.application.service.SiftPrepTestSupport.FailingSidecarRead;
+import static photos.sluice.application.service.SiftPrepTestSupport.applyEngine;
+import static photos.sluice.application.service.SiftPrepTestSupport.classificationJson;
+import static photos.sluice.application.service.SiftPrepTestSupport.fixedCategories;
+import static photos.sluice.application.service.SiftPrepTestSupport.nearDupChosenJson;
+import static photos.sluice.application.service.SiftPrepTestSupport.nearDupRejectJson;
+import static photos.sluice.application.service.SiftPrepTestSupport.prepDir;
+import static photos.sluice.application.service.SiftPrepTestSupport.prepDirRemedies;
+import static photos.sluice.application.service.SiftPrepTestSupport.readIndex;
+import static photos.sluice.application.service.SiftPrepTestSupport.sidecarEntry;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeFile;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeIndex;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeMoveRecord;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeShard;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeSidecar;
 
 // A remedy records a disposition rather than editing a shard. So most of these prove one by
 // running a real apply() afterwards, and assert on what it then does.

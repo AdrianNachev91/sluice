@@ -39,7 +39,7 @@ final class CliHarness {
         commands.add(new SortCommand(mock(Pipeline.class), mock(JobReports.class)));
         commands.add(new CommitCommand(mock(Pipeline.class), mock(JobReports.class)));
         commands.add(new RescueCommand(mock(Pipeline.class), mock(JobReports.class)));
-        commands.add(new CullCommand(mock(Pipeline.class), mock(JobReports.class),
+        commands.add(new SiftCommand(mock(Pipeline.class), mock(JobReports.class),
                 mock(ConsoleProgressPort.class), mock(PathsPort.class)));
         commands.add(new ResumeCommand(mock(Pipeline.class), mock(JobReports.class), mock(RunAddress.class),
                 mock(PathsPort.class)));

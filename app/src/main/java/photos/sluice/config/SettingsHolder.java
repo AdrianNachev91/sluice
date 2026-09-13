@@ -2,13 +2,13 @@ package photos.sluice.config;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import photos.sluice.application.port.out.CullProviderSettings;
-import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
+import photos.sluice.application.port.out.SiftSettings;
 import photos.sluice.application.port.out.LiveSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
-import photos.sluice.domain.cull.CullCategory;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.SiftCategory;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.util.List;
 
@@ -16,7 +16,7 @@ import java.util.List;
  * The single place the app's current settings live, from the values bound at startup until the last
  * save before it closes.
  *
- * <p>It is also the {@link CullSettings} every cull reads. That is what makes a saved setting take
+ * <p>It is also the {@link SiftSettings} every sift reads. That is what makes a saved setting take
  * effect without a restart: consumers hold this, and this holds a reference that a save swaps.
  *
  * <p>The reference is volatile, and a save replaces the whole settings value rather than editing
@@ -25,7 +25,7 @@ import java.util.List;
  * and reads them off it. An accessor per field is a read per field.
  */
 @Component
-public class SettingsHolder implements LiveSettings, CullSettings {
+public class SettingsHolder implements LiveSettings, SiftSettings {
 
     private volatile Settings current;
 
@@ -33,14 +33,14 @@ public class SettingsHolder implements LiveSettings, CullSettings {
      * Starts from the values bound out of the config files and the environment.
      *
      * @param paths {@link PathsProperties} the bound folder roots
-     * @param cull {@link CullConfig} the bound cull settings
+     * @param sift {@link SiftConfig} the bound sift settings
      * @param montage {@link MontageProperties} the bound contact-sheet grid
      * @param ui {@link UiProperties} the bound look
      */
     @Autowired
-    public SettingsHolder(final PathsProperties paths, final CullConfig cull, final MontageProperties montage,
+    public SettingsHolder(final PathsProperties paths, final SiftConfig sift, final MontageProperties montage,
                           final UiProperties ui) {
-        this(boundSettings(paths, cull, montage, ui));
+        this(boundSettings(paths, sift, montage, ui));
     }
 
     /**
@@ -57,16 +57,16 @@ public class SettingsHolder implements LiveSettings, CullSettings {
      * accessor name, so a reordering of either one's fields cannot silently swap the two ints.
      *
      * @param paths {@link PathsProperties} the bound folder roots
-     * @param cull {@link CullConfig} the bound cull settings
+     * @param sift {@link SiftConfig} the bound sift settings
      * @param montage {@link MontageProperties} the bound contact-sheet grid
      * @param ui {@link UiProperties} the bound look
      * @return {@link Settings} the settings the app starts on
      */
-    static Settings boundSettings(final PathsProperties paths, final CullConfig cull, final MontageProperties montage,
+    static Settings boundSettings(final PathsProperties paths, final SiftConfig sift, final MontageProperties montage,
                                   final UiProperties ui) {
         return new Settings(
                 new PathSettings(paths.workingRoot(), paths.libraryRoot(), paths.inbox()),
-                cull.provider(), cull.providerSettings(), cull.categories(),
+                sift.provider(), sift.providerSettings(), sift.categories(),
                 new MontageConfig(montage.tileSize(), montage.tilesPerRow()), ui.theme());
     }
 
@@ -91,7 +91,7 @@ public class SettingsHolder implements LiveSettings, CullSettings {
     }
 
     /**
-     * The id of the vision provider a cull routes through.
+     * The id of the vision provider a sift routes through.
      *
      * @return {@link String} the configured provider id
      */
@@ -101,22 +101,22 @@ public class SettingsHolder implements LiveSettings, CullSettings {
     }
 
     /**
-     * The classification cards a cull routes to.
+     * The classification cards a sift routes to.
      *
-     * @return a {@link List} of {@link CullCategory} the configured category cards
+     * @return a {@link List} of {@link SiftCategory} the configured category cards
      */
     @Override
-    public List<CullCategory> categories() {
+    public List<SiftCategory> categories() {
         return this.current.categories();
     }
 
     /**
      * Connection settings for the provider in force.
      *
-     * @return {@link CullProviderSettings} that provider's connection settings
+     * @return {@link SiftProviderSettings} that provider's connection settings
      */
     @Override
-    public CullProviderSettings providerSettings() {
+    public SiftProviderSettings providerSettings() {
         return this.current.providerSettings();
     }
 
@@ -124,15 +124,15 @@ public class SettingsHolder implements LiveSettings, CullSettings {
      * Connection settings for one named provider.
      *
      * @param providerId {@link String} the provider whose settings to read
-     * @return {@link CullProviderSettings} that provider's connection settings
+     * @return {@link SiftProviderSettings} that provider's connection settings
      */
     @Override
-    public CullProviderSettings providerSettings(final String providerId) {
+    public SiftProviderSettings providerSettings(final String providerId) {
         return this.current.providerSettings(providerId);
     }
 
     /**
-     * The contact-sheet grid a cull renders.
+     * The contact-sheet grid a sift renders.
      *
      * @return {@link MontageConfig} the montage grid configuration
      */

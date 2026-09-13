@@ -3,7 +3,7 @@ package photos.sluice.application.port.in;
 import java.util.List;
 
 /**
- * Thrown when the library root cannot move because cull runs on disk have not finished.
+ * Thrown when the library root cannot move because sift runs on disk have not finished.
  *
  * <p>An unfinished run holds move records naming destinations under the library root that was in
  * force when they were written. Resume one after a move and its records verify against a folder the

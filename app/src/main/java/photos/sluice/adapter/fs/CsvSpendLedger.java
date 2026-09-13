@@ -21,7 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A {@link SpendLedgerPort} backed by a twelve-column CSV file, one row per cull run however it
+ * A {@link SpendLedgerPort} backed by a twelve-column CSV file, one row per sift run however it
  * ended.
  *
  * <p>The row format matches the library hash index that sits beside it, so the two files can be
@@ -40,7 +40,7 @@ import java.util.List;
 public class CsvSpendLedger implements SpendLedgerPort {
 
     private static final String HEADER = "\"ended_at\",\"scope\",\"provider\",\"model\",\"tile_size\","
-            + "\"tiles_per_row\",\"montages_culled\",\"montages_skipped\",\"api_calls\",\"input_tokens\","
+            + "\"tiles_per_row\",\"montages_sifted\",\"montages_skipped\",\"api_calls\",\"input_tokens\","
             + "\"output_tokens\",\"ending\"";
     private static final int COLUMNS = 12;
     private static final String LEDGER_FILE_NAME = "spend-ledger.csv";
@@ -196,7 +196,7 @@ public class CsvSpendLedger implements SpendLedgerPort {
                 quote(entry.modelId() == null ? "" : entry.modelId()),
                 quote(String.valueOf(entry.tileSize())),
                 quote(String.valueOf(entry.tilesPerRow())),
-                quote(String.valueOf(entry.montagesCulled())),
+                quote(String.valueOf(entry.montagesSifted())),
                 quote(String.valueOf(entry.montagesSkipped())),
                 quote(String.valueOf(entry.apiCalls())),
                 quote(String.valueOf(entry.inputTokens())),

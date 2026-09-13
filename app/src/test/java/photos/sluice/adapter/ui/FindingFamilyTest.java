@@ -1,8 +1,8 @@
 package photos.sluice.adapter.ui;
 
 import org.junit.jupiter.api.Test;
-import photos.sluice.domain.cull.Decision;
-import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.sift.Decision;
+import photos.sluice.domain.sift.Finding;
 
 import java.nio.file.Path;
 import java.util.List;

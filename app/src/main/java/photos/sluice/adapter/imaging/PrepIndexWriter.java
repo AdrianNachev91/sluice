@@ -2,7 +2,7 @@ package photos.sluice.adapter.imaging;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import org.springframework.stereotype.Component;
-import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.sift.PrepDir;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -54,7 +54,7 @@ public class PrepIndexWriter {
 
     /**
      * The on-disk shape of one recorded category card. Written as an object rather than the bare
-     * name, so a run carries the prose its culling prompt was rendered from. Examples are part of
+     * name, so a run carries the prose its sifting prompt was rendered from. Examples are part of
      * that prose. Whether a card is enabled is not recorded: a disabled one never reaches this list.
      *
      * <p>A card offering no examples writes no key rather than an empty array, so a prep dir whose

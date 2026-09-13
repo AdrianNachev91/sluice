@@ -13,12 +13,12 @@ import photos.sluice.adapter.ui.RunsView.RunCard;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.LaunchPrompt;
-import photos.sluice.domain.cull.PrepDirHealth.State;
-import photos.sluice.domain.cull.PurgeReport;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.LaunchPrompt;
+import photos.sluice.domain.sift.PrepDirHealth.State;
+import photos.sluice.domain.sift.PurgeReport;
 import photos.sluice.domain.job.ShardTally;
 
 import java.nio.file.Path;
@@ -106,7 +106,7 @@ public class RunsPresenter {
 
     // Volatile throughout. The reading is taken off the thread that paints. A job reporting that it
     // has ended writes the flag and the message from whatever thread it ran on.
-    private volatile CullRuns runs = new CullRuns.Listed(List.of());
+    private volatile SiftRuns runs = new SiftRuns.Listed(List.of());
     // Two of them, because they are cleared by different things. A failed read is undone by the
     // next read that works. What a press had to report survives its own redraw, which takes no
     // reading. It goes on the next read, which is the reader leaving the screen and coming back.
@@ -238,15 +238,15 @@ public class RunsPresenter {
     public RunsView view() {
         // Read once into a local, and everything below works from it. The field is written by a
         // read on another thread, so asking it twice can answer twice about two different moments.
-        final CullRuns reading = this.runs;
-        final List<CullRunSummary> found = found(reading);
+        final SiftRuns reading = this.runs;
+        final List<SiftRunSummary> found = found(reading);
         final String unreadableLine = unreadableLine(reading);
         // Oldest timeframe first, which is the order a reader already has in their head. Sorted here
         // rather than left to the reading's own order, since where the cards sit is this screen's
         // claim to keep.
         final List<RunCard> unfinished = found.stream()
                 .filter(run -> run.health().state() != State.COMPLETE)
-                .sorted(Comparator.comparing(CullRunSummary::scope))
+                .sorted(Comparator.comparing(SiftRunSummary::scope))
                 .map(this::card)
                 .toList();
         final List<RunCard> completed = found.stream()
@@ -531,10 +531,10 @@ public class RunsPresenter {
     /**
      * What the runs folder said, or nothing where it could not be read.
      *
-     * @return a {@link List} of {@link CullRunSummary} the runs found
+     * @return a {@link List} of {@link SiftRunSummary} the runs found
      */
-    private static List<CullRunSummary> found(final CullRuns reading) {
-        return reading instanceof CullRuns.Listed(final List<CullRunSummary> listed)
+    private static List<SiftRunSummary> found(final SiftRuns reading) {
+        return reading instanceof SiftRuns.Listed(final List<SiftRunSummary> listed)
                 ? listed
                 : List.of();
     }
@@ -544,8 +544,8 @@ public class RunsPresenter {
      *
      * @return {@link String} the sentence, or null where the folder was read
      */
-    private static @Nullable String unreadableLine(final CullRuns reading) {
-        return reading instanceof CullRuns.Unlistable(final Path root)
+    private static @Nullable String unreadableLine(final SiftRuns reading) {
+        return reading instanceof SiftRuns.Unlistable(final Path root)
                 ? UNREADABLE.formatted(root)
                 : null;
     }
@@ -565,10 +565,10 @@ public class RunsPresenter {
      * agent outside the app judges, nothing on the card is dressed as the way on, whatever state
      * the run is in. What it waits on is not the reader, and a copy is a quiet act anyway.
      *
-     * @param run {@link CullRunSummary} the run as it sits on disk
+     * @param run {@link SiftRunSummary} the run as it sits on disk
      * @return {@link RunCard} what the screen draws for it
      */
-    private RunCard card(final CullRunSummary run) {
+    private RunCard card(final SiftRunSummary run) {
         final State state = run.health().state();
         final List<Finding> findings = run.health().findings();
         final boolean providerJudgesSheets = this.pipeline.configuredProviderSpends();
@@ -605,14 +605,14 @@ public class RunsPresenter {
      * gesture, which spends, so it is asked about first. Where an agent does, it frees them and
      * hands back the follow-up to pass on, which spends nothing and needs no question.
      *
-     * @param run {@link CullRunSummary} the run
+     * @param run {@link SiftRunSummary} the run
      * @param findings a {@link List} of {@link Finding} what the diagnosis blamed
      * @param leads boolean whether this is the press the card is drawn to be reached for
      * @param drawnAt {@link Integer} where it sits in the card's button row, or null to sit with
      *     the card's own text
      * @return {@link RunsView.Redo} the control
      */
-    private RunsView.Redo redo(final CullRunSummary run, final List<Finding> findings,
+    private RunsView.Redo redo(final SiftRunSummary run, final List<Finding> findings,
                                final boolean leads, final @Nullable Integer drawnAt) {
         final boolean providerJudgesSheets = this.pipeline.configuredProviderSpends();
         return new RunsView.Redo("run-redo-" + run.scope(),
@@ -642,11 +642,11 @@ public class RunsPresenter {
      *
      * <p>That holds while throwing the whole run away is the only other road.
      *
-     * @param run {@link CullRunSummary} the run
+     * @param run {@link SiftRunSummary} the run
      * @param findings a {@link List} of {@link Finding} what the diagnosis blamed
      * @return {@link Confirmation} what to ask
      */
-    private Confirmation judgeAgainConfirm(final CullRunSummary run, final List<Finding> findings) {
+    private Confirmation judgeAgainConfirm(final SiftRunSummary run, final List<Finding> findings) {
         final ShardTally sheets = run.shards();
         final int missing = sheets == null ? 0 : sheets.total() - sheets.present();
         final int dispatched = LaunchPrompt.sheetsToRedo(findings).size() + missing;
@@ -673,12 +673,12 @@ public class RunsPresenter {
      * shards into the drawer, so offering it beside a resume already applying them would let one
      * press take work out from under the other.
      *
-     * @param run {@link CullRunSummary} the run
+     * @param run {@link SiftRunSummary} the run
      * @param state {@link State} its state
      * @param blamesASheet boolean whether any finding is one a sheet could answer for
      * @return {@link RunsView.Waiting} the block, or null on a run past waiting
      */
-    private RunsView.@Nullable Waiting waiting(final CullRunSummary run, final State state,
+    private RunsView.@Nullable Waiting waiting(final SiftRunSummary run, final State state,
                                                final boolean blamesASheet) {
         if (state != State.WAITING) {
             return null;
@@ -709,10 +709,10 @@ public class RunsPresenter {
      * <p>Counts what arrived rather than what passed. An answer that came back unusable is still
      * an agent that started, and it is the one thing a follow-up exists to discard.
      *
-     * @param run {@link CullRunSummary} the run
+     * @param run {@link SiftRunSummary} the run
      * @return boolean whether the press should ask for a follow-up
      */
-    private static boolean hasAnySheetAnswer(final CullRunSummary run) {
+    private static boolean hasAnySheetAnswer(final SiftRunSummary run) {
         final ShardTally sheets = run.shards();
         return sheets != null && sheets.present() >= 1;
     }
@@ -737,14 +737,14 @@ public class RunsPresenter {
      * however many sheets have arrived. A card where neither press can finish the run draws no
      * filled button at all rather than dressing one of them as the way on.
      *
-     * @param run {@link CullRunSummary} the run
+     * @param run {@link SiftRunSummary} the run
      * @param state {@link State} its state
      * @param blamesASheet boolean whether any finding is one a sheet could answer for
      * @param redoLeads boolean whether the card's own way back is already drawn as the way on, so
      *     Troubleshoot does not draw as a second one beside it
      * @return a {@link List} of {@link Action} the buttons
      */
-    private List<Action> actions(final CullRunSummary run, final State state,
+    private List<Action> actions(final SiftRunSummary run, final State state,
                                  final boolean blamesASheet, final boolean redoLeads) {
         if (state == State.COMPLETE || this.working()) {
             return List.of();
@@ -789,11 +789,11 @@ public class RunsPresenter {
      * <p>False where the configured provider judges the sheets itself. Answering true there would
      * spend the reader's money rather than skip anything.
      *
-     * @param run {@link CullRunSummary} the run
+     * @param run {@link SiftRunSummary} the run
      * @param state {@link State} its state
      * @return boolean whether to offer it
      */
-    private boolean canFinishWithoutMissingSheets(final CullRunSummary run, final State state) {
+    private boolean canFinishWithoutMissingSheets(final SiftRunSummary run, final State state) {
         final ShardTally sheets = run.shards();
         return state == State.WAITING && !this.pipeline.configuredProviderSpends()
                 && sheets != null && sheets.present() < sheets.total();
@@ -814,10 +814,10 @@ public class RunsPresenter {
      * back to them from inside the app, and saying so is the part that decides whether somebody
      * presses this.
      *
-     * @param run {@link CullRunSummary} the run
+     * @param run {@link SiftRunSummary} the run
      * @return {@link Confirmation} what to ask
      */
-    private Confirmation discardConfirm(final CullRunSummary run) {
+    private Confirmation discardConfirm(final SiftRunSummary run) {
         final ShardTally sheets = run.shards();
         final String judged = RunWords.counted(
                 sheets == null ? 0 : sheets.valid(), "sheet decision", "sheet decisions");
@@ -858,11 +858,11 @@ public class RunsPresenter {
      * <p>A waiting run whose provider judges its own sheets is not waiting on anybody. Nothing is
      * coming back on its own, so it is a sift that stopped part way rather than one in progress.
      *
-     * @param run {@link CullRunSummary} the run
+     * @param run {@link SiftRunSummary} the run
      * @param state {@link State} its state
      * @return {@link String} the sentence, or null where the headline says it all
      */
-    private @Nullable String detail(final CullRunSummary run, final State state) {
+    private @Nullable String detail(final SiftRunSummary run, final State state) {
         return state == State.WAITING && this.pipeline.configuredProviderSpends()
                 ? "This sift stopped before every sheet was judged."
                 : waitingOnSomebodyElse(run, state);
@@ -871,11 +871,11 @@ public class RunsPresenter {
     /**
      * The sentence under the headline, for every run whose sheets are not Sluice's own to judge.
      *
-     * @param run {@link CullRunSummary} the run
+     * @param run {@link SiftRunSummary} the run
      * @param state {@link State} its state
      * @return {@link String} the sentence, or null where the headline says it all
      */
-    private static @Nullable String waitingOnSomebodyElse(final CullRunSummary run, final State state) {
+    private static @Nullable String waitingOnSomebodyElse(final SiftRunSummary run, final State state) {
         return switch (state) {
             case READY -> "Every sheet was judged. Finishing the sift moves the photos it did not "
                     + "keep out of Sorted.";
@@ -1021,7 +1021,7 @@ public class RunsPresenter {
      */
     private void reread() {
         try {
-            this.runs = this.pipeline.cullRuns();
+            this.runs = this.pipeline.siftRuns();
             // Cleared on the way through, so a read that fails once and works after does not leave
             // its sentence pinned under cards that are now fine.
             this.readFailure = null;
@@ -1030,11 +1030,11 @@ public class RunsPresenter {
             // start and every press. A trace here fills the log a reader would send about something
             // else.
             log.info("Could not read the runs: {}", unset.getMessage());
-            this.runs = new CullRuns.Listed(List.of());
+            this.runs = new SiftRuns.Listed(List.of());
             this.readFailure = RunRefusals.refuseMessage(unset);
         } catch (final RuntimeException e) {
             log.info("Could not read the runs", e);
-            this.runs = new CullRuns.Listed(List.of());
+            this.runs = new SiftRuns.Listed(List.of());
             this.readFailure = RunRefusals.refuseMessage(e);
         }
     }

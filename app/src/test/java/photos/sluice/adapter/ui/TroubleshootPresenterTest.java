@@ -8,23 +8,23 @@ import photos.sluice.adapter.ui.TroubleshootView.Kind;
 import photos.sluice.adapter.ui.TroubleshootView.Option;
 import photos.sluice.adapter.ui.TroubleshootView.Problem;
 import photos.sluice.adapter.ui.TroubleshootView.ProblemStack;
-import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.SiftJobOutcome;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.AnswerSource;
-import photos.sluice.domain.cull.ChoiceAnswer;
-import photos.sluice.domain.cull.CorruptSidecarResolution;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.Decision;
-import photos.sluice.domain.cull.DiscardReport;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.OverlapResolution;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PrepDirHealth.State;
-import photos.sluice.domain.cull.TroubleshootReport;
+import photos.sluice.domain.sift.AnswerSource;
+import photos.sluice.domain.sift.ChoiceAnswer;
+import photos.sluice.domain.sift.CorruptSidecarResolution;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.Decision;
+import photos.sluice.domain.sift.DiscardReport;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.OverlapResolution;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PrepDirHealth.State;
+import photos.sluice.domain.sift.TroubleshootReport;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
 
@@ -149,7 +149,7 @@ class TroubleshootPresenterTest {
         final TroubleshootPresenter presenter = opened(pipeline);
         assertThat(presenter.view().problems().getFirst().heading())
                 .isEqualTo("2 photos this sift wants to move are not where they were.");
-        when(pipeline.cullRun(any())).thenReturn(summary(State.BLOCKED, List.of(second)));
+        when(pipeline.siftRun(any())).thenReturn(summary(State.BLOCKED, List.of(second)));
 
         pressOption(presenter, Answer.SKIP_FILE);
 
@@ -256,7 +256,7 @@ class TroubleshootPresenterTest {
             final Pipeline pipeline = pipelineReporting(State.BLOCKED,
                     List.of(new Finding.MissingSource(PHOTO, Path.of("move-records.log"))));
             final TroubleshootPresenter presenter = opened(pipeline);
-            when(pipeline.cullRun(any())).thenReturn(summary(State.READY, List.of()));
+            when(pipeline.siftRun(any())).thenReturn(summary(State.READY, List.of()));
 
             pressOption(presenter, Answer.SKIP_FILE);
 
@@ -273,7 +273,7 @@ class TroubleshootPresenterTest {
             final Pipeline pipeline = pipelineReporting(State.BLOCKED,
                     List.of(new Finding.MissingSource(PHOTO, Path.of("a.log")), second));
             final TroubleshootPresenter presenter = opened(pipeline);
-            when(pipeline.cullRun(any())).thenReturn(summary(State.BLOCKED, List.of(second)));
+            when(pipeline.siftRun(any())).thenReturn(summary(State.BLOCKED, List.of(second)));
             pressOption(presenter, Answer.SKIP_FILE);
             final int afterTheFirst = presenter.view().reportNumber();
 
@@ -290,7 +290,7 @@ class TroubleshootPresenterTest {
             final Pipeline pipeline = pipelineReporting(State.BLOCKED,
                     List.of(new Finding.MissingSource(PHOTO, Path.of("move-records.log"))));
             final TroubleshootPresenter presenter = opened(pipeline);
-            when(pipeline.cullRun(any())).thenReturn(summary(State.READY, List.of()));
+            when(pipeline.siftRun(any())).thenReturn(summary(State.READY, List.of()));
 
             pressOption(presenter, Answer.RECHECK);
 
@@ -320,7 +320,7 @@ class TroubleshootPresenterTest {
                     List.of(new Finding.CorruptSidecar("montage-002")));
             final TroubleshootPresenter presenter = opened(pipeline);
             final Problem stale = rows(presenter).getFirst();
-            when(pipeline.cullRun(any())).thenReturn(summary(State.READY, List.of()));
+            when(pipeline.siftRun(any())).thenReturn(summary(State.READY, List.of()));
             presenter.press(stale, stale.options().getFirst());
 
             presenter.press(stale, stale.options().getFirst());
@@ -344,7 +344,7 @@ class TroubleshootPresenterTest {
             final List<Problem> drawn = rows(presenter);
             final Problem problemA = drawn.get(0);
             final Problem problemB = drawn.get(1);
-            when(pipeline.cullRun(any())).thenReturn(summary(State.BLOCKED, List.of(findingB, findingC)));
+            when(pipeline.siftRun(any())).thenReturn(summary(State.BLOCKED, List.of(findingB, findingC)));
             skipFile(presenter, problemA);
 
             skipFile(presenter, problemB);
@@ -362,7 +362,7 @@ class TroubleshootPresenterTest {
             final TroubleshootPresenter presenter = opened(pipeline);
             final Problem problemA = rows(presenter).getFirst();
             // Something else settled it between the row being drawn and the press landing.
-            when(pipeline.cullRun(any())).thenReturn(summary(State.READY, List.of()));
+            when(pipeline.siftRun(any())).thenReturn(summary(State.READY, List.of()));
             skipFile(presenter, problemA);
 
             skipFile(presenter, problemA);
@@ -382,7 +382,7 @@ class TroubleshootPresenterTest {
             final Pipeline pipeline = pipelineReporting(State.BLOCKED, List.of(missing));
             final TroubleshootPresenter presenter = opened(pipeline);
             final Problem row = rows(presenter).getFirst();
-            when(pipeline.cullRun(any())).thenThrow(new IllegalStateException("the folder is gone"));
+            when(pipeline.siftRun(any())).thenThrow(new IllegalStateException("the folder is gone"));
 
             presenter.press(row, option(row, Answer.RECHECK));
 
@@ -399,7 +399,7 @@ class TroubleshootPresenterTest {
             assertThat(afterPressing.text()).doesNotContain("read again");
         }
 
-        // A roots refusal, that being the only thing cullRun throws.
+        // A roots refusal, that being the only thing siftRun throws.
         @Test
         void aRunNobodyCouldReadSaysSoWhereTheCountsWouldGo() {
             final var roots = new PathsMisconfiguredException(
@@ -408,7 +408,7 @@ class TroubleshootPresenterTest {
                     List.of(new Finding.MissingSource(PHOTO, Path.of("a.log"))));
             final TroubleshootPresenter presenter = opened(pipeline);
             final Problem row = rows(presenter).getFirst();
-            when(pipeline.cullRun(any())).thenThrow(roots);
+            when(pipeline.siftRun(any())).thenThrow(roots);
 
             presenter.press(row, option(row, Answer.SKIP_FILE));
 
@@ -426,13 +426,13 @@ class TroubleshootPresenterTest {
             final Problem row = rows(presenter).getFirst();
             // The answer clears the last finding, so the run reads as ready and offers Finish. The row
             // the reader is still looking at is now stale, and pressing it again reads once more.
-            doReturn(summary(State.READY, List.of())).when(pipeline).cullRun(any());
+            doReturn(summary(State.READY, List.of())).when(pipeline).siftRun(any());
             presenter.press(row, option(row, Answer.SKIP_FILE));
             assertThat(presenter.view().actions()).extracting(Action::id)
                     .contains("troubleshoot-finish");
             doThrow(new PathsMisconfiguredException(
                     List.of(new NotADirectory(PathRole.WORKING_ROOT, Path.of("D:", "gone")))))
-                    .when(pipeline).cullRun(any());
+                    .when(pipeline).siftRun(any());
 
             presenter.press(row, option(row, Answer.SKIP_FILE));
 
@@ -452,7 +452,7 @@ class TroubleshootPresenterTest {
                     List.of(new Finding.MissingSource(PHOTO, Path.of("a.log"))));
             final TroubleshootPresenter presenter = opened(pipeline);
             final Problem row = rows(presenter).getFirst();
-            doThrow(roots).doReturn(summary(State.READY, List.of())).when(pipeline).cullRun(any());
+            doThrow(roots).doReturn(summary(State.READY, List.of())).when(pipeline).siftRun(any());
             presenter.press(row, option(row, Answer.SKIP_FILE));
             final var pressedMidDraw = new AtomicBoolean();
             when(pipeline.archivesFolder()).thenAnswer(_ -> {
@@ -478,12 +478,12 @@ class TroubleshootPresenterTest {
             final Problem row = rows(presenter).getFirst();
             final var roots = new PathsMisconfiguredException(
                     List.of(new NotADirectory(PathRole.WORKING_ROOT, Path.of("D:", "gone"))));
-            when(pipeline.cullRun(any())).thenThrow(roots);
+            when(pipeline.siftRun(any())).thenThrow(roots);
             presenter.press(row, option(row, Answer.RECHECK));
             assertThat(presenter.view().summary()).isEqualTo(RunRefusals.refuseSentence(roots));
             // doReturn, because when(...) would call the still-throwing stub while setting up the
             // replacement for it.
-            doReturn(summary(State.READY, List.of())).when(pipeline).cullRun(any());
+            doReturn(summary(State.READY, List.of())).when(pipeline).siftRun(any());
 
             presenter.press(row, option(row, Answer.RECHECK));
 
@@ -499,7 +499,7 @@ class TroubleshootPresenterTest {
             when(pipeline.troubleshoot(any())).thenReturn(refused);
             final var roots = new PathsMisconfiguredException(
                     List.of(new NotADirectory(PathRole.WORKING_ROOT, Path.of("D:", "gone"))));
-            when(pipeline.cullRun(any())).thenThrow(roots);
+            when(pipeline.siftRun(any())).thenThrow(roots);
             final var presenter = new TroubleshootPresenter(pipeline, launcher(pipeline));
 
             presenter.open(PREP_DIR, "2019");
@@ -551,7 +551,7 @@ class TroubleshootPresenterTest {
             final JobHandle<TroubleshootReport> pass = failing(
                     new ApplyException("montage-004[#3]: missing 'reason'", List.of()));
             when(pipeline.troubleshoot(any())).thenReturn(pass);
-            when(pipeline.cullRun(any())).thenReturn(summary(State.BLOCKED, List.of()));
+            when(pipeline.siftRun(any())).thenReturn(summary(State.BLOCKED, List.of()));
             final var presenter = new TroubleshootPresenter(pipeline, launcher(pipeline));
 
             presenter.open(PREP_DIR, "2019");
@@ -577,7 +577,7 @@ class TroubleshootPresenterTest {
             final JobHandle<TroubleshootReport> refused =
                     failing(new ApplyException("montage-004[#3]: missing 'reason'", List.of()));
             when(pipeline.troubleshoot(any())).thenReturn(refused);
-            when(pipeline.cullRun(any())).thenReturn(summary(State.BLOCKED,
+            when(pipeline.siftRun(any())).thenReturn(summary(State.BLOCKED,
                     List.of(new Finding.CorruptSidecar("montage-002"))));
             final var presenter = new TroubleshootPresenter(pipeline, launcher(pipeline));
 
@@ -596,7 +596,7 @@ class TroubleshootPresenterTest {
             final JobHandle<TroubleshootReport> refused =
                     failing(new ApplyException("montage-004[#3]: missing 'reason'", List.of()));
             when(pipeline.troubleshoot(any())).thenReturn(refused);
-            when(pipeline.cullRun(any())).thenReturn(summary(State.READY, List.of()));
+            when(pipeline.siftRun(any())).thenReturn(summary(State.READY, List.of()));
             final var presenter = new TroubleshootPresenter(pipeline, launcher(pipeline));
             presenter.open(PREP_DIR, "2019");
             assertThat(presenter.view().summary()).contains("do not hold together");
@@ -618,7 +618,7 @@ class TroubleshootPresenterTest {
                     true, null, List.of("decisions-009.json -> montage-002"),
                     new PrepDirHealth(State.BLOCKED, List.of()), "the technical report"));
             when(pipeline.troubleshoot(any())).thenReturn(pass);
-            when(pipeline.cullRun(any())).thenReturn(summary(State.BLOCKED,
+            when(pipeline.siftRun(any())).thenReturn(summary(State.BLOCKED,
                     List.of(new Finding.CorruptSidecar("montage-002"))));
             final var presenter = new TroubleshootPresenter(pipeline, launcher(pipeline));
             presenter.open(PREP_DIR, "2019");
@@ -651,7 +651,7 @@ class TroubleshootPresenterTest {
         @Test
         void handsTheRunToTheDashboardAndLeavesTheScreen() {
             final Pipeline pipeline = pipelineReporting(State.READY, List.of());
-            final JobHandle<CullJobOutcome> job = neverFinishes();
+            final JobHandle<SiftJobOutcome> job = neverFinishes();
             when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
             final TroubleshootPresenter presenter = opened(pipeline);
             final var left = new AtomicInteger();
@@ -669,7 +669,7 @@ class TroubleshootPresenterTest {
         @Test
         void oneThatCouldNotStartAnythingSaysSoAndStaysOnThisScreen() {
             final Pipeline pipeline = pipelineReporting(State.READY, List.of());
-            final JobHandle<CullJobOutcome> job = neverFinishes();
+            final JobHandle<SiftJobOutcome> job = neverFinishes();
             when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
             final TroubleshootPresenter presenter = opened(pipeline);
             final var dashboard = new AtomicInteger();
@@ -769,7 +769,7 @@ class TroubleshootPresenterTest {
             final Pipeline pipeline = pipelineReporting(State.BLOCKED,
                     List.of(new Finding.CorruptSidecar("montage-002")));
             final TroubleshootPresenter presenter = opened(pipeline);
-            when(pipeline.cullRun(any())).thenReturn(summary(State.READY, List.of()));
+            when(pipeline.siftRun(any())).thenReturn(summary(State.READY, List.of()));
             pressOption(presenter, Answer.SET_ASIDE_SHEET);
 
             presenter.open(Path.of("logs", "sift-prep", "2018"), "2018");
@@ -805,7 +805,7 @@ class TroubleshootPresenterTest {
             final JobHandle<TroubleshootReport> refused =
                     failing(new ApplyException("montage-004[#3]: missing 'reason'", List.of()));
             when(pipeline.troubleshoot(any())).thenReturn(refused);
-            when(pipeline.cullRun(any())).thenReturn(summary(State.BLOCKED, List.of()));
+            when(pipeline.siftRun(any())).thenReturn(summary(State.BLOCKED, List.of()));
             final var presenter = new TroubleshootPresenter(pipeline, launcher(pipeline));
             presenter.open(PREP_DIR, "2019");
             assertThat(presenter.view().summary()).contains("do not hold together");
@@ -828,7 +828,7 @@ class TroubleshootPresenterTest {
                 new PrepDirHealth(State.BLOCKED, List.of()), false, null, strays,
                 new PrepDirHealth(after, open), "the technical report"));
         when(pipeline.troubleshoot(any())).thenReturn(pass);
-        when(pipeline.cullRun(any())).thenReturn(summary(after, open));
+        when(pipeline.siftRun(any())).thenReturn(summary(after, open));
         final var presenter = new TroubleshootPresenter(pipeline, launcher(pipeline));
         presenter.open(PREP_DIR, "2019");
         return requireNonNull(presenter.view().summary());
@@ -883,12 +883,12 @@ class TroubleshootPresenterTest {
         final JobHandle<TroubleshootReport> pass = reporting(new TroubleshootReport(
                 health, false, null, List.of(), health, "the technical report"));
         when(pipeline.troubleshoot(any())).thenReturn(pass);
-        when(pipeline.cullRun(any())).thenReturn(summary(state, findings));
+        when(pipeline.siftRun(any())).thenReturn(summary(state, findings));
         return pipeline;
     }
 
-    private static CullRunSummary summary(final State state, final List<Finding> findings) {
-        return new CullRunSummary("2019", PREP_DIR, new PrepDirHealth(state, findings), null,
+    private static SiftRunSummary summary(final State state, final List<Finding> findings) {
+        return new SiftRunSummary("2019", PREP_DIR, new PrepDirHealth(state, findings), null,
                 Instant.now());
     }
 

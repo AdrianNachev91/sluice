@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class CsvSpendLedgerTest {
 
     private static final String HEADER = "\"ended_at\",\"scope\",\"provider\",\"model\",\"tile_size\","
-            + "\"tiles_per_row\",\"montages_culled\",\"montages_skipped\",\"api_calls\",\"input_tokens\","
+            + "\"tiles_per_row\",\"montages_sifted\",\"montages_skipped\",\"api_calls\",\"input_tokens\","
             + "\"output_tokens\",\"ending\"";
 
     @Test

@@ -3,7 +3,7 @@ package photos.sluice.adapter.ui;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.adapter.ui.RunSetupPresenter.Confirmation;
-import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.sift.Finding;
 
 import java.util.List;
 

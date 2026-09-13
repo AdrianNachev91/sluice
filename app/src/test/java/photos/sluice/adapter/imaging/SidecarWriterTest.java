@@ -2,7 +2,7 @@ package photos.sluice.adapter.imaging;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import photos.sluice.domain.cull.SidecarPhotoEntry;
+import photos.sluice.domain.sift.SidecarPhotoEntry;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 

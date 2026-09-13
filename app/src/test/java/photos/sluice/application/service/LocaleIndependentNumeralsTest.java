@@ -17,9 +17,9 @@ import photos.sluice.adapter.metadata.TakeoutJsonSource;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
-import photos.sluice.domain.cull.CullScope;
-import photos.sluice.domain.cull.CullScopeSelector;
-import photos.sluice.domain.cull.MontageNaming;
+import photos.sluice.domain.sift.SiftScope;
+import photos.sluice.domain.sift.SiftScopeSelector;
+import photos.sluice.domain.sift.MontageNaming;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.model.Numerals;
 import photos.sluice.domain.model.SortScope;
@@ -60,16 +60,16 @@ class LocaleIndependentNumeralsTest {
     }
 
     @Test
-    void cullScopeTagStaysAscii() {
-        assertThat(CullScope.tag(new CullScope.Year(2021, List.of(3)))).isEqualTo("2021-03");
+    void siftScopeTagStaysAscii() {
+        assertThat(SiftScope.tag(new SiftScope.Year(2021, List.of(3)))).isEqualTo("2021-03");
     }
 
     @Test
-    void cullScopeSelectorMonthDirectoryStaysAscii() {
-        final var selector = new CullScopeSelector();
+    void siftScopeSelectorMonthDirectoryStaysAscii() {
+        final var selector = new SiftScopeSelector();
         final Path photosRoot = Path.of("Sorted", "Photos");
 
-        final var directories = selector.directoriesToScan(photosRoot, new CullScope.Year(2021, List.of(3)));
+        final var directories = selector.directoriesToScan(photosRoot, new SiftScope.Year(2021, List.of(3)));
 
         assertThat(directories).containsExactly(photosRoot.resolve("2021").resolve("03"));
     }

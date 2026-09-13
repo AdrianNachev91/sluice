@@ -8,7 +8,7 @@ import photos.sluice.application.port.out.SpendCeiling;
 import photos.sluice.application.port.out.SpendForecast;
 import photos.sluice.application.port.out.SpendLedgerEntry;
 import photos.sluice.application.port.out.SpendLedgerPort;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.util.List;
 
@@ -62,7 +62,7 @@ final class SpendEstimator {
     }
 
     /**
-     * Estimates what culling prep will consume.
+     * Estimates what sifting prep will consume.
      *
      * @param montages how many montages the run will dispatch for
      * @param forecast {@link SpendForecast} what the provider said one call would carry

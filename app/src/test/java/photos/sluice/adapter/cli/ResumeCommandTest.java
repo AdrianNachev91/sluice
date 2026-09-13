@@ -3,19 +3,19 @@ package photos.sluice.adapter.cli;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
-import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.SiftJobOutcome;
 import photos.sluice.application.port.in.PathValidationUseCase;
-import photos.sluice.application.port.out.CullReport;
+import photos.sluice.application.port.out.SiftReport;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.WorkingRootLock;
 import photos.sluice.application.service.JobRunner;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.config.SettingsFixture;
-import photos.sluice.domain.cull.ApplyReport;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.PrepDirHealth;
+import photos.sluice.domain.sift.ApplyReport;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.PrepDirHealth;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.paths.PathViolation;
 
@@ -71,7 +71,7 @@ class ResumeCommandTest {
 
     @Test
     void aTagNamingNoSiftIsRefusedRatherThanStartingAJob(@TempDir final Path root) {
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of()));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of()));
 
         final CliHarness.Result result = this.run(root, "resume", "2019");
 
@@ -82,8 +82,8 @@ class ResumeCommandTest {
     @Test
     void aScopeTagResolvesToTheRunCarryingIt(@TempDir final Path root) {
         final Path prepDir = root.resolve("2019");
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
-                new CullRunSummary("2019", prepDir, new PrepDirHealth(PrepDirHealth.State.WAITING, List.of()),
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(
+                new SiftRunSummary("2019", prepDir, new PrepDirHealth(PrepDirHealth.State.WAITING, List.of()),
                         new ShardTally(1, 0, 2), SINCE))));
         this.answering(prepDir, false, applied());
 
@@ -113,13 +113,13 @@ class ResumeCommandTest {
         verify(this.lock).acquire(root);
     }
 
-    private void answering(final Path prepDir, final boolean allowPartial, final CullJobOutcome outcome) {
+    private void answering(final Path prepDir, final boolean allowPartial, final SiftJobOutcome outcome) {
         when(this.pipeline.resume(eq(prepDir), eq(allowPartial)))
                 .thenAnswer(_ -> this.runner.submit(_ -> outcome));
     }
 
-    private static CullJobOutcome.Applied applied() {
-        return new CullJobOutcome.Applied(CullReport.nothingSpent("external-agent", 0),
+    private static SiftJobOutcome.Applied applied() {
+        return new SiftJobOutcome.Applied(SiftReport.nothingSpent("external-agent", 0),
                 new ApplyReport(1, Map.of(), 0, 0, 0, List.of()), null, null);
     }
 

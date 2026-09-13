@@ -22,12 +22,12 @@ import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.SettingsUseCase;
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.MontageConfig;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
@@ -203,7 +203,7 @@ class FirstRunCardTest {
     void aCardOpenedOnAHalfFilledInstallSaysWhatIsStillNeeded() throws Exception {
         final Built built = onFxThread(() -> built(new Install(
                 new Settings(new PathSettings(WORKING_ROOT, LIBRARY_ROOT, null), "external-agent",
-                        Map.of("external-agent", CullProviderSettings.unset()), List.of(),
+                        Map.of("external-agent", SiftProviderSettings.unset()), List.of(),
                         new MontageConfig(224, 5),
                         ThemeChoice.SYSTEM))));
 
@@ -302,13 +302,13 @@ class FirstRunCardTest {
 
     private static Settings startingOn(final String provider) {
         return new Settings(new PathSettings(null, null, null), provider,
-                Map.of(provider, CullProviderSettings.unset()), List.of(),
+                Map.of(provider, SiftProviderSettings.unset()), List.of(),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM);
     }
 
     private static Settings nothingChosen() {
         return new Settings(new PathSettings(null, null, null), "external-agent",
-                Map.of("external-agent", CullProviderSettings.unset()), List.of(),
+                Map.of("external-agent", SiftProviderSettings.unset()), List.of(),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM);
     }
 

@@ -3,7 +3,7 @@ package photos.sluice.adapter.vision;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
-import photos.sluice.domain.cull.SidecarPhotoEntry;
+import photos.sluice.domain.sift.SidecarPhotoEntry;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.exc.JacksonIOException;
 import tools.jackson.databind.json.JsonMapper;
@@ -20,7 +20,7 @@ import java.util.List;
 
 /**
  * Reads a {@code montage-NNN.json} sidecar and returns every photo entry it lists. The srcs are the
- * authoritative in-scope file set {@link photos.sluice.domain.cull.ShardValidator} checks decisions
+ * authoritative in-scope file set {@link photos.sluice.domain.sift.ShardValidator} checks decisions
  * against. Fields outside the photo entries (the montage field, anything the writer grows later)
  * stay ignored. The sidecar's full shape is owned by the writer that produces it.
  *
@@ -101,7 +101,7 @@ class SidecarReader {
         }
         // A montage only exists for a non-empty batch, so an empty photos array is corruption too.
         // Tolerating it would strip those files from the in-scope set, and the validator would then
-        // blame the culling agent for out-of-scope decisions when the prep dir is what's broken.
+        // blame the sifting agent for out-of-scope decisions when the prep dir is what's broken.
         if (raw.photos().isEmpty()) {
             throw new MalformedPrepJsonException("Sidecar " + sidecarPath + " lists no photos",
                     new IOException("empty photos"));

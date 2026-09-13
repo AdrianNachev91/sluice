@@ -52,7 +52,7 @@ public class StartupSequence {
     // to cover one file operation already under way. Five seconds is well clear of a large move on a
     // slow disk.
     //
-    // A cull sitting inside a vision call is the case no value here fixes. Its next boundary is a
+    // A sift sitting inside a vision call is the case no value here fixes. Its next boundary is a
     // whole montage away. This path has nothing on screen to explain such a wait, and a window that
     // hangs unexplained is worse than a job given up on.
     private static final Duration DRAIN_WAIT = Duration.ofSeconds(5);

@@ -12,7 +12,7 @@ import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MissingCredentialException;
 import photos.sluice.application.port.out.UnrecognisedProviderException;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.sift.SiftScope;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.secrets.SecretStoreException;
@@ -151,7 +151,7 @@ final class RunRefusals {
      * @param chosen {@link String} the timeframe the reader picked
      * @return {@link Refusal} the sentence, and the runs screen to deal with them from
      */
-    static Refusal overlapUnfinishedRefusal(final CullScope.Year chosen, final List<CullScope.Year> across) {
+    static Refusal overlapUnfinishedRefusal(final SiftScope.Year chosen, final List<SiftScope.Year> across) {
         return new Refusal(RunWords.spelledScope(chosen) + " overlaps "
                 + RunWords.listed(across.stream().map(RunWords::spelledScope).toList())
                 + ", which " + (across.size() == 1 ? "is a sift" : "are sifts")
@@ -251,8 +251,8 @@ final class RunRefusals {
      * @return {@link Refusal} the sentence, and the location where the runs could be named
      */
     private static Refusal scopeOverlapsRefusal(final Pipeline.ScopeOverlapsException overlaps) {
-        final List<CullScope.Year> across = overlaps.across().stream()
-                .map(run -> CullScope.yearScopeOf(run.scope()))
+        final List<SiftScope.Year> across = overlaps.across().stream()
+                .map(run -> SiftScope.yearScopeOf(run.scope()))
                 .filter(Objects::nonNull)
                 .toList();
         // Nothing to send the reader to where none of them could be read back.

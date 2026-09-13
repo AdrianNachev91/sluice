@@ -9,9 +9,9 @@ import photos.sluice.application.port.out.MissingCredentialException;
 import photos.sluice.application.port.out.UnrecognisedProviderException;
 import photos.sluice.application.port.out.WorkingRootBusyException;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullScope;
-import photos.sluice.domain.cull.PrepDirHealth;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftScope;
+import photos.sluice.domain.sift.PrepDirHealth;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation.NotConfigured;
@@ -198,7 +198,7 @@ class RefusalClassifierTest {
 
     @Test
     void anOccupiedScopeNamesTheRunAlreadyThereWithoutItsInternalState() {
-        final CullRunSummary occupant = new CullRunSummary("2019", Path.of("logs", "sift-prep", "2019"),
+        final SiftRunSummary occupant = new SiftRunSummary("2019", Path.of("logs", "sift-prep", "2019"),
                 new PrepDirHealth(PrepDirHealth.State.WAITING, List.of()), new ShardTally(1, 0, 2),
                 Instant.parse("2026-08-20T10:15:30Z"));
 
@@ -212,12 +212,12 @@ class RefusalClassifierTest {
 
     @Test
     void overlappingScopesNameTheChosenTimeframeAndEveryRunInTheWay() {
-        final CullRunSummary blocking = new CullRunSummary("2019-06", Path.of("logs", "sift-prep", "2019-06"),
+        final SiftRunSummary blocking = new SiftRunSummary("2019-06", Path.of("logs", "sift-prep", "2019-06"),
                 new PrepDirHealth(PrepDirHealth.State.READY, List.of()), new ShardTally(1, 1, 1),
                 Instant.parse("2026-08-20T10:15:30Z"));
 
         final Refusal refusal = this.classifier.refusalFor(
-                new Pipeline.ScopeOverlapsException(new CullScope.Year(2019, null), List.of(blocking)));
+                new Pipeline.ScopeOverlapsException(new SiftScope.Year(2019, null), List.of(blocking)));
 
         assertThat(refusal).isNotNull();
         assertThat(refusal.kind()).isEqualTo(RefusalKind.SCOPE_OVERLAPS);

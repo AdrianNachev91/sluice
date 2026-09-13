@@ -4,11 +4,11 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.AnswerSource;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.DiscardReport;
-import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.sift.AnswerSource;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.DiscardReport;
+import photos.sluice.domain.sift.Finding;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
@@ -261,15 +261,15 @@ public class AnswerCommand implements Callable<Integer> {
      * @throws ScopeRefusedException when the run is not among those found
      */
     private List<Finding> openFindings(final Path prepDir) {
-        return switch (this.pipeline.cullRuns()) {
-            case CullRuns.Listed(final List<CullRunSummary> runs) -> runs.stream()
+        return switch (this.pipeline.siftRuns()) {
+            case SiftRuns.Listed(final List<SiftRunSummary> runs) -> runs.stream()
                     .filter(candidate -> candidate.prepDir().equals(prepDir))
                     .findFirst()
                     .map(candidate -> candidate.health().findings())
                     .orElseThrow(() -> new ScopeRefusedException(new Refusal(RefusalKind.RUN_NOT_FOUND,
                             "No sift at " + prepDir + ".",
                             Fields.of("prepDir", prepDir.toString()))));
-            case CullRuns.Unlistable(final Path root) -> throw new ScopeRefusedException(
+            case SiftRuns.Unlistable(final Path root) -> throw new ScopeRefusedException(
                     RunsRefusals.unreadable(root));
         };
     }

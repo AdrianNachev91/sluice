@@ -43,7 +43,7 @@ class PipelinePathGuardTest {
         final Path library = root.resolve("Library");
         Files.delete(library);
 
-        assertThatThrownBy(pipeline::cullRuns)
+        assertThatThrownBy(pipeline::siftRuns)
                 .isInstanceOfSatisfying(PathsMisconfiguredException.class, e ->
                         assertThat(e.violations())
                                 .containsExactly(new NotADirectory(PathRole.LIBRARY_ROOT, library)));
@@ -55,7 +55,7 @@ class PipelinePathGuardTest {
     void theExitPathIsNotRefusedOnceAFolderRootHasGone(@TempDir final Path root) throws IOException {
         final Pipeline pipeline = pipeline(root, this.progress);
         Files.delete(root.resolve("Library"));
-        assertThatThrownBy(pipeline::cullRuns).isInstanceOf(PathsMisconfiguredException.class);
+        assertThatThrownBy(pipeline::siftRuns).isInstanceOf(PathsMisconfiguredException.class);
 
         assertThat(pipeline.stopAcceptingJobs(Duration.ofSeconds(5))).isTrue();
     }
@@ -66,10 +66,10 @@ class PipelinePathGuardTest {
         final Pipeline pipeline = pipeline(root, this.progress);
         final Path library = root.resolve("Library");
         Files.delete(library);
-        assertThatThrownBy(pipeline::cullRuns).isInstanceOf(PathsMisconfiguredException.class);
+        assertThatThrownBy(pipeline::siftRuns).isInstanceOf(PathsMisconfiguredException.class);
 
         Files.createDirectory(library);
 
-        assertThat(listed(pipeline.cullRuns())).isEmpty();
+        assertThat(listed(pipeline.siftRuns())).isEmpty();
     }
 }

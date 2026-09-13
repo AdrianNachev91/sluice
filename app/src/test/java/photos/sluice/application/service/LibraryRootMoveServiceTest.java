@@ -37,8 +37,8 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static photos.sluice.application.service.CullPrepTestSupport.prepDir;
-import static photos.sluice.application.service.CullPrepTestSupport.writeIndex;
+import static photos.sluice.application.service.SiftPrepTestSupport.prepDir;
+import static photos.sluice.application.service.SiftPrepTestSupport.writeIndex;
 
 class LibraryRootMoveServiceTest {
 
@@ -205,7 +205,7 @@ class LibraryRootMoveServiceTest {
     class Refusals {
 
         @Test
-        void refusesWhileACullRunHasNotFinished(@TempDir final Path root, @TempDir final Path newLibrary)
+        void refusesWhileASiftRunHasNotFinished(@TempDir final Path root, @TempDir final Path newLibrary)
                 throws IOException {
             final var fixture = new Fixture(root);
             writeIndex(prepDir(root), 1, List.of("montage-001"));
@@ -311,7 +311,7 @@ class LibraryRootMoveServiceTest {
                     new NoClaims(), jobRunner, validation, new NioMediaStore(),
                     _ -> Optional.empty(), List.of());
             this.service = new LibraryRootMoveService(settingsService, jobRunner, copyEngine,
-                    this.hashIndex, paths, CullPrepTestSupport.prepDirDoctor(root), validation, this.progress);
+                    this.hashIndex, paths, SiftPrepTestSupport.prepDirDoctor(root), validation, this.progress);
         }
 
         private LibraryRootMoveOutcome move(final Path newLibrary, final LibraryRootResolution resolution) {

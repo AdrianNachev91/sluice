@@ -155,7 +155,7 @@ while the file itself still sits in the Inbox awaiting a future run.
 
 The dedup-deletion step in section 1 ("delete redundant and duplicate files") has no cancellation
 check of its own. A cancellation requested during it is only observed once routing's own per-file
-check runs next. See [`cull-engine.md`](cull-engine.md)'s Cancellation section for the cross-engine
+check runs next. See [`sift-engine.md`](sift-engine.md)'s Cancellation section for the cross-engine
 picture.
 
 This is a deliberate omission, not a gap that slipped through review. The two dedup buckets are

@@ -16,17 +16,17 @@ import photos.sluice.adapter.ui.TroubleshootView.Problem;
 import photos.sluice.adapter.ui.TroubleshootView.ProblemStack;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.AnswerSource;
-import photos.sluice.domain.cull.ChoiceAnswer;
-import photos.sluice.domain.cull.CorruptSidecarResolution;
-import photos.sluice.domain.cull.DiscardReport;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.LaunchPrompt;
-import photos.sluice.domain.cull.OverlapResolution;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PrepDirHealth.State;
-import photos.sluice.domain.cull.TroubleshootReport;
-import photos.sluice.domain.cull.Verdict;
+import photos.sluice.domain.sift.AnswerSource;
+import photos.sluice.domain.sift.ChoiceAnswer;
+import photos.sluice.domain.sift.CorruptSidecarResolution;
+import photos.sluice.domain.sift.DiscardReport;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.LaunchPrompt;
+import photos.sluice.domain.sift.OverlapResolution;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PrepDirHealth.State;
+import photos.sluice.domain.sift.TroubleshootReport;
+import photos.sluice.domain.sift.Verdict;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -433,7 +433,7 @@ public class TroubleshootPresenter {
      */
     private @Nullable Reading reread(final Path run) {
         try {
-            final PrepDirHealth health = this.pipeline.cullRun(run).health();
+            final PrepDirHealth health = this.pipeline.siftRun(run).health();
             final Reading landed = new Reading(health.findings(), health.state(), null);
             this.reading.set(landed);
             return landed;

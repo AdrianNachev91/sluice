@@ -7,19 +7,19 @@ import photos.sluice.adapter.ui.RunSetupPresenter.Confirmation;
 import photos.sluice.adapter.ui.RunsView.Action;
 import photos.sluice.adapter.ui.RunsView.Kind;
 import photos.sluice.adapter.ui.RunsView.RunCard;
-import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.SiftJobOutcome;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.DiscardReport;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.PurgeReport;
-import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.DiscardReport;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.PurgeReport;
+import photos.sluice.domain.sift.PrepDirHealth.State;
 import photos.sluice.domain.job.ShardTally;
 
 import java.io.IOException;
@@ -79,7 +79,7 @@ class RunsPresenterTest {
         void aBlockedRunNamesWhichKindOfFaultStoppedIt() {
             final var health = new PrepDirHealth(State.BLOCKED,
                     List.of(new Finding.CorruptIndex(Path.of("a")), new Finding.CorruptIndex(Path.of("b"))));
-            final RunsPresenter presenter = presenterOver(new CullRunSummary("2019", Path.of("p"), health,
+            final RunsPresenter presenter = presenterOver(new SiftRunSummary("2019", Path.of("p"), health,
                     new ShardTally(2, 2, 2), Instant.now()));
 
             assertThat(presenter.view().unfinished().getFirst().detail())
@@ -91,7 +91,7 @@ class RunsPresenterTest {
         void aBlockedRunSpanningTwoKindsOfFaultNamesNeitherRatherThanPickingOne() {
             final var health = new PrepDirHealth(State.BLOCKED,
                     List.of(new Finding.CorruptIndex(Path.of("a")), new Finding.MissingReason("m", 0)));
-            final RunsPresenter presenter = presenterOver(new CullRunSummary("2019", Path.of("p"), health,
+            final RunsPresenter presenter = presenterOver(new SiftRunSummary("2019", Path.of("p"), health,
                     new ShardTally(2, 2, 2), Instant.now()));
 
             assertThat(presenter.view().unfinished().getFirst().detail())
@@ -111,7 +111,7 @@ class RunsPresenterTest {
 
         @Test
         void aRunNobodyCouldStatIsAgedAsNotKnownRatherThanAsADateIn1970() {
-            final RunsPresenter presenter = presenterOver(new CullRunSummary("2019", Path.of("p"),
+            final RunsPresenter presenter = presenterOver(new SiftRunSummary("2019", Path.of("p"),
                     new PrepDirHealth(State.DAMAGED, List.of()), null, Instant.EPOCH));
 
             assertThat(presenter.view().unfinished().getFirst().age()).isEqualTo("Last activity: not known");
@@ -119,7 +119,7 @@ class RunsPresenterTest {
 
         @Test
         void aRunLastActiveDaysAgoSaysHowManyDays() {
-            final RunsPresenter presenter = presenterOver(new CullRunSummary("2019", Path.of("p"),
+            final RunsPresenter presenter = presenterOver(new SiftRunSummary("2019", Path.of("p"),
                     new PrepDirHealth(State.WAITING, List.of()), new ShardTally(1, 1, 2),
                     Instant.now().minus(Duration.ofDays(3))));
 
@@ -217,7 +217,7 @@ class RunsPresenterTest {
         @Test
         void theyAllGoDeadWhileAJobThisScreenStartedIsStillRunning() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.READY))));
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.READY))));
             final JobHandle<DiscardReport> job = neverFinishes();
             when(pipeline.discard(any())).thenReturn(job);
             final var presenter = runsPresenter(pipeline);
@@ -234,7 +234,7 @@ class RunsPresenterTest {
         @Test
         void theyAllGoDeadWhileAJobStartedAnywhereElseIsStillRunning() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(
                     run("2019", State.READY), run("2018", State.COMPLETE))));
             when(pipeline.isBusy()).thenReturn(true);
             final var presenter = runsPresenter(pipeline);
@@ -247,7 +247,7 @@ class RunsPresenterTest {
         @Test
         void aRefusedPressLeavesTheScreenAbleToTryAgain() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.READY))));
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.READY))));
             when(pipeline.resume(any(), anyBoolean()))
                     .thenThrow(new JobInProgressException("busy"));
             final var presenter = runsPresenter(pipeline);
@@ -268,7 +268,7 @@ class RunsPresenterTest {
         void aFailureSaysSoRatherThanReportingNoRuns() {
             final Path root = Path.of("logs", "sift-prep");
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Unlistable(root));
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Unlistable(root));
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
 
@@ -295,7 +295,7 @@ class RunsPresenterTest {
         @Test
         void theSidebarCountsNoneWhereTheFolderCouldNotBeRead() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Unlistable(Path.of("p")));
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Unlistable(Path.of("p")));
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
 
@@ -305,7 +305,7 @@ class RunsPresenterTest {
         @Test
         void aFolderNobodyHasConfiguredYetIsReportedTheSameWayAnyOtherFailureIs() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenThrow(new PathsMisconfiguredException(List.of()));
+            when(pipeline.siftRuns()).thenThrow(new PathsMisconfiguredException(List.of()));
             final var presenter = runsPresenter(pipeline);
 
             presenter.refresh();
@@ -322,7 +322,7 @@ class RunsPresenterTest {
             final Pipeline pipeline = pipeline();
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
             when(pipeline.configuredProviderSpends()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
             when(pipeline.redoRejectedAnswers(any()))
                     .thenThrow(new Pipeline.NothingToRedoException(prepDir));
@@ -339,9 +339,9 @@ class RunsPresenterTest {
         @Test
         void oneThatWorksClearsWhatAFailedOneHadToReport() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns())
+            when(pipeline.siftRuns())
                     .thenThrow(new IllegalStateException("nope"))
-                    .thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+                    .thenReturn(new SiftRuns.Listed(List.of(run("2019", State.WAITING))));
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
             assertThat(presenter.view().message()).isNotNull();
@@ -355,7 +355,7 @@ class RunsPresenterTest {
         @Test
         void aFolderSettingRefusalReachesTheScreenRatherThanEscaping() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenThrow(new IllegalStateException("nope"));
+            when(pipeline.siftRuns()).thenThrow(new IllegalStateException("nope"));
             final var presenter = runsPresenter(pipeline);
 
             presenter.refresh();
@@ -369,13 +369,13 @@ class RunsPresenterTest {
             final Pipeline pipeline = pipeline();
             runsPresenter(pipeline);
 
-            verify(pipeline, never()).cullRuns();
+            verify(pipeline, never()).siftRuns();
         }
 
         @Test
         void aRunMovingWithNobodyLookingRedrawsBothTheCountAndTheCards() throws Exception {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.WAITING))));
             final var listener = new AtomicReference<@Nullable Runnable>(null);
             doAnswer(call -> {
                 listener.set(call.getArgument(0));
@@ -396,7 +396,7 @@ class RunsPresenterTest {
         @Test
         void aRunMovingTakesOneRatherThanOnePerThingItRedraws() throws Exception {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.WAITING))));
             final var listener = new AtomicReference<@Nullable Runnable>(null);
             doAnswer(call -> {
                 listener.set(call.getArgument(0));
@@ -410,7 +410,7 @@ class RunsPresenterTest {
             requireNonNull(listener.get()).run();
 
             assertThat(bothDrawn.await(5, TimeUnit.SECONDS)).isTrue();
-            verify(pipeline).cullRuns();
+            verify(pipeline).siftRuns();
         }
     }
 
@@ -420,7 +420,7 @@ class RunsPresenterTest {
         @Test
         void asksFirstAndNamesWhatItSetsAsideAndWhereItGoes() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(new SiftRunSummary("2019",
                     Path.of("p"), new PrepDirHealth(State.WAITING, List.of()),
                     new ShardTally(17, 17, 28), Instant.now()))));
             when(pipeline.configuredProviderSpends()).thenReturn(true);
@@ -439,7 +439,7 @@ class RunsPresenterTest {
 
         @Test
         void aRunJudgedByTheirOwnAgentCountsTheSheetsWithoutClaimingTheyPaid() {
-            final RunsPresenter presenter = presenterOver(new CullRunSummary("2019", Path.of("p"),
+            final RunsPresenter presenter = presenterOver(new SiftRunSummary("2019", Path.of("p"),
                     new PrepDirHealth(State.WAITING, List.of()), new ShardTally(17, 17, 28), Instant.now()));
 
             final Action discard = presenter.view().unfinished().getFirst().actions().getLast();
@@ -473,7 +473,7 @@ class RunsPresenterTest {
         @Test
         void aRunThatFinishedFirstIsSaidInWordsRatherThanAsABug() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.WAITING))));
             when(pipeline.discard(any())).thenThrow(
                     new Pipeline.RunAlreadyFinishedException(Path.of("logs", "sift-prep", "2019")));
             final var presenter = runsPresenter(pipeline);
@@ -491,7 +491,7 @@ class RunsPresenterTest {
         @Test
         void aJobThatFailsRatherThanBeingRefusedStillSaysSoAndFreesTheScreen() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.WAITING))));
             final JobHandle<DiscardReport> job = failing(new JobInProgressException("Something else is running."));
             when(pipeline.discard(any())).thenReturn(job);
             final var presenter = runsPresenter(pipeline);
@@ -507,7 +507,7 @@ class RunsPresenterTest {
         @Test
         void aRunMovingInTheBackgroundLeavesThePressesOwnMessageStanding() throws Exception {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.WAITING))));
             final JobHandle<DiscardReport> job = failing(new JobInProgressException("Something else is running."));
             when(pipeline.discard(any())).thenReturn(job);
             final var listener = new AtomicReference<@Nullable Runnable>(null);
@@ -536,9 +536,9 @@ class RunsPresenterTest {
         void handsThatRunsOwnFolderToTheFacade() {
             final Pipeline pipeline = pipeline();
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(new SiftRunSummary("2019",
                     prepDir, new PrepDirHealth(State.READY, List.of()), new ShardTally(3, 3, 3), Instant.now()))));
-            final JobHandle<CullJobOutcome> job = finished();
+            final JobHandle<SiftJobOutcome> job = finished();
             when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
@@ -551,8 +551,8 @@ class RunsPresenterTest {
         @Test
         void putsItsProgressOnTheDashboard() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.READY))));
-            final JobHandle<CullJobOutcome> job = neverFinishes();
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.READY))));
+            final JobHandle<SiftJobOutcome> job = neverFinishes();
             when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
             final RunLauncherPresenter dashboard = dashboard(pipeline);
             final var presenter = new RunsPresenter(pipeline, dashboard);
@@ -567,8 +567,8 @@ class RunsPresenterTest {
         @Test
         void takesTheReaderToWhereItReports() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.READY))));
-            final JobHandle<CullJobOutcome> job = neverFinishes();
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.READY))));
+            final JobHandle<SiftJobOutcome> job = neverFinishes();
             when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
             final var presenter = runsPresenter(pipeline);
             final var opened = new AtomicInteger();
@@ -583,7 +583,7 @@ class RunsPresenterTest {
         @Test
         void aRefusedPressIsSaidOnTheDashboardTheReaderIsSentTo() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.READY))));
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.READY))));
             when(pipeline.resume(any(), anyBoolean()))
                     .thenThrow(new JobInProgressException("Something else is running."));
             final RunLauncherPresenter dashboard = dashboard(pipeline);
@@ -602,8 +602,8 @@ class RunsPresenterTest {
         void goingOnWithoutTheMissingSheetsIsWhatTheFacadeIsAskedFor() {
             final Pipeline pipeline = pipeline();
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
-            final JobHandle<CullJobOutcome> job = neverFinishes();
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.WAITING))));
+            final JobHandle<SiftJobOutcome> job = neverFinishes();
             when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
@@ -617,8 +617,8 @@ class RunsPresenterTest {
         void finishingWaitsForEverySheetUnlessTheOtherButtonIsPressed() {
             final Pipeline pipeline = pipeline();
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
-            final JobHandle<CullJobOutcome> job = neverFinishes();
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.WAITING))));
+            final JobHandle<SiftJobOutcome> job = neverFinishes();
             when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
@@ -631,8 +631,8 @@ class RunsPresenterTest {
         @Test
         void aPressThatCouldNotStartAnythingSaysSoRatherThanOpeningTheDashboard() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
-            final JobHandle<CullJobOutcome> job = neverFinishes();
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.WAITING))));
+            final JobHandle<SiftJobOutcome> job = neverFinishes();
             when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
             final RunLauncherPresenter dashboard = dashboard(pipeline);
             final var presenter = new RunsPresenter(pipeline, dashboard);
@@ -657,8 +657,8 @@ class RunsPresenterTest {
         @Test
         void thereIsNoWayPastTheMissingSheetsOnceNoneAreMissing() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
-                    new CullRunSummary("2019", Path.of("logs", "sift-prep", "2019"),
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(
+                    new SiftRunSummary("2019", Path.of("logs", "sift-prep", "2019"),
                             new PrepDirHealth(State.WAITING, List.of()), new ShardTally(4, 4, 4),
                             Instant.now()))));
             final var presenter = runsPresenter(pipeline);
@@ -715,7 +715,7 @@ class RunsPresenterTest {
         @Test
         void goesThroughTheFacade() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.COMPLETE))));
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.COMPLETE))));
             final JobHandle<PurgeReport> job = finished();
             when(pipeline.purgeCompleted()).thenReturn(job);
             final var presenter = runsPresenter(pipeline);
@@ -755,7 +755,7 @@ class RunsPresenterTest {
         @Test
         void onAnAgentItOffersTheFolderAndTheInstructions() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.WAITING))));
             when(pipeline.configuredProviderSpends()).thenReturn(false);
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
@@ -769,7 +769,7 @@ class RunsPresenterTest {
         @Test
         void onAProviderThatSpendsItOffersNoInstructionsAndNoWayPastTheMissingSheets() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.WAITING))));
             when(pipeline.configuredProviderSpends()).thenReturn(true);
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
@@ -795,7 +795,7 @@ class RunsPresenterTest {
         void theInstructionsAreNotWrittenUntilSomebodyAsksForThem() {
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.WAITING))));
             when(pipeline.launchPromptFor(any())).thenReturn("Sift the photo sheets in ...");
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
@@ -812,7 +812,7 @@ class RunsPresenterTest {
         @Test
         void instructionsThatCouldNotBeWrittenSayWhyAndCopyNothing() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.WAITING))));
             when(pipeline.launchPromptFor(any()))
                     .thenThrow(new MalformedPrepJsonException("index.json will not parse",
                             new IllegalStateException("unexpected end of input")));
@@ -830,7 +830,7 @@ class RunsPresenterTest {
         // thing the follow-up exists to discard. Counted on what arrived, never on what passed.
         @Test
         void aRunWhoseOnlyAnswerCameBackUnusableIsOfferedTheFollowUp() {
-            final RunsPresenter presenter = presenterOver(new CullRunSummary("2019",
+            final RunsPresenter presenter = presenterOver(new SiftRunSummary("2019",
                     Path.of("logs", "sift-prep", "2019"),
                     new PrepDirHealth(State.WAITING,
                             List.of(new Finding.PhotosNotJudged("montage-001", List.of("IMG_1.jpg")))),
@@ -847,7 +847,7 @@ class RunsPresenterTest {
         // is an agent that has not started, and the reader's move then is to start it again.
         @Test
         void aRunAnAgentHasNotAnsweredYetIsOfferedTheInstructionsRatherThanAFollowUp() {
-            final RunsPresenter presenter = presenterOver(new CullRunSummary("2019",
+            final RunsPresenter presenter = presenterOver(new SiftRunSummary("2019",
                     Path.of("logs", "sift-prep", "2019"), new PrepDirHealth(State.WAITING, List.of()),
                     new ShardTally(0, 0, 4), Instant.now()));
 
@@ -872,7 +872,7 @@ class RunsPresenterTest {
         @Test
         void separatesTheSheetsThatCameBackWrongFromTheOnesStillMissing() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(new SiftRunSummary("2019",
                     Path.of("logs", "sift-prep", "2019"), new PrepDirHealth(State.WAITING, List.of()),
                     new ShardTally(4, 2, 6), Instant.now()))));
             final var presenter = runsPresenter(pipeline);
@@ -886,7 +886,7 @@ class RunsPresenterTest {
         @Test
         void withOneOfEachItAgreesWithItselfOnSingularAndPlural() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2016",
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(new SiftRunSummary("2016",
                     Path.of("logs", "sift-prep", "2016"), new PrepDirHealth(State.WAITING, List.of()),
                     new ShardTally(9, 8, 10), Instant.now()))));
             final var presenter = runsPresenter(pipeline);
@@ -900,7 +900,7 @@ class RunsPresenterTest {
         @Test
         void whereEverySheetIsInItNamesOnlyWhatWasJudged() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(new SiftRunSummary("2019",
                     Path.of("logs", "sift-prep", "2019"), new PrepDirHealth(State.READY, List.of()),
                     new ShardTally(4, 4, 4), Instant.now()))));
             final var presenter = runsPresenter(pipeline);
@@ -913,7 +913,7 @@ class RunsPresenterTest {
         @Test
         void aBlockedRunWhoseSheetsAreAllInAndAllSoundSaysNothingAboutThem() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(new SiftRunSummary("2019",
                     Path.of("logs", "sift-prep", "2019"),
                     new PrepDirHealth(State.BLOCKED, List.of(new Finding.MissingSource(
                             Path.of("Sorted", "Photos", "2019", "06", "gone.jpg"),
@@ -968,7 +968,7 @@ class RunsPresenterTest {
         void aRunHeldUpOnlyByItsAnswersIsLedByItAndNotByFinishing() {
             final Pipeline pipeline = pipeline();
             when(pipeline.configuredProviderSpends()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.WAITING))));
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
@@ -986,7 +986,7 @@ class RunsPresenterTest {
         void onAProviderThatSpendsARunASheetAloneBlamesLeadsWithItNotTroubleshoot() {
             final Pipeline pipeline = pipeline();
             when(pipeline.configuredProviderSpends()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(
                     run("2019", State.BLOCKED,
                             List.of(new Finding.CorruptShard("montage-002", "decisions-002.json"))))));
             final var presenter = runsPresenter(pipeline);
@@ -1005,7 +1005,7 @@ class RunsPresenterTest {
         void onAProviderThatSpendsARunAlsoHeldUpBySomethingElseOffersItQuietly() {
             final Pipeline pipeline = pipeline();
             when(pipeline.configuredProviderSpends()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(
                     run("2019", State.BLOCKED, List.of(
                             new Finding.PhotosNotJudged("montage-001", List.of("IMG_1.jpg")),
                             new Finding.MissingSource(Path.of("a.jpg"), Path.of("moves.log")))))));
@@ -1038,7 +1038,7 @@ class RunsPresenterTest {
         void itIsDrawnBetweenFinishingAndThrowingAway() {
             final Pipeline pipeline = pipeline();
             when(pipeline.configuredProviderSpends()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(
                     runWithRejectedAnswers("2019", State.WAITING),
                     runWithRejectedAnswers("2018", State.BLOCKED))));
             final var presenter = runsPresenter(pipeline);
@@ -1054,7 +1054,7 @@ class RunsPresenterTest {
         void onAProviderThatSpendsTheSamePressNamesTheMoneyAndAsksFirst() {
             final Pipeline pipeline = pipeline();
             when(pipeline.configuredProviderSpends()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
@@ -1075,7 +1075,7 @@ class RunsPresenterTest {
         void theQuestionCountsTheSheetsStillMissingAlongsideTheOnesComingBackWrong() {
             final Pipeline pipeline = pipeline();
             when(pipeline.configuredProviderSpends()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(new SiftRunSummary("2019",
                     Path.of("logs", "sift-prep", "2019"),
                     new PrepDirHealth(State.WAITING,
                             List.of(new Finding.PhotosNotJudged("montage-001", List.of("IMG_1.jpg")))),
@@ -1094,7 +1094,7 @@ class RunsPresenterTest {
         void theQuestionCountsWhatThePressDispatchesRatherThanWhatTheTallyCallsInvalid() {
             final Pipeline pipeline = pipeline();
             when(pipeline.configuredProviderSpends()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(new SiftRunSummary("2019",
                     Path.of("logs", "sift-prep", "2019"),
                     new PrepDirHealth(State.BLOCKED, List.of(
                             new Finding.GroupSpansMultipleMontages("harbour",
@@ -1115,7 +1115,7 @@ class RunsPresenterTest {
         void onAProviderThatSpendsARunHeldUpBySomethingNoSheetCanAnswerForIsOfferedNone() {
             final Pipeline pipeline = pipeline();
             when(pipeline.configuredProviderSpends()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.BLOCKED,
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2019", State.BLOCKED,
                     List.of(new Finding.CorruptIndex(Path.of("index.json")))))));
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
@@ -1137,7 +1137,7 @@ class RunsPresenterTest {
         void onAProviderThatSpendsARunStillShortOfSheetsIsOfferedItBesideItsWaitingBlock() {
             final Pipeline pipeline = pipeline();
             when(pipeline.configuredProviderSpends()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.WAITING))));
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
@@ -1167,7 +1167,7 @@ class RunsPresenterTest {
         void onAProviderThatSpendsAWaitingCardWithNothingBlamedStillLeadsWithFinishing() {
             final Pipeline pipeline = pipeline();
             when(pipeline.configuredProviderSpends()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(run("2019", State.WAITING, List.of()))));
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
@@ -1182,7 +1182,7 @@ class RunsPresenterTest {
         void aPressThatFreedSheetsHasTheScreenReadTheRunsAgain() {
             final Pipeline pipeline = pipeline();
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.WAITING))));
             when(pipeline.redoRejectedAnswers(any())).thenReturn("write them again");
             final var repainted = new AtomicInteger();
@@ -1201,7 +1201,7 @@ class RunsPresenterTest {
         void theCopyControlReadsCopiedAfterTheReadItsOwnPressSetOff() {
             final Pipeline pipeline = pipeline();
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.WAITING))));
             when(pipeline.redoRejectedAnswers(any())).thenReturn("write them again");
             final var presenter = runsPresenter(pipeline);
@@ -1218,7 +1218,7 @@ class RunsPresenterTest {
         void theReadAfterThatPutsTheCopyControlBackToItsOrdinaryLabel() {
             final Pipeline pipeline = pipeline();
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.WAITING))));
             when(pipeline.redoRejectedAnswers(any())).thenReturn("write them again");
             final var presenter = runsPresenter(pipeline);
@@ -1236,7 +1236,7 @@ class RunsPresenterTest {
         void aRunMovingInTheBackgroundLeavesTheCopiedLabelStanding() throws Exception {
             final Pipeline pipeline = pipeline();
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.WAITING))));
             when(pipeline.redoRejectedAnswers(any())).thenReturn("write them again");
             final var listener = new AtomicReference<@Nullable Runnable>(null);
@@ -1263,7 +1263,7 @@ class RunsPresenterTest {
         void aPressOnAStalledRunHasTheScreenReadNothingAgain() {
             final Pipeline pipeline = pipeline();
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.WAITING))));
             when(pipeline.redoRejectedAnswers(any()))
                     .thenThrow(new Pipeline.NothingToRedoException(prepDir));
@@ -1284,7 +1284,7 @@ class RunsPresenterTest {
         void itGoesFromTheWaitingBlockWhileAJobIsRunning() {
             final Pipeline pipeline = pipeline();
             when(pipeline.isBusy()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.WAITING))));
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
@@ -1300,7 +1300,7 @@ class RunsPresenterTest {
         void itGoesFromTheCardWhileAJobIsRunning() {
             final Pipeline pipeline = pipeline();
             when(pipeline.isBusy()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
@@ -1311,7 +1311,7 @@ class RunsPresenterTest {
         @Test
         void askingForTheAnswersAgainHandsBackWhatTheFacadeWrote() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
             when(pipeline.redoRejectedAnswers(any())).thenReturn("write them again");
             final var presenter = runsPresenter(pipeline);
@@ -1326,7 +1326,7 @@ class RunsPresenterTest {
         void onAProviderThatSpendsARefusedPressReportsOnTheScreenAndHandsBackNothingToCopy() {
             final Pipeline pipeline = pipeline();
             when(pipeline.configuredProviderSpends()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
             when(pipeline.redoRejectedAnswers(any())).thenThrow(new Pipeline.NothingToRedoException(prepDir));
@@ -1343,7 +1343,7 @@ class RunsPresenterTest {
         void onAnAgentRouteARunWithNothingToRedoIsAskedAfreshRatherThanRefused() {
             final Pipeline pipeline = pipeline();
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
             when(pipeline.redoRejectedAnswers(any())).thenThrow(new Pipeline.NothingToRedoException(prepDir));
             when(pipeline.launchPromptFor(any())).thenReturn("Sift the photo sheets in ...");
@@ -1361,10 +1361,10 @@ class RunsPresenterTest {
             final Pipeline pipeline = pipeline();
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
             when(pipeline.configuredProviderSpends()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
             when(pipeline.redoRejectedAnswers(any())).thenReturn("write them again");
-            final JobHandle<CullJobOutcome> job = finished();
+            final JobHandle<SiftJobOutcome> job = finished();
             when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
@@ -1381,7 +1381,7 @@ class RunsPresenterTest {
         void onAnAgentRouteTheSamePressStartsNothing() {
             final Pipeline pipeline = pipeline();
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
             when(pipeline.redoRejectedAnswers(any())).thenReturn("write them again");
             final var presenter = runsPresenter(pipeline);
@@ -1399,7 +1399,7 @@ class RunsPresenterTest {
             final Pipeline pipeline = pipeline();
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
             when(pipeline.configuredProviderSpends()).thenReturn(true);
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
             when(pipeline.redoRejectedAnswers(any()))
                     .thenThrow(new Pipeline.NothingToRedoException(prepDir));
@@ -1414,7 +1414,7 @@ class RunsPresenterTest {
         @Test
         void aPressBlockedByALockedFileReportsItWithTheTechnicalTextToQuote() {
             final Pipeline pipeline = pipeline();
-            when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+            when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(
                     List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
             final Path prepDir = Path.of("logs", "sift-prep", "2019");
             when(pipeline.redoRejectedAnswers(any()))
@@ -1429,9 +1429,9 @@ class RunsPresenterTest {
         }
     }
 
-    private static RunsPresenter presenterOver(final CullRunSummary... runs) {
+    private static RunsPresenter presenterOver(final SiftRunSummary... runs) {
         final Pipeline pipeline = pipeline();
-        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(runs)));
+        when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(runs)));
         final var presenter = runsPresenter(pipeline);
         presenter.refresh();
         return presenter;
@@ -1472,18 +1472,18 @@ class RunsPresenterTest {
         return matching.getFirst();
     }
 
-    private static CullRunSummary run(final String scope, final State state) {
+    private static SiftRunSummary run(final String scope, final State state) {
         return run(scope, state, List.of());
     }
 
-    private static CullRunSummary run(final String scope, final State state, final List<Finding> findings) {
-        return new CullRunSummary(scope, Path.of("logs", "sift-prep", scope),
+    private static SiftRunSummary run(final String scope, final State state, final List<Finding> findings) {
+        return new SiftRunSummary(scope, Path.of("logs", "sift-prep", scope),
                 new PrepDirHealth(state, findings),
                 state == State.DAMAGED || state == State.COMPLETE ? null : new ShardTally(2, 2, 4),
                 Instant.now());
     }
 
-    private static CullRunSummary runWithRejectedAnswers(final String scope, final State state) {
+    private static SiftRunSummary runWithRejectedAnswers(final String scope, final State state) {
         return run(scope, state, List.of(new Finding.PhotosNotJudged("montage-001", List.of("IMG_1.jpg"))));
     }
 
@@ -1492,7 +1492,7 @@ class RunsPresenterTest {
     @SuppressWarnings("unchecked")
     private static String sweptSaying(final PurgeReport report) {
         final Pipeline pipeline = pipeline();
-        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2018", State.COMPLETE))));
+        when(pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(run("2018", State.COMPLETE))));
         final JobHandle<PurgeReport> handle = mock(JobHandle.class);
         when(handle.onComplete()).thenReturn(CompletableFuture.completedFuture(report));
         when(pipeline.purgeCompleted()).thenReturn(handle);

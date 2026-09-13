@@ -2,7 +2,7 @@ package photos.sluice.adapter.imaging;
 
 import org.junit.jupiter.api.Test;
 import photos.sluice.adapter.imaging.MontageBuilder.MontageTile;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.awt.Color;
 import java.awt.Graphics2D;

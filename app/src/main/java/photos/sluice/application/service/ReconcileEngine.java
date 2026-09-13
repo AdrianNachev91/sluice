@@ -3,18 +3,18 @@ package photos.sluice.application.service;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
-import photos.sluice.application.port.out.CullPrepPort;
+import photos.sluice.application.port.out.SiftPrepPort;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.Sha256Port;
 import photos.sluice.application.service.MoveLedger.Ledger;
-import photos.sluice.domain.cull.Decision;
-import photos.sluice.domain.cull.Decision.Classification;
-import photos.sluice.domain.cull.Decision.NearDupChosen;
-import photos.sluice.domain.cull.Decision.NearDupReject;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.PrepDir;
-import photos.sluice.domain.cull.ReconcileReport;
-import photos.sluice.domain.cull.ValidationReport;
+import photos.sluice.domain.sift.Decision;
+import photos.sluice.domain.sift.Decision.Classification;
+import photos.sluice.domain.sift.Decision.NearDupChosen;
+import photos.sluice.domain.sift.Decision.NearDupReject;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.PrepDir;
+import photos.sluice.domain.sift.ReconcileReport;
+import photos.sluice.domain.sift.ValidationReport;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -49,10 +49,10 @@ import java.util.Set;
 public class ReconcileEngine {
 
     private final MediaStore mediaStore;
-    private final CullPrepPort cullPrepPort;
+    private final SiftPrepPort siftPrepPort;
     private final Sha256Port sha256Port;
     private final DisasterDrawer disasterDrawer;
-    private final CullDestinations cullDestinations;
+    private final SiftDestinations siftDestinations;
     private final MoveLedger moveLedger;
     private final ApplyPlanner applyPlanner;
 
@@ -60,22 +60,22 @@ public class ReconcileEngine {
      * Creates a reconcile engine wired to its collaborators.
      *
      * @param mediaStore {@link MediaStore} checks which files exist on disk
-     * @param cullPrepPort {@link CullPrepPort} reads the prep dir's index
+     * @param siftPrepPort {@link SiftPrepPort} reads the prep dir's index
      * @param sha256Port {@link Sha256Port} hashes a located destination for the rebuilt record
      * @param disasterDrawer {@link DisasterDrawer} files the untrusted ledger away before rebuilding
-     * @param cullDestinations {@link CullDestinations} resolves where each decision would have gone
+     * @param siftDestinations {@link SiftDestinations} resolves where each decision would have gone
      * @param moveLedger {@link MoveLedger} appends the reconstructed records
      * @param applyPlanner {@link ApplyPlanner} validates the shard contract before any rebuild
      */
-    public ReconcileEngine(final MediaStore mediaStore, final CullPrepPort cullPrepPort, final Sha256Port sha256Port,
-                           final DisasterDrawer disasterDrawer, final CullDestinations cullDestinations,
+    public ReconcileEngine(final MediaStore mediaStore, final SiftPrepPort siftPrepPort, final Sha256Port sha256Port,
+                           final DisasterDrawer disasterDrawer, final SiftDestinations siftDestinations,
                            final MoveLedger moveLedger,
                            final ApplyPlanner applyPlanner) {
         this.mediaStore = mediaStore;
-        this.cullPrepPort = cullPrepPort;
+        this.siftPrepPort = siftPrepPort;
         this.sha256Port = sha256Port;
         this.disasterDrawer = disasterDrawer;
-        this.cullDestinations = cullDestinations;
+        this.siftDestinations = siftDestinations;
         this.moveLedger = moveLedger;
         this.applyPlanner = applyPlanner;
     }
@@ -95,7 +95,7 @@ public class ReconcileEngine {
      * @throws ApplyException if the shard contract itself does not validate cleanly
      */
     public ReconcileReport reconcile(final Path prepDirPath) throws ApplyException {
-        final PrepDir prepDir = this.cullPrepPort.readIndex(prepDirPath);
+        final PrepDir prepDir = this.siftPrepPort.readIndex(prepDirPath);
         // One snapshot for this whole reconcile, taken before either filing below - see Ledger's
         // own Javadoc. validate() and resolvedUnreviewable() both consume it, and the sweep reads
         // its skips. Taking it later would also read a filed-away choices file as simply absent,
@@ -114,10 +114,10 @@ public class ReconcileEngine {
             this.fileAway(prepDirPath, this.moveLedger.choicesLogFor(prepDirPath), MoveLedger.CHOICES_DRAWER_LABEL);
         }
 
-        final Map<String, Path> nearDupAnchors = CullDestinations.nearDupAnchors(validation.decisions());
+        final Map<String, Path> nearDupAnchors = SiftDestinations.nearDupAnchors(validation.decisions());
         final var sweep = new ReconcileSweep(prepDirPath, moveRecordLog, ledger.skipped());
         validation.decisions().forEach(decision -> this.reconcileDecision(decision, nearDupAnchors, sweep));
-        unreviewableFiles.forEach(file -> this.reconcileFile(file, this.cullDestinations.unreviewableDir(file), sweep));
+        unreviewableFiles.forEach(file -> this.reconcileFile(file, this.siftDestinations.unreviewableDir(file), sweep));
         this.resolvePendingMoves(sweep);
 
         return new ReconcileReport(sweep.reconstructed, sweep.stillPending, sweep.skipped, sweep.missingSource,
@@ -142,7 +142,7 @@ public class ReconcileEngine {
     /**
      * One decision's step in the sweep, dispatched by decision type. A NearDupReject resolves its
      * destination from the group's chosen keeper, not its own file - see
-     * {@link CullDestinations#duplicatesDir}.
+     * {@link SiftDestinations#duplicatesDir}.
      *
      * @param decision {@link Decision} the decision to reconcile
      * @param nearDupAnchors a {@link Map} of {@link String} to {@link Path} each near-dup group's keeper file, by
@@ -154,8 +154,8 @@ public class ReconcileEngine {
         switch (decision) {
             case final NearDupChosen c -> this.reconcileNearDupChosen(c, sweep);
             case final NearDupReject reject -> this.reconcileFile(reject.file(),
-                    this.cullDestinations.duplicatesDir(nearDupAnchors.get(reject.group()), reject.group()), sweep);
-            case final Classification c -> this.reconcileFile(c.file(), this.cullDestinations.destinationDirFor(c), sweep);
+                    this.siftDestinations.duplicatesDir(nearDupAnchors.get(reject.group()), reject.group()), sweep);
+            case final Classification c -> this.reconcileFile(c.file(), this.siftDestinations.destinationDirFor(c), sweep);
         }
     }
 
@@ -266,11 +266,11 @@ public class ReconcileEngine {
     private List<Path> contiguousCandidates(final Path destDir, final String baseName) {
         final var candidates = new ArrayList<Path>();
         int slot = 1;
-        Path candidate = destDir.resolve(CullDestinations.candidateName(baseName, slot));
+        Path candidate = destDir.resolve(SiftDestinations.candidateName(baseName, slot));
         while (this.mediaStore.exists(candidate)) {
             candidates.add(candidate);
             slot++;
-            candidate = destDir.resolve(CullDestinations.candidateName(baseName, slot));
+            candidate = destDir.resolve(SiftDestinations.candidateName(baseName, slot));
         }
         return candidates;
     }

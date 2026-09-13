@@ -7,7 +7,7 @@ import photos.sluice.application.port.in.SortedTally;
 import photos.sluice.application.port.in.SortedTally.MonthRow;
 import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRuns;
+import photos.sluice.domain.sift.SiftRuns;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -36,7 +36,7 @@ class FolderCountsTest {
         when(this.pipeline.inboxTally()).thenReturn(new InboxTally(300, 1_000_000L));
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
                 new YearRow(2019, 100, 10, List.of(new MonthRow(6, 40, 10)))), 0));
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of()));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of()));
     }
 
     @Test
@@ -243,7 +243,7 @@ class FolderCountsTest {
     @Test
     void aRunsFolderThatThrowsLeavesTheInboxAndSortedCountsAlone() {
         final FolderCounts counts = this.counts();
-        when(this.pipeline.cullRuns()).thenThrow(new IllegalStateException("the folder is gone"));
+        when(this.pipeline.siftRuns()).thenThrow(new IllegalStateException("the folder is gone"));
 
         counts.refresh();
 

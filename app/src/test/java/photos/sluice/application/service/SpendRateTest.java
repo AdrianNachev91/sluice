@@ -4,7 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import photos.sluice.application.port.out.RunEnding;
 import photos.sluice.application.port.out.SpendLedgerEntry;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.MontageConfig;
 
 import java.time.Instant;
 import java.util.List;
@@ -148,20 +148,20 @@ class SpendRateTest {
                 .callsPerMontage()).isEqualTo(1.0);
     }
 
-    private static SpendLedgerEntry ending(final RunEnding ending, final int montagesCulled, final int apiCalls,
+    private static SpendLedgerEntry ending(final RunEnding ending, final int montagesSifted, final int apiCalls,
                                            final long outputTokens) {
-        final SpendLedgerEntry completed = run(MODEL, SHIPPED, montagesCulled, apiCalls, outputTokens);
+        final SpendLedgerEntry completed = run(MODEL, SHIPPED, montagesSifted, apiCalls, outputTokens);
         return new SpendLedgerEntry(completed.endedAt(), completed.scope(), completed.providerId(),
-                completed.modelId(), completed.tileSize(), completed.tilesPerRow(), completed.montagesCulled(),
+                completed.modelId(), completed.tileSize(), completed.tilesPerRow(), completed.montagesSifted(),
                 completed.montagesSkipped(), completed.apiCalls(), completed.inputTokens(),
                 completed.outputTokens(), ending);
     }
 
     private static SpendLedgerEntry run(final @Nullable String modelId, final MontageConfig grid,
-                                        final int montagesCulled,
+                                        final int montagesSifted,
                                         final int apiCalls, final long outputTokens) {
         return new SpendLedgerEntry(Instant.parse("2026-08-22T10:00:00Z"), "2019-06", "anthropic", modelId,
-                grid.tileSize(), grid.tilesPerRow(), montagesCulled, 0, apiCalls, 100_000, outputTokens,
+                grid.tileSize(), grid.tilesPerRow(), montagesSifted, 0, apiCalls, 100_000, outputTokens,
                 RunEnding.APPLIED);
     }
 }

@@ -8,10 +8,10 @@ import photos.sluice.application.port.out.WorkingRootLock;
 import photos.sluice.application.service.JobRunner;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.config.SettingsFixture;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.DiscardReport;
-import photos.sluice.domain.cull.PrepDirHealth;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.DiscardReport;
+import photos.sluice.domain.sift.PrepDirHealth;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.paths.PathViolation;
 
@@ -41,7 +41,7 @@ class DiscardCommandTest {
     @Test
     void withoutYesItRefusesAndNamesWhatIsLost() {
         when(this.address.folderFor(eq("2019"))).thenReturn(PREP_DIR);
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(runWith(3))));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(runWith(3))));
         when(this.pipeline.configuredProviderSpends()).thenReturn(true);
         when(this.pipeline.archivesFolder()).thenReturn(Path.of("D:", "Sift", "archives"));
 
@@ -81,27 +81,27 @@ class DiscardCommandTest {
     @Test
     void aRunWithNoShardsYetIsNotAskedToConfirmMoney() {
         when(this.address.folderFor(eq("2019"))).thenReturn(PREP_DIR);
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(runWith(0))));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of(runWith(0))));
 
         final CliHarness.Result result = this.run("discard", "2019");
 
         assertThat(result.err()).doesNotContain("sheet decision").contains("--yes");
     }
 
-    // The run address resolved to a folder cullRuns() does not enumerate: an absolute path that
+    // The run address resolved to a folder siftRuns() does not enumerate: an absolute path that
     // does not match any listed prep dir. The cost here is genuinely unknown, not zero.
     @Test
     void aRunNotAmongThoseListedSaysTheCostCouldNotBeConfirmed() {
         when(this.address.folderFor(eq("2019"))).thenReturn(PREP_DIR);
-        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of()));
+        when(this.pipeline.siftRuns()).thenReturn(new SiftRuns.Listed(List.of()));
 
         final CliHarness.Result result = this.run("discard", "2019");
 
         assertThat(result.err()).contains("The number of paid sheet decisions is unknown").contains("--yes");
     }
 
-    private static CullRunSummary runWith(final int validShards) {
-        return new CullRunSummary("2019", PREP_DIR, new PrepDirHealth(PrepDirHealth.State.BLOCKED, List.of()),
+    private static SiftRunSummary runWith(final int validShards) {
+        return new SiftRunSummary("2019", PREP_DIR, new PrepDirHealth(PrepDirHealth.State.BLOCKED, List.of()),
                 new ShardTally(validShards, validShards, validShards), Instant.EPOCH);
     }
 

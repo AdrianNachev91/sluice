@@ -3,8 +3,8 @@ package photos.sluice.adapter.cli;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -36,7 +36,7 @@ public class DiscardConfirmation {
      * @return {@link String} the sentence a caller is told without {@code --yes}
      */
     String messageFor(final Path prepDir) {
-        final Optional<CullRunSummary> run = this.runAt(prepDir);
+        final Optional<SiftRunSummary> run = this.runAt(prepDir);
         final String paidDecisionsText = run.map(this::paidDecisionsClause)
                 .orElse("The number of paid sheet decisions is unknown. ");
         return paidDecisionsText + "Discarding this run's records will archive them. They will stay on disk in "
@@ -46,10 +46,10 @@ public class DiscardConfirmation {
     /**
      * What a found run's own shard count says about what would be lost.
      *
-     * @param run {@link CullRunSummary} the run, freshly diagnosed
+     * @param run {@link SiftRunSummary} the run, freshly diagnosed
      * @return {@link String} the clause, empty when nothing counted is worth naming
      */
-    private String paidDecisionsClause(final CullRunSummary run) {
+    private String paidDecisionsClause(final SiftRunSummary run) {
         final var sheets = run.shards();
         if (sheets == null || sheets.valid() == 0) {
             return "";
@@ -64,14 +64,14 @@ public class DiscardConfirmation {
      * The run at this folder, read off a fresh sweep of the sift-prep root.
      *
      * @param prepDir {@link Path} the run
-     * @return an {@link Optional} of {@link CullRunSummary} the run, empty when it is not among
+     * @return an {@link Optional} of {@link SiftRunSummary} the run, empty when it is not among
      *         those found or the sift-prep root could not be read
      */
-    private Optional<CullRunSummary> runAt(final Path prepDir) {
-        return switch (this.pipeline.cullRuns()) {
-            case CullRuns.Listed(final List<CullRunSummary> runs) ->
+    private Optional<SiftRunSummary> runAt(final Path prepDir) {
+        return switch (this.pipeline.siftRuns()) {
+            case SiftRuns.Listed(final List<SiftRunSummary> runs) ->
                     runs.stream().filter(run -> run.prepDir().equals(prepDir)).findFirst();
-            case final CullRuns.Unlistable ignored -> Optional.empty();
+            case final SiftRuns.Unlistable ignored -> Optional.empty();
         };
     }
 

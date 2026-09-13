@@ -1,9 +1,9 @@
 package photos.sluice.adapter.cli;
 
 import org.jspecify.annotations.Nullable;
-import photos.sluice.domain.cull.Finding;
-import photos.sluice.domain.cull.PrepDirHealth;
-import photos.sluice.domain.cull.TroubleshootReport;
+import photos.sluice.domain.sift.Finding;
+import photos.sluice.domain.sift.PrepDirHealth;
+import photos.sluice.domain.sift.TroubleshootReport;
 
 import java.util.List;
 

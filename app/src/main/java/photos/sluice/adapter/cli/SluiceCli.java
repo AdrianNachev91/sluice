@@ -22,7 +22,7 @@ import java.util.concurrent.Callable;
 @Command(name = "sluice", description = "Sluice organises your photos and videos.",
         versionProvider = SluiceVersionProvider.class,
         subcommands = {AppCommand.class, RunsCommand.class, SortCommand.class, CommitCommand.class,
-                RescueCommand.class, CullCommand.class, ResumeCommand.class, ImportCommand.class,
+                RescueCommand.class, SiftCommand.class, ResumeCommand.class, ImportCommand.class,
                 TroubleshootCommand.class, AnswerCommand.class, DiscardCommand.class, PurgeCommand.class,
                 RedoCommand.class, SkillCommand.class})
 public class SluiceCli implements Callable<Integer> {

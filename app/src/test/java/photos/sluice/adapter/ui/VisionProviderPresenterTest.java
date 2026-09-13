@@ -4,7 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.in.VisionProviderCatalog;
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.ModelOption;
@@ -14,7 +14,7 @@ import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
-import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.sift.MontageConfig;
 import photos.sluice.secrets.SecretHolding;
 import photos.sluice.secrets.SecretHolding.Holding;
 import photos.sluice.secrets.SecretId;
@@ -431,14 +431,14 @@ class VisionProviderPresenterTest {
 
     @Test
     void testConnectionAsksTheCatalogAboutTheCandidateEndpointRatherThanWhatIsStored() {
-        final var received = new ArrayList<CullProviderSettings>();
+        final var received = new ArrayList<SiftProviderSettings>();
         final VisionProviderPresenter visionProvider = new VisionProviderPresenter(new FixedSecretStore(new InKeyring()),
                 candidateCapturingCatalog(received), new FixedSettingsUseCase(settings(null, null, null)));
 
         final VisionProviderPresenter.ConnectionCheckResult result =
                 visionProvider.testConnection("anthropic", "https://example.test");
 
-        assertThat(received).containsExactly(new CullProviderSettings(null, "https://example.test", null));
+        assertThat(received).containsExactly(new SiftProviderSettings(null, "https://example.test", null));
         assertThat(result.message()).contains("This works");
         assertThat(result.succeeded()).isTrue();
     }
@@ -446,13 +446,13 @@ class VisionProviderPresenterTest {
     // Sent as "" the provider would be asked about an endpoint that is not an address.
     @Test
     void testConnectionSendsABlankEndpointAsNoEndpointAtAll() {
-        final var received = new ArrayList<CullProviderSettings>();
+        final var received = new ArrayList<SiftProviderSettings>();
         final VisionProviderPresenter visionProvider = new VisionProviderPresenter(new FixedSecretStore(new InKeyring()),
                 candidateCapturingCatalog(received), new FixedSettingsUseCase(settings(null, null, null)));
 
         visionProvider.testConnection("anthropic", "   ");
 
-        assertThat(received).containsExactly(new CullProviderSettings(null, null, null));
+        assertThat(received).containsExactly(new SiftProviderSettings(null, null, null));
     }
 
     @Test
@@ -603,7 +603,7 @@ class VisionProviderPresenterTest {
             }
 
             @Override
-            public ProviderCheck check(final String id, final CullProviderSettings candidate) {
+            public ProviderCheck check(final String id, final SiftProviderSettings candidate) {
                 return checkById.apply(id);
             }
         };
@@ -642,7 +642,7 @@ class VisionProviderPresenterTest {
     // checkingCatalog ignores the candidate its own check(id, candidate) is given. This one reads
     // it back, so a test can prove testConnection forwards the screen's typed endpoint rather than
     // what is stored.
-    private static VisionProviderCatalog candidateCapturingCatalog(final List<CullProviderSettings> received) {
+    private static VisionProviderCatalog candidateCapturingCatalog(final List<SiftProviderSettings> received) {
         final VisionProviderCatalog delegate = checkingCatalog(_ -> new ProviderCheck.Rejected());
         return new VisionProviderCatalog() {
             @Override
@@ -661,7 +661,7 @@ class VisionProviderPresenterTest {
             }
 
             @Override
-            public ProviderCheck check(final String id, final CullProviderSettings candidate) {
+            public ProviderCheck check(final String id, final SiftProviderSettings candidate) {
                 received.add(candidate);
                 return new ProviderCheck.Accepted(MODELS);
             }
@@ -687,7 +687,7 @@ class VisionProviderPresenterTest {
             }
 
             @Override
-            public ProviderCheck check(final String id, final CullProviderSettings candidate) {
+            public ProviderCheck check(final String id, final SiftProviderSettings candidate) {
                 throw new AssertionError("no test here presses a credential check");
             }
         };
@@ -696,7 +696,7 @@ class VisionProviderPresenterTest {
     private static Settings settings(final @Nullable String workingRoot, final @Nullable String libraryRoot,
                                      final @Nullable String inbox) {
         return new Settings(new PathSettings(workingRoot, libraryRoot, inbox), "anthropic",
-                Map.of("anthropic", new CullProviderSettings("claude-opus-5", null, null)), List.of(),
+                Map.of("anthropic", new SiftProviderSettings("claude-opus-5", null, null)), List.of(),
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM);
     }
 

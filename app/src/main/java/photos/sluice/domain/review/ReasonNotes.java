@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
  * read back. One line per photo, naming the file, when it was taken, and why it is here.
  *
  * <p>A line's date is what lets a rescue put the photo back under the month it came from. A reader
- * is invited to open the folder and weed it. A reason can be free text a culling agent wrote. A
+ * is invited to open the folder and weed it. A reason can be free text a sifting agent wrote. A
  * line read back is input from outside on both counts. Anything that does not match exactly yields
  * no date at all, and never a guessed one.
  *
@@ -45,7 +45,7 @@ public final class ReasonNotes {
     // too small: nothing else here holds a date it doubts.
     private static final String LOW_CONFIDENCE = ", low confidence date";
 
-    // Every shape a line break takes, since a reason travels here as JSON out of a culling agent.
+    // Every shape a line break takes, since a reason travels here as JSON out of a sifting agent.
     private static final Pattern LINE_BREAK = Pattern.compile("\\R");
 
     // The name reluctantly, so the date is the first parenthesised one that a separator follows.
@@ -181,7 +181,7 @@ public final class ReasonNotes {
     /**
      * A reason flattened to fit the one line its photo gets.
      *
-     * <p>A reason is free text a culling agent wrote, and the shard contract asks only that it not
+     * <p>A reason is free text a sifting agent wrote, and the shard contract asks only that it not
      * be blank.
      *
      * @param reason {@link String} why the photo is in this folder, as its writer gave it

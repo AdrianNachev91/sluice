@@ -18,7 +18,7 @@ import photos.sluice.application.port.in.ReviewListing.FiledBy;
 import photos.sluice.application.port.in.ReviewListing.Folder;
 import photos.sluice.application.port.in.ReviewListing.Root;
 import photos.sluice.application.service.Pipeline;
-import photos.sluice.domain.cull.JunkCategory;
+import photos.sluice.domain.sift.JunkCategory;
 
 import java.nio.file.Path;
 import java.time.Instant;

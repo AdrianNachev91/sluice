@@ -1,7 +1,7 @@
 package photos.sluice.adapter.imaging;
 
 import org.springframework.stereotype.Component;
-import photos.sluice.domain.cull.SidecarPhotoEntry;
+import photos.sluice.domain.sift.SidecarPhotoEntry;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -16,7 +16,7 @@ import java.util.List;
  * <p>{@link java.nio.file.Path} and {@link java.time.Instant} values serialize as plain strings,
  * via this class's private record fields. Jackson's own {@code Path}/{@code Instant} handling is
  * not used, since its default {@code Path} serializer emits a {@code file://} URI. This project's
- * on-disk contract, and the culler agent reading it, expect a plain path string instead.
+ * on-disk contract, and the sieve agent reading it, expect a plain path string instead.
  */
 @Component
 public class SidecarWriter {

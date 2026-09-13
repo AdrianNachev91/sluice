@@ -4,7 +4,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * The effect boundary application services use to record what each cull run consumed, and to read
+ * The effect boundary application services use to record what each sift run consumed, and to read
  * back the runs already recorded.
  *
  * <p>Append-only, one line per run, never replaced. The rate the estimate projects from is derived

@@ -1,10 +1,10 @@
 package photos.sluice.adapter.fs;
 
-import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.SiftProviderSettings;
 import photos.sluice.application.port.out.MalformedSettingsException;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.SettingsStore;
-import photos.sluice.domain.cull.CullCategory;
+import photos.sluice.domain.sift.SiftCategory;
 
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
@@ -70,15 +70,15 @@ public class YamlSettingsStore implements SettingsStore {
         YamlConfigFile.set(montage, "tile-size", settings.montage().tileSize());
         YamlConfigFile.set(montage, "tiles-per-row", settings.montage().tilesPerRow());
 
-        final Map<String, Object> cull = this.document.ensureGroup(sluice, "sift");
-        YamlConfigFile.set(cull, "provider", settings.provider());
-        YamlConfigFile.set(cull, "categories", categories(settings.categories()));
+        final Map<String, Object> sift = this.document.ensureGroup(sluice, "sift");
+        YamlConfigFile.set(sift, "provider", settings.provider());
+        YamlConfigFile.set(sift, "categories", categories(settings.categories()));
 
         // One group per provider, merged into rather than replaced. A block belonging to a provider
         // this install does not have then survives a save, the same way any unknown key does.
-        final Map<String, Object> providerSettings = this.document.ensureGroup(cull, "provider-settings");
-        for (final Map.Entry<String, CullProviderSettings> entry : settings.providerSettingsById().entrySet()) {
-            final CullProviderSettings provider = entry.getValue();
+        final Map<String, Object> providerSettings = this.document.ensureGroup(sift, "provider-settings");
+        for (final Map.Entry<String, SiftProviderSettings> entry : settings.providerSettingsById().entrySet()) {
+            final SiftProviderSettings provider = entry.getValue();
             final Map<String, Object> group = this.document.ensureGroup(providerSettings, entry.getKey());
             YamlConfigFile.set(group, "model", provider.model());
             YamlConfigFile.set(group, "endpoint", provider.endpoint());
@@ -88,7 +88,7 @@ public class YamlSettingsStore implements SettingsStore {
         // nothing under it reaches YAML as `provider-settings: {}`. That binds to a string rather
         // than to a map of providers, so the next launch fails on the file this save just wrote.
         if (providerSettings.isEmpty()) {
-            YamlConfigFile.remove(cull, "provider-settings");
+            YamlConfigFile.remove(sift, "provider-settings");
         }
 
         final Map<String, Object> ui = this.document.ensureGroup(sluice, "ui");
@@ -100,12 +100,12 @@ public class YamlSettingsStore implements SettingsStore {
     /**
      * The category cards as a list of mappings, in the order they are configured.
      *
-     * @param categories a {@link List} of {@link CullCategory}, the cards to write
+     * @param categories a {@link List} of {@link SiftCategory}, the cards to write
      * @return a {@link List} of {@link Map} of {@link String} to {@link Object}, the mappings to store
      */
-    private static List<Map<String, Object>> categories(final List<CullCategory> categories) {
+    private static List<Map<String, Object>> categories(final List<SiftCategory> categories) {
         final List<Map<String, Object>> cards = new ArrayList<>();
-        for (final CullCategory category : categories) {
+        for (final SiftCategory category : categories) {
             final Map<String, Object> card = new LinkedHashMap<>();
             card.put("name", category.name());
             card.put("description", category.description());

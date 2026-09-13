@@ -6,7 +6,7 @@ import photos.sluice.adapter.fs.CsvSpendLedger;
 import photos.sluice.adapter.fs.InboxScanner;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.adapter.fs.Sha256Hasher;
-import photos.sluice.adapter.imaging.CullMontageRenderer;
+import photos.sluice.adapter.imaging.SiftMontageRenderer;
 import photos.sluice.adapter.imaging.ImageDimensionsReader;
 import photos.sluice.adapter.imaging.MontageBuilder;
 import photos.sluice.adapter.imaging.PrepIndexWriter;
@@ -16,13 +16,13 @@ import photos.sluice.adapter.metadata.ExifSource;
 import photos.sluice.adapter.metadata.FilenameSource;
 import photos.sluice.adapter.metadata.MtimeSource;
 import photos.sluice.adapter.metadata.TakeoutJsonSource;
-import photos.sluice.adapter.vision.JsonCullPrepStore;
-import photos.sluice.application.port.out.CullException;
-import photos.sluice.application.port.out.CullOptions;
-import photos.sluice.application.port.out.CullPrepPort;
-import photos.sluice.application.port.out.CullProviderSettings;
-import photos.sluice.application.port.out.CullReport;
-import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.adapter.vision.JsonSiftPrepStore;
+import photos.sluice.application.port.out.SiftException;
+import photos.sluice.application.port.out.SiftOptions;
+import photos.sluice.application.port.out.SiftPrepPort;
+import photos.sluice.application.port.out.SiftProviderSettings;
+import photos.sluice.application.port.out.SiftReport;
+import photos.sluice.application.port.out.SiftSettings;
 import photos.sluice.application.port.out.HeifDecoder;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.ProgressPort;
@@ -34,20 +34,20 @@ import photos.sluice.application.port.out.SpendForecast;
 import photos.sluice.application.port.out.SpendLedgerPort;
 import photos.sluice.application.port.out.TokenSpend;
 import photos.sluice.application.port.out.TransferProgress;
-import photos.sluice.application.port.out.VisionCuller;
+import photos.sluice.application.port.out.VisionSieve;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.SettingsFixture;
-import photos.sluice.domain.cull.ApplyReport;
-import photos.sluice.domain.cull.CullCategory;
-import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
-import photos.sluice.domain.cull.Decision;
-import photos.sluice.domain.cull.DecisionShard;
-import photos.sluice.domain.cull.MontageConfig;
-import photos.sluice.domain.cull.PrepDir;
-import photos.sluice.domain.cull.PrepDirHealth.State;
-import photos.sluice.domain.cull.SidecarPhotoEntry;
+import photos.sluice.domain.sift.ApplyReport;
+import photos.sluice.domain.sift.SiftCategory;
+import photos.sluice.domain.sift.SiftRunSummary;
+import photos.sluice.domain.sift.SiftRuns;
+import photos.sluice.domain.sift.Decision;
+import photos.sluice.domain.sift.DecisionShard;
+import photos.sluice.domain.sift.MontageConfig;
+import photos.sluice.domain.sift.PrepDir;
+import photos.sluice.domain.sift.PrepDirHealth.State;
+import photos.sluice.domain.sift.SidecarPhotoEntry;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.dating.RescueDateResolver;
 import photos.sluice.domain.job.CancellationSignal;
@@ -96,7 +96,7 @@ final class PipelineTestSupport {
                 throw new AssertionError("condition not met within " + timeout);
             }
             try {
-                // The busy-wait this polls for is a real background CullWatcher/JobRunner thread,
+                // The busy-wait this polls for is a real background SiftWatcher/JobRunner thread,
                 // not something this test can await via a latch or callback.
                 //noinspection BusyWait
                 Thread.sleep(10);
@@ -117,7 +117,7 @@ final class PipelineTestSupport {
             }
             try {
                 // Throttles this checking loop; the thing being watched is a real background
-                // CullWatcher thread, with no latch or callback to await instead.
+                // SiftWatcher thread, with no latch or callback to await instead.
                 //noinspection BusyWait
                 Thread.sleep(5);
             } catch (final InterruptedException e) {
@@ -139,18 +139,18 @@ final class PipelineTestSupport {
         waitUntil(timeout, () -> unresolvedRuns(pipeline).isEmpty() && !pipeline.isBusy());
     }
 
-    // An applied run stays on disk until purged, so cullRuns() keeps listing it and "no runs at
+    // An applied run stays on disk until purged, so siftRuns() keeps listing it and "no runs at
     // all" would never come true.
-    static List<CullRunSummary> unresolvedRuns(final Pipeline pipeline) {
-        return listed(pipeline.cullRuns()).stream()
+    static List<SiftRunSummary> unresolvedRuns(final Pipeline pipeline) {
+        return listed(pipeline.siftRuns()).stream()
                 .filter(run -> run.health().state() != State.COMPLETE)
                 .toList();
     }
 
     // Fails rather than returning empty on an unlistable root, so a test that meant to read runs
     // cannot pass by reading a failure as none.
-    static List<CullRunSummary> listed(final CullRuns runs) {
-        if (runs instanceof CullRuns.Listed(final List<CullRunSummary> found)) {
+    static List<SiftRunSummary> listed(final SiftRuns runs) {
+        if (runs instanceof SiftRuns.Listed(final List<SiftRunSummary> found)) {
             return found;
         }
         throw new AssertionError("The sift-prep root could not be listed: " + runs);
@@ -165,24 +165,24 @@ final class PipelineTestSupport {
     }
 
     static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore) {
-        return pipeline(root, progress, mediaStore, defaultCullSettings(), List.of(new ManualModeCuller()));
+        return pipeline(root, progress, mediaStore, defaultSiftSettings(), List.of(new ManualModeSieve()));
     }
 
-    static Pipeline cullPipeline(final Path root, final RecordingProgressPort progress) {
-        return pipeline(root, progress, new NioMediaStore(), defaultCullSettings(), List.of(new ManualModeCuller()));
+    static Pipeline siftPipeline(final Path root, final RecordingProgressPort progress) {
+        return pipeline(root, progress, new NioMediaStore(), defaultSiftSettings(), List.of(new ManualModeSieve()));
     }
 
-    static Pipeline cullPipeline(final Path root, final RecordingProgressPort progress, final CullSettings cullSettings,
-                                 final List<VisionCuller> cullers) {
-        return pipeline(root, progress, new NioMediaStore(), cullSettings, cullers);
+    static Pipeline siftPipeline(final Path root, final RecordingProgressPort progress, final SiftSettings siftSettings,
+                                 final List<VisionSieve> sieves) {
+        return pipeline(root, progress, new NioMediaStore(), siftSettings, sieves);
     }
 
     // Every other factory here wires a provider naming no credential, so what the machine holds
     // never comes up.
     static Pipeline credentialPipeline(final Path root, final RecordingProgressPort progress,
-                                       final List<VisionCuller> cullers, final SecretStore secretStore) {
-        return pipeline(root, progress, new NioMediaStore(), defaultCullSettings(), cullers, null,
-                new JsonCullPrepStore(), secretStore);
+                                       final List<VisionSieve> sieves, final SecretStore secretStore) {
+        return pipeline(root, progress, new NioMediaStore(), defaultSiftSettings(), sieves, null,
+                new JsonSiftPrepStore(), secretStore);
     }
 
     static Pipeline curatePipeline(final Path root, final RecordingProgressPort progress) {
@@ -190,37 +190,37 @@ final class PipelineTestSupport {
     }
 
     static Pipeline curatePipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore) {
-        return pipeline(root, progress, mediaStore, autoApproveCullSettings(), List.of(new AutoApproveCuller()));
+        return pipeline(root, progress, mediaStore, autoApproveSiftSettings(), List.of(new AutoApproveSieve()));
     }
 
     static SpendLedgerPort spendLedgerOf(final Path root) {
         return new CsvSpendLedger(SettingsFixture.workingRoot(root));
     }
 
-    static CullSettings autoApproveCullSettings() {
+    static SiftSettings autoApproveSiftSettings() {
         return new FixedSettings("auto-approve", List.of());
     }
 
     // A millisecond-scale poll interval, so a real auto-resume proves out without waiting on the
     // production cadence.
     static Pipeline watchPipeline(final Path root, final RecordingProgressPort progress,
-                                  final CullSettings cullSettings,
-                                  final List<VisionCuller> cullers, final Duration pollInterval) {
-        return pipeline(root, progress, new NioMediaStore(), cullSettings, cullers, pollInterval);
+                                  final SiftSettings siftSettings,
+                                  final List<VisionSieve> sieves, final Duration pollInterval) {
+        return pipeline(root, progress, new NioMediaStore(), siftSettings, sieves, pollInterval);
     }
 
     static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore,
-                             final CullSettings cullSettings, final List<VisionCuller> cullers) {
-        return pipeline(root, progress, mediaStore, cullSettings, cullers, null);
+                             final SiftSettings siftSettings, final List<VisionSieve> sieves) {
+        return pipeline(root, progress, mediaStore, siftSettings, sieves, null);
     }
 
     // A prep-dir reader that can be told to start failing its index reads, standing in for a file
     // held open by a backup or antivirus process. Reaching that state through the filesystem
     // instead would mean testing the OS. A directory in place of the file fails at the open on
     // Windows and at the first read on Linux, which are different clauses in the reader.
-    static final class FailableIndexReads implements CullPrepPort {
+    static final class FailableIndexReads implements SiftPrepPort {
 
-        private final CullPrepPort delegate = new JsonCullPrepStore();
+        private final SiftPrepPort delegate = new JsonSiftPrepStore();
         private boolean failing;
 
         void startFailing() {
@@ -418,31 +418,31 @@ final class PipelineTestSupport {
         }
     }
 
-    static Pipeline cullPipeline(final Path root, final RecordingProgressPort progress,
-                                 final CullPrepPort cullPrepPort) {
-        return pipeline(root, progress, new NioMediaStore(), defaultCullSettings(), List.of(new ManualModeCuller()),
-                null, cullPrepPort);
+    static Pipeline siftPipeline(final Path root, final RecordingProgressPort progress,
+                                 final SiftPrepPort siftPrepPort) {
+        return pipeline(root, progress, new NioMediaStore(), defaultSiftSettings(), List.of(new ManualModeSieve()),
+                null, siftPrepPort);
     }
 
     static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore,
-                             final CullSettings cullSettings, final List<VisionCuller> cullers,
+                             final SiftSettings siftSettings, final List<VisionSieve> sieves,
                              final @Nullable Duration pollInterval) {
-        return pipeline(root, progress, mediaStore, cullSettings, cullers, pollInterval, new JsonCullPrepStore());
+        return pipeline(root, progress, mediaStore, siftSettings, sieves, pollInterval, new JsonSiftPrepStore());
     }
 
     static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore,
-                             final CullSettings cullSettings, final List<VisionCuller> cullers,
-                             final @Nullable Duration pollInterval, final CullPrepPort cullPrepPort) {
-        return pipeline(root, progress, mediaStore, cullSettings, cullers, pollInterval, cullPrepPort,
+                             final SiftSettings siftSettings, final List<VisionSieve> sieves,
+                             final @Nullable Duration pollInterval, final SiftPrepPort siftPrepPort) {
+        return pipeline(root, progress, mediaStore, siftSettings, sieves, pollInterval, siftPrepPort,
                 new FixedSecretStore(null));
     }
 
-    // Real adapters throughout. CullMontageRenderer's HeifDecoder dependency is stubbed to always
+    // Real adapters throughout. SiftMontageRenderer's HeifDecoder dependency is stubbed to always
     // miss, none of these fixtures being HEIC or AVIF. A null pollInterval means Pipeline's own
     // production default.
     static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore,
-                             final CullSettings cullSettings, final List<VisionCuller> cullers,
-                             final @Nullable Duration pollInterval, final CullPrepPort cullPrepPort,
+                             final SiftSettings siftSettings, final List<VisionSieve> sieves,
+                             final @Nullable Duration pollInterval, final SiftPrepPort siftPrepPort,
                              final SecretStore secretStore) {
         final Path libraryRoot = createDirectory(root.resolve("Library"));
         final Path inbox = createDirectory(root.resolve("Inbox"));
@@ -462,32 +462,32 @@ final class PipelineTestSupport {
         final var rescueEngine = new RescueEngine(pathsConfig, mediaStore, rescueDateResolver, new Sha256Hasher());
 
         final HeifDecoder stubHeifDecoder = _ -> Optional.empty();
-        final var montageRenderer = new CullMontageRenderer(new TileRenderer(stubHeifDecoder), new MontageBuilder(),
-                new SidecarWriter(), new PrepIndexWriter(), mediaStore, pathsConfig, cullSettings);
-        final var cullDispatcher = new CullDispatcher(cullers, cullSettings);
+        final var montageRenderer = new SiftMontageRenderer(new TileRenderer(stubHeifDecoder), new MontageBuilder(),
+                new SidecarWriter(), new PrepIndexWriter(), mediaStore, pathsConfig, siftSettings);
+        final var siftDispatcher = new SiftDispatcher(sieves, siftSettings);
         final var disasterDrawer = new DisasterDrawer(mediaStore);
         final var moveLedger = new MoveLedger(mediaStore, disasterDrawer);
-        final var cullDestinations = new CullDestinations(pathsConfig);
-        final var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, sha256Port, pathsConfig);
-        final var applyEngine = new ApplyEngine(mediaStore, cullPrepPort, sha256Port, hashIndex, cullDestinations,
+        final var siftDestinations = new SiftDestinations(pathsConfig);
+        final var applyPlanner = new ApplyPlanner(mediaStore, siftPrepPort, sha256Port, pathsConfig);
+        final var applyEngine = new ApplyEngine(mediaStore, siftPrepPort, sha256Port, hashIndex, siftDestinations,
                 moveLedger, applyPlanner);
-        final var reconcileEngine = new ReconcileEngine(mediaStore, cullPrepPort, sha256Port, disasterDrawer,
-                cullDestinations, moveLedger, applyPlanner);
-        final var prepDirRemedies = new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig, cullSettings,
+        final var reconcileEngine = new ReconcileEngine(mediaStore, siftPrepPort, sha256Port, disasterDrawer,
+                siftDestinations, moveLedger, applyPlanner);
+        final var prepDirRemedies = new PrepDirRemedies(mediaStore, siftPrepPort, pathsConfig, siftSettings,
                 disasterDrawer, moveLedger);
-        final var prepDirDoctor = new PrepDirDoctor(cullPrepPort, mediaStore, applyPlanner, moveLedger);
+        final var prepDirDoctor = new PrepDirDoctor(siftPrepPort, mediaStore, applyPlanner, moveLedger);
         final var troubleshooter = new Troubleshooter(prepDirDoctor, reconcileEngine, prepDirRemedies, disasterDrawer);
         final var importEngine = new ImportEngine(mediaStore, pathsConfig, sha256Port);
         if (pollInterval == null) {
             return new Pipeline(sortEngine, commitEngine, rescueEngine, importEngine, montageRenderer,
-                    cullDispatcher, applyEngine,
-                    prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig,
+                    siftDispatcher, applyEngine,
+                    prepDirRemedies, siftPrepPort, siftSettings, mediaStore, pathsConfig,
                     new JobRunner(), progress, disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner,
                     moveLedger, pathValidation, spendLedger, secretStore);
         }
-        return new Pipeline(sortEngine, commitEngine, rescueEngine, importEngine, montageRenderer, cullDispatcher,
+        return new Pipeline(sortEngine, commitEngine, rescueEngine, importEngine, montageRenderer, siftDispatcher,
                 applyEngine,
-                prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig, new JobRunner(),
+                prepDirRemedies, siftPrepPort, siftSettings, mediaStore, pathsConfig, new JobRunner(),
                 progress, disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, moveLedger, pathValidation,
                 spendLedger, secretStore, pollInterval);
     }
@@ -507,11 +507,11 @@ final class PipelineTestSupport {
         final var pathsConfig = SettingsFixture.pathsConfig(root, root.resolve("Library"), root.resolve("Inbox"));
         final var mediaStore = new NioMediaStore();
         final var disasterDrawer = new DisasterDrawer(mediaStore);
-        return new PrepDirRemedies(mediaStore, new JsonCullPrepStore(), pathsConfig, defaultCullSettings(),
+        return new PrepDirRemedies(mediaStore, new JsonSiftPrepStore(), pathsConfig, defaultSiftSettings(),
                 disasterDrawer, new MoveLedger(mediaStore, disasterDrawer));
     }
 
-    static CullSettings defaultCullSettings() {
+    static SiftSettings defaultSiftSettings() {
         return new FixedSettings(MANUAL_PROVIDER_ID, List.of());
     }
 
@@ -590,7 +590,7 @@ final class PipelineTestSupport {
 
     // Reads the sidecar rather than taking a count, so a fixture that grows a photo stays covered.
     static void writeAllKeepsShard(final Path prepDir, final String montage) throws IOException {
-        writeShard(prepDir, montage, new JsonCullPrepStore().readSidecar(prepDir, montage).stream()
+        writeShard(prepDir, montage, new JsonSiftPrepStore().readSidecar(prepDir, montage).stream()
                 .map(photo -> keepJson(photo.src()))
                 .toArray(String[]::new));
     }
@@ -1199,19 +1199,19 @@ final class PipelineTestSupport {
         }
     }
 
-    // Stands in for the real ExternalAgentCuller, which is package-private and unreachable from
+    // Stands in for the real ExternalAgentSieve, which is package-private and unreachable from
     // here. Only a completeness check, gating on hasShard() rather than on full shard validation.
-    static final class ManualModeCuller implements VisionCuller {
+    static final class ManualModeSieve implements VisionSieve {
 
         private final @Nullable SecretId credential;
 
-        ManualModeCuller() {
+        ManualModeSieve() {
             this(null);
         }
 
         // A provider that authenticates. Manual mode otherwise, so a dispatch behaves the same
         // either way and only the credential varies.
-        ManualModeCuller(final @Nullable SecretId credential) {
+        ManualModeSieve(final @Nullable SecretId credential) {
             this.credential = credential;
         }
 
@@ -1239,7 +1239,7 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
+        public SiftReport sift(final PrepDir prep, final SiftOptions opts) throws SiftException {
             final List<String> missing = new ArrayList<>();
             int done = 0;
             for (final String montage : prep.entries()) {
@@ -1252,16 +1252,16 @@ final class PipelineTestSupport {
                 }
             }
             if (!missing.isEmpty()) {
-                throw new CullException("missing shard(s) for: " + missing);
+                throw new SiftException("missing shard(s) for: " + missing);
             }
-            return new CullReport(done, prep.entries().size() - done, 0,
+            return new SiftReport(done, prep.entries().size() - done, 0,
                     TokenSpend.none(MANUAL_PROVIDER_ID), false);
         }
     }
 
-    // Blocks before throwing the "not complete yet" CullException, so a test lands a real
+    // Blocks before throwing the "not complete yet" SiftException, so a test lands a real
     // cancellation at the exact moment dispatch is in flight.
-    record BlockingIncompleteCuller(CountDownLatch started, CountDownLatch release) implements VisionCuller {
+    record BlockingIncompleteSieve(CountDownLatch started, CountDownLatch release) implements VisionSieve {
         @Override
         public VisionProviderDescriptor describe() {
             return describing(MANUAL_PROVIDER_ID);
@@ -1283,7 +1283,7 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
+        public SiftReport sift(final PrepDir prep, final SiftOptions opts) throws SiftException {
             this.started.countDown();
             try {
                 this.release.await();
@@ -1291,7 +1291,7 @@ final class PipelineTestSupport {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
             }
-            throw new CullException("still incomplete");
+            throw new SiftException("still incomplete");
         }
     }
 
@@ -1300,8 +1300,8 @@ final class PipelineTestSupport {
     //
     // Unconditional rather than gated on hasShard(). The prep dir is always rebuilt fresh right
     // before dispatch runs, so a montage here can never already carry a shard.
-    static final class AutoApproveCuller implements VisionCuller {
-        @Nullable CullOptions receivedOptions;
+    static final class AutoApproveSieve implements VisionSieve {
+        @Nullable SiftOptions receivedOptions;
 
         @Override
         public VisionProviderDescriptor describe() {
@@ -1324,7 +1324,7 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(final PrepDir prep, final CullOptions opts) {
+        public SiftReport sift(final PrepDir prep, final SiftOptions opts) {
             this.receivedOptions = opts;
             for (final String montage : prep.entries()) {
                 try {
@@ -1333,12 +1333,12 @@ final class PipelineTestSupport {
                     throw new UncheckedIOException(e);
                 }
             }
-            return new CullReport(prep.entries().size(), 0, 0, TokenSpend.none(this.describe().id()), false);
+            return new SiftReport(prep.entries().size(), 0, 0, TokenSpend.none(this.describe().id()), false);
         }
     }
 
-    // Nothing validates CullReport, so a provider can hand back counts SpendLedgerEntry refuses.
-    static final class ImpossibleCountCuller implements VisionCuller {
+    // Nothing validates SiftReport, so a provider can hand back counts SpendLedgerEntry refuses.
+    static final class ImpossibleCountSieve implements VisionSieve {
         @Override
         public VisionProviderDescriptor describe() {
             return describing("auto-approve");
@@ -1360,7 +1360,7 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(final PrepDir prep, final CullOptions opts) {
+        public SiftReport sift(final PrepDir prep, final SiftOptions opts) {
             for (final String montage : prep.entries()) {
                 try {
                     writeAllKeepsShard(prep.prepDir(), montage);
@@ -1368,13 +1368,13 @@ final class PipelineTestSupport {
                     throw new UncheckedIOException(e);
                 }
             }
-            return new CullReport(prep.entries().size(), -1, 0, TokenSpend.none(this.describe().id()), false);
+            return new SiftReport(prep.entries().size(), -1, 0, TokenSpend.none(this.describe().id()), false);
         }
     }
 
     // Spends and then gives up, the way a real provider does when a montage fails its corrective
     // retry.
-    static final class SpendingThenFailingCuller implements VisionCuller {
+    static final class SpendingThenFailingSieve implements VisionSieve {
         @Override
         public VisionProviderDescriptor describe() {
             return describing("auto-approve");
@@ -1396,16 +1396,16 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
-            throw new CullException("gave up on a sheet", new CullReport(1, 0, 3,
+        public SiftReport sift(final PrepDir prep, final SiftOptions opts) throws SiftException {
+            throw new SiftException("gave up on a sheet", new SiftReport(1, 0, 3,
                     new TokenSpend(4_000, 800, "auto-approve", "a-model"), false));
         }
     }
 
-    // CeilingStoppedCuller with a gap held open in the middle. A test lands a cancellation in that
+    // CeilingStoppedSieve with a gap held open in the middle. A test lands a cancellation in that
     // gap, so both it and the ceiling stop are true when the engine picks which one to report.
-    record BlockingCuller(CountDownLatch started, CountDownLatch release, boolean stoppedAtCeiling)
-            implements VisionCuller {
+    record BlockingSieve(CountDownLatch started, CountDownLatch release, boolean stoppedAtCeiling)
+            implements VisionSieve {
         @Override
         public VisionProviderDescriptor describe() {
             return describing("auto-approve");
@@ -1427,7 +1427,7 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(final PrepDir prep, final CullOptions opts) {
+        public SiftReport sift(final PrepDir prep, final SiftOptions opts) {
             try {
                 writeAllKeepsShard(prep.prepDir(), prep.entries().getFirst());
             } catch (final IOException e) {
@@ -1440,14 +1440,14 @@ final class PipelineTestSupport {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
             }
-            return new CullReport(1, 0, 2, new TokenSpend(9_000, 3_000, "auto-approve", "a-model"),
+            return new SiftReport(1, 0, 2, new TokenSpend(9_000, 3_000, "auto-approve", "a-model"),
                     this.stoppedAtCeiling);
         }
     }
 
     // Judges the first montage and then reports that its ceiling ended the run. It forecasts a
     // real per-call figure, so the engine has something to build a ceiling from.
-    static final class CeilingStoppedCuller implements VisionCuller {
+    static final class CeilingStoppedSieve implements VisionSieve {
         @Nullable SpendCeiling receivedCeiling;
 
         @Override
@@ -1471,21 +1471,21 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(final PrepDir prep, final CullOptions opts) {
+        public SiftReport sift(final PrepDir prep, final SiftOptions opts) {
             this.receivedCeiling = opts.ceiling();
             try {
                 writeAllKeepsShard(prep.prepDir(), prep.entries().getFirst());
             } catch (final IOException e) {
                 throw new UncheckedIOException(e);
             }
-            return new CullReport(1, 0, 2, new TokenSpend(9_000, 3_000, "auto-approve", "a-model"), true);
+            return new SiftReport(1, 0, 2, new TokenSpend(9_000, 3_000, "auto-approve", "a-model"), true);
         }
     }
 
     // Writes a real "junk" classification for every photo in every montage rather than an
     // all-keeps shard, so apply has an actual move loop to run.
-    static final class JunkEverythingCuller implements VisionCuller {
-        private final CullPrepPort cullPrepPort = new JsonCullPrepStore();
+    static final class JunkEverythingSieve implements VisionSieve {
+        private final SiftPrepPort siftPrepPort = new JsonSiftPrepStore();
 
         @Override
         public VisionProviderDescriptor describe() {
@@ -1508,9 +1508,9 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(final PrepDir prep, final CullOptions opts) {
+        public SiftReport sift(final PrepDir prep, final SiftOptions opts) {
             for (final String montage : prep.entries()) {
-                final List<SidecarPhotoEntry> photos = this.cullPrepPort.readSidecar(prep.prepDir(), montage);
+                final List<SidecarPhotoEntry> photos = this.siftPrepPort.readSidecar(prep.prepDir(), montage);
                 final String[] decisions = photos.stream()
                         .map(photo -> classificationJson(photo.src(), "junk", "blurry"))
                         .toArray(String[]::new);
@@ -1520,15 +1520,15 @@ final class PipelineTestSupport {
                     throw new UncheckedIOException(e);
                 }
             }
-            return new CullReport(prep.entries().size(), 0, 0, TokenSpend.none(this.describe().id()), false);
+            return new SiftReport(prep.entries().size(), 0, 0, TokenSpend.none(this.describe().id()), false);
         }
     }
 
     // Succeeds at its own job and still produces a shard set apply refuses. Every decision names a
     // file no montage showed, whose basename matches no in-scope file either, so no
     // unique-basename heal can pull it back into scope. That is the shape a run needs to reach
-    // Blocked with no culler-side failure along the way.
-    static final class OutOfScopeCuller implements VisionCuller {
+    // Blocked with no sieve-side failure along the way.
+    static final class OutOfScopeSieve implements VisionSieve {
         @Override
         public VisionProviderDescriptor describe() {
             return describing("auto-approve");
@@ -1550,8 +1550,8 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(final PrepDir prep, final CullOptions opts) {
-            final CullPrepPort prepPort = new JsonCullPrepStore();
+        public SiftReport sift(final PrepDir prep, final SiftOptions opts) {
+            final SiftPrepPort prepPort = new JsonSiftPrepStore();
             for (final String montage : prep.entries()) {
                 // Keeps for every photo the sheet showed, so coverage holds and the out-of-scope
                 // file is the only thing left to report.
@@ -1565,13 +1565,13 @@ final class PipelineTestSupport {
                     throw new UncheckedIOException(e);
                 }
             }
-            return new CullReport(prep.entries().size(), 0, 0, TokenSpend.none(this.describe().id()), false);
+            return new SiftReport(prep.entries().size(), 0, 0, TokenSpend.none(this.describe().id()), false);
         }
     }
 
-    // Stands in for a provider that calls a model, so its CullException means the model could not
+    // Stands in for a provider that calls a model, so its SiftException means the model could not
     // answer rather than that shards are still arriving.
-    record ThrowingCuller(String id) implements VisionCuller {
+    record ThrowingSieve(String id) implements VisionSieve {
         @Override
         public VisionProviderDescriptor describe() {
             return describing(this.id);
@@ -1593,19 +1593,19 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
-            throw new CullException("the model could not produce a valid judgement");
+        public SiftReport sift(final PrepDir prep, final SiftOptions opts) throws SiftException {
+            throw new SiftException("the model could not produce a valid judgement");
         }
     }
 
-    // A signal-honoring stand-in for an automated provider, the same shape as AnthropicCuller. It
+    // A signal-honoring stand-in for an automated provider, the same shape as AnthropicSieve. It
     // writes a shard for each montage in turn, checking cancellation between them. It blocks after
     // the first shard, so a test can synchronize a mid-dispatch cancellation with a real observable
-    // signal instead of a guessed sleep. Cancellation is never surfaced as a CullException here. The
-    // loop just stops early and returns whatever partial CullReport it has - the real provider's own
+    // signal instead of a guessed sleep. Cancellation is never surfaced as a SiftException here. The
+    // loop just stops early and returns whatever partial SiftReport it has - the real provider's own
     // "never throws to signal a cancellation" contract.
-    record BlockingCancellableCuller(CountDownLatch firstShardWritten, CountDownLatch releaseRemaining)
-            implements VisionCuller {
+    record BlockingCancellableSieve(CountDownLatch firstShardWritten, CountDownLatch releaseRemaining)
+            implements VisionSieve {
 
         @Override
         public VisionProviderDescriptor describe() {
@@ -1628,16 +1628,16 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(final PrepDir prep, final CullOptions opts) {
-            return this.cull(prep, opts, ProgressCallback.NO_OP, CancellationSignal.NEVER);
+        public SiftReport sift(final PrepDir prep, final SiftOptions opts) {
+            return this.sift(prep, opts, ProgressCallback.NO_OP, CancellationSignal.NEVER);
         }
 
         @Override
-        public CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress,
+        public SiftReport sift(final PrepDir prep, final SiftOptions opts, final ProgressCallback progress,
                                final CancellationSignal cancellation) {
             final int total = prep.entries().size();
             int current = 0;
-            int culled = 0;
+            int sifted = 0;
             while (current < total && !cancellation.isCancelled()) {
                 final String montage = prep.entries().get(current);
                 current++;
@@ -1646,9 +1646,9 @@ final class PipelineTestSupport {
                 } catch (final IOException e) {
                     throw new UncheckedIOException(e);
                 }
-                culled++;
+                sifted++;
                 progress.tick(current, total);
-                if (culled == 1) {
+                if (sifted == 1) {
                     this.firstShardWritten.countDown();
                     try {
                         this.releaseRemaining.await();
@@ -1658,14 +1658,14 @@ final class PipelineTestSupport {
                     }
                 }
             }
-            return new CullReport(culled, total - culled, 0, TokenSpend.none(this.describe().id()), false);
+            return new SiftReport(sifted, total - sifted, 0, TokenSpend.none(this.describe().id()), false);
         }
     }
 
     // Any call into this fake fails its test outright. Two separate claims lean on that. One is
     // buildFreshAndDispatch()'s post-PREPPING cancellation check short-circuiting before dispatch.
     // The other is a resume skipping dispatch entirely once every montage already has a shard.
-    static final class NeverCalledCuller implements VisionCuller {
+    static final class NeverCalledSieve implements VisionSieve {
         @Override
         public VisionProviderDescriptor describe() {
             return describing(MANUAL_PROVIDER_ID);
@@ -1687,22 +1687,22 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(final PrepDir prep, final CullOptions opts) {
+        public SiftReport sift(final PrepDir prep, final SiftOptions opts) {
             throw new AssertionError("dispatch must never run: neither after a post-PREPPING "
                     + "cancellation, nor when every montage already has a shard");
         }
     }
 
-    record FixedSettings(String provider, List<CullCategory> categories)
-            implements CullSettings {
+    record FixedSettings(String provider, List<SiftCategory> categories)
+            implements SiftSettings {
         @Override
-        public CullProviderSettings providerSettings() {
-            return CullProviderSettings.unset();
+        public SiftProviderSettings providerSettings() {
+            return SiftProviderSettings.unset();
         }
 
         @Override
-        public CullProviderSettings providerSettings(final String providerId) {
-            return CullProviderSettings.unset();
+        public SiftProviderSettings providerSettings(final String providerId) {
+            return SiftProviderSettings.unset();
         }
 
         // tilesPerRow=1 gives one photo per montage, so a test controls exactly which montage a

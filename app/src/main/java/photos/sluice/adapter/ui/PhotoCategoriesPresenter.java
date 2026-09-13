@@ -11,9 +11,9 @@ import photos.sluice.adapter.ui.PhotoCategoriesView.CategoryRow;
 import photos.sluice.adapter.ui.PhotoCategoriesView.SaveOutcome;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.out.Settings;
-import photos.sluice.domain.cull.CategoryName;
-import photos.sluice.domain.cull.CullCategory;
-import photos.sluice.domain.cull.JunkCategory;
+import photos.sluice.domain.sift.CategoryName;
+import photos.sluice.domain.sift.SiftCategory;
+import photos.sluice.domain.sift.JunkCategory;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -25,7 +25,7 @@ import java.util.Set;
 /**
  * Decides what the Photo categories screen shows and carries out what a user does on it.
  *
- * <p>The screen edits the one part of the culling brain a user owns. Everything else an automated
+ * <p>The screen edits the one part of the sifting brain a user owns. Everything else an automated
  * provider is told, the safety rules, the output format and the shard contract, is the app's and is
  * not on any screen.
  *
@@ -65,8 +65,8 @@ public class PhotoCategoriesPresenter {
     // The whole examples box rather than one line of it, since the box is the control. Its own
     // per-line rule stays with the value type, which is what a save is judged against.
     private static final PhotoCategoriesView.Limits LIMITS = new PhotoCategoriesView.Limits(
-            CategoryName.maxLength(), CullCategory.maxDescriptionLength(),
-            CullCategory.maxExamples() * CullCategory.maxExample());
+            CategoryName.maxLength(), SiftCategory.maxDescriptionLength(),
+            SiftCategory.maxExamples() * SiftCategory.maxExample());
 
     private static final String TOO_MANY = "There is room for at most " + Settings.maxCategories()
             + " photo categories. Remove some before saving.";
@@ -145,8 +145,8 @@ public class PhotoCategoriesPresenter {
             return new SaveOutcome.Refused(TOO_MANY, refusals);
         }
         final Settings current = this.settingsUseCase.settings();
-        final List<CullCategory> cards = edits.stream()
-                .map(edit -> new CullCategory(edit.name().strip(), edit.description().strip(),
+        final List<SiftCategory> cards = edits.stream()
+                .map(edit -> new SiftCategory(edit.name().strip(), edit.description().strip(),
                         edit.examples(), edit.enabled()))
                 .toList();
         try {
@@ -262,7 +262,7 @@ public class PhotoCategoriesPresenter {
 
     /**
      * What is wrong with one card, judged in the screen's own words rather than by letting
-     * {@link CullCategory}'s constructor throw. A refused save has to mark the field at fault, and
+     * {@link SiftCategory}'s constructor throw. A refused save has to mark the field at fault, and
      * an exception carries no field.
      *
      * @param edit {@link CategoryEdit} the card being saved
@@ -306,23 +306,23 @@ public class PhotoCategoriesPresenter {
         final List<String> offered = edit.examples().stream()
                 .filter(example -> !example.isBlank())
                 .toList();
-        if (offered.size() > CullCategory.maxExamples()) {
-            return "Keep at most " + CullCategory.maxExamples() + " examples. There are "
+        if (offered.size() > SiftCategory.maxExamples()) {
+            return "Keep at most " + SiftCategory.maxExamples() + " examples. There are "
                     + offered.size() + ".";
         }
-        return offered.stream().anyMatch(example -> example.strip().length() > CullCategory.maxExample())
+        return offered.stream().anyMatch(example -> example.strip().length() > SiftCategory.maxExample())
                 ? "An example is a phrase, not a sentence. Keep each one to "
-                        + CullCategory.maxExample() + " characters."
+                        + SiftCategory.maxExample() + " characters."
                 : null;
     }
 
     /**
      * The card as a row, marking the one name with a destination of its own.
      *
-     * @param card {@link CullCategory} the configured card
+     * @param card {@link SiftCategory} the configured card
      * @return {@link CategoryRow} the row to draw
      */
-    private static CategoryRow row(final CullCategory card) {
+    private static CategoryRow row(final SiftCategory card) {
         final boolean builtIn = isBuiltIn(card.name());
         return new CategoryRow(card.name(), card.description(), card.examples(), card.enabled(),
                 builtIn ? FIXED_NOTE : null);

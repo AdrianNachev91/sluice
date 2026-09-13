@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ImageDimensionsReaderTest {
 
     private static final Path FIXTURES = Path.of("src/test/resources/dating");
-    private static final Path CULL_FIXTURES = Path.of("src/test/resources/cull");
+    private static final Path SIFT_FIXTURES = Path.of("src/test/resources/sift");
 
     private final ImageDimensionsReader reader = new ImageDimensionsReader();
 
@@ -65,7 +65,7 @@ class ImageDimensionsReaderTest {
     // This camera exposes exactly one Exif SubIFD, already carrying the true capture resolution.
     @Test
     void readsTrueCaptureResolutionFromARealCr2WithASingleSubIfd() {
-        final Path cr2 = CULL_FIXTURES.resolve("raw-samples/canon-eos-20d.cr2");
+        final Path cr2 = SIFT_FIXTURES.resolve("raw-samples/canon-eos-20d.cr2");
 
         final Optional<Dimensions> result = this.reader.read(cr2);
 
@@ -78,7 +78,7 @@ class ImageDimensionsReaderTest {
     // real high-resolution photo as low-res.
     @Test
     void readsTrueCaptureResolutionFromARealNefWhereTheFirstSubIfdHasNoDimensions() {
-        final Path nef = CULL_FIXTURES.resolve("raw-samples/nikon-d40.nef");
+        final Path nef = SIFT_FIXTURES.resolve("raw-samples/nikon-d40.nef");
 
         final Optional<Dimensions> result = this.reader.read(nef);
 
@@ -89,7 +89,7 @@ class ImageDimensionsReaderTest {
     // SubIFD, and a smaller embedded-preview resolution under the EXIF-specific pair on another.
     @Test
     void readsTrueCaptureResolutionFromARealModernSonyArw() {
-        final Path arw = CULL_FIXTURES.resolve("raw-samples/sony-ilce-6700.arw");
+        final Path arw = SIFT_FIXTURES.resolve("raw-samples/sony-ilce-6700.arw");
 
         final Optional<Dimensions> result = this.reader.read(arw);
 
@@ -100,7 +100,7 @@ class ImageDimensionsReaderTest {
     // container's own width and height box, as a HeifDirectory rather than an Exif SubIFD.
     @Test
     void readsDimensionsFromARealAvifFixtureViaItsHeifDirectory() {
-        final Optional<Dimensions> result = this.reader.read(CULL_FIXTURES.resolve("arctic-sky.avif"));
+        final Optional<Dimensions> result = this.reader.read(SIFT_FIXTURES.resolve("arctic-sky.avif"));
 
         assertThat(result).contains(new Dimensions(1600, 1063));
     }
@@ -109,7 +109,7 @@ class ImageDimensionsReaderTest {
     // so nothing but a real decode says whether that works.
     @Test
     void readsDimensionsFromARealWebpFixture() {
-        final Optional<Dimensions> result = this.reader.read(CULL_FIXTURES.resolve("webp-sample.webp"));
+        final Optional<Dimensions> result = this.reader.read(SIFT_FIXTURES.resolve("webp-sample.webp"));
 
         assertThat(result).contains(new Dimensions(1024, 772));
     }
@@ -119,7 +119,7 @@ class ImageDimensionsReaderTest {
     // Trusting the tags alone would route a perfectly good photo to Review.
     @Test
     void aSubThresholdMetadataSizeLosesToTheLargerSizeADecodeFinds() {
-        final Path jpeg = CULL_FIXTURES.resolve("stale-exif-dimensions.jpg");
+        final Path jpeg = SIFT_FIXTURES.resolve("stale-exif-dimensions.jpg");
 
         final Optional<Dimensions> result = this.reader.read(jpeg);
 
@@ -133,7 +133,7 @@ class ImageDimensionsReaderTest {
     // the file alone. Reporting the small number would exile a photo of that second shape.
     @Test
     void aSubThresholdMetadataSizeNoDecoderCanCorroborateIsNotReported() {
-        final Path avif = CULL_FIXTURES.resolve("small-heif-only.avif");
+        final Path avif = SIFT_FIXTURES.resolve("small-heif-only.avif");
 
         final Optional<Dimensions> result = this.reader.read(avif);
 
