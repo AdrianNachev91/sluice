@@ -13,7 +13,9 @@
 
   <groupId>photos.sluice</groupId>
   <artifactId>sluice</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <!-- Numbers and dots only, with no Maven qualifier. A qualifier reaches a user: it goes into the
+       jar's Implementation-Version, which SluiceVersionProvider prints. -->
+  <version>0.1.0</version>
   <packaging>jar</packaging>
 
   <name>Sluice</name>
