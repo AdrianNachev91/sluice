@@ -32,7 +32,7 @@ class YamlConfigFileTest {
     @Test
     void readsWhatIsInTheFile(@TempDir final Path dir) throws IOException {
         final Path file = dir.resolve("config.yml");
-        Files.writeString(file, "sluice:\n  cull:\n    provider: manual\n");
+        Files.writeString(file, "sluice:\n  sift:\n    provider: manual\n");
 
         assertThat(new YamlConfigFile(file).read()).containsOnlyKeys("sluice");
     }
@@ -62,7 +62,7 @@ class YamlConfigFileTest {
         final Path file = dir.resolve("nested").resolve("config.yml");
         final var document = new YamlConfigFile(file);
 
-        document.write(new LinkedHashMap<>(Map.of("sluice", Map.of("cull", Map.of("provider", "manual")))));
+        document.write(new LinkedHashMap<>(Map.of("sluice", Map.of("sift", Map.of("provider", "manual")))));
 
         assertThat(Files.readString(file)).contains("provider: manual");
         assertThat(new YamlConfigFile(file).read()).containsOnlyKeys("sluice");
@@ -82,7 +82,7 @@ class YamlConfigFileTest {
     @Test
     void aFailedWriteLeavesTheFileAsItWas(@TempDir final Path dir) throws IOException {
         final Path file = dir.resolve("config.yml");
-        final String original = "sluice:\n  cull:\n    provider: manual\n";
+        final String original = "sluice:\n  sift:\n    provider: manual\n";
         Files.writeString(file, original);
 
         assertThatThrownBy(() -> new FailingWriteDocument(file).write(new LinkedHashMap<>()))

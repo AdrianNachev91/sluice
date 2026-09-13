@@ -1149,7 +1149,7 @@ class AnthropicCullerTest {
         assertThatThrownBy(() -> culler.cull(prep, OPTIONS))
                 .isInstanceOf(IllegalStateException.class)
                 .isNotInstanceOf(MissingCredentialException.class)
-                .hasMessageContaining("sluice.cull.provider-settings.anthropic.model");
+                .hasMessageContaining("sluice.sift.provider-settings.anthropic.model");
     }
 
     // Someone hitting this has taken neither route, so the message names both rather than the one

@@ -42,7 +42,7 @@ class YamlConfigFileRepairTest {
                     working-root: /photos/work
                   montage:
                     tile-size: many
-                  cull:
+                  sift:
                     categories:
                       - name: receipts
                         description: photographed paperwork
@@ -82,13 +82,13 @@ class YamlConfigFileRepairTest {
         final Path file = dir.resolve("config.yml");
         Files.writeString(file, """
                 sluice:
-                  cull:
+                  sift:
                     providerSettings:
                       max-retries: lots
                 """);
 
         final boolean removed = new YamlConfigFileRepair(file)
-                .removeSetting("sluice.cull.provider-settings.max-retries");
+                .removeSetting("sluice.sift.provider-settings.max-retries");
 
         assertThat(removed).isTrue();
         assertThat(Files.readString(file)).doesNotContain("lots");
@@ -118,14 +118,14 @@ class YamlConfigFileRepairTest {
         final Path file = dir.resolve("config.yml");
         final String original = """
                 sluice:
-                  cull:
+                  sift:
                     categories:
                       - name: receipts
                 """;
         Files.writeString(file, original);
 
         final boolean removed = new YamlConfigFileRepair(file)
-                .removeSetting("sluice.cull.categories[0].description");
+                .removeSetting("sluice.sift.categories[0].description");
 
         assertThat(removed).isFalse();
         assertThat(Files.readString(file)).isEqualTo(original);

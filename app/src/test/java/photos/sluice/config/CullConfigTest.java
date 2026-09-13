@@ -28,7 +28,7 @@ class CullConfigTest {
 
     @Test
     void explicitPropertyOverridesProvider() {
-        this.runner.withPropertyValues("sluice.cull.provider=anthropic")
+        this.runner.withPropertyValues("sluice.sift.provider=anthropic")
                 .run(context -> {
                     final CullConfig config = context.getBean(CullConfig.class);
                     assertThat(config.provider()).isEqualTo("anthropic");
@@ -47,10 +47,10 @@ class CullConfigTest {
     @Test
     void explicitPropertiesOverrideCategories() {
         this.runner.withPropertyValues(
-                "sluice.cull.categories[0].name=receipts",
-                "sluice.cull.categories[0].description=Paper receipts and invoices",
-                "sluice.cull.categories[1].name=pets",
-                "sluice.cull.categories[1].description=Photos of the family dog"
+                "sluice.sift.categories[0].name=receipts",
+                "sluice.sift.categories[0].description=Paper receipts and invoices",
+                "sluice.sift.categories[1].name=pets",
+                "sluice.sift.categories[1].description=Photos of the family dog"
         ).run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.categories()).containsExactly(
@@ -70,9 +70,9 @@ class CullConfigTest {
     @Test
     void aCardCanBeSwitchedOffFromTheConfigFile() {
         this.runner.withPropertyValues(
-                "sluice.cull.categories[0].name=pets",
-                "sluice.cull.categories[0].description=Photos of the family dog",
-                "sluice.cull.categories[0].enabled=false"
+                "sluice.sift.categories[0].name=pets",
+                "sluice.sift.categories[0].description=Photos of the family dog",
+                "sluice.sift.categories[0].enabled=false"
         ).run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.categories().getFirst().enabled()).isFalse();
@@ -82,8 +82,8 @@ class CullConfigTest {
     @Test
     void aCardWithNoEnabledKeyIsOn() {
         this.runner.withPropertyValues(
-                "sluice.cull.categories[0].name=pets",
-                "sluice.cull.categories[0].description=Photos of the family dog"
+                "sluice.sift.categories[0].name=pets",
+                "sluice.sift.categories[0].description=Photos of the family dog"
         ).run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.categories().getFirst().enabled()).isTrue();
@@ -93,11 +93,11 @@ class CullConfigTest {
     @Test
     void aCardsExamplesBindAsWrittenAndDropTheBlankOnes() {
         this.runner.withPropertyValues(
-                "sluice.cull.categories[0].name=food",
-                "sluice.cull.categories[0].description=Food and meal photos",
-                "sluice.cull.categories[0].examples[0]=restaurant plates",
-                "sluice.cull.categories[0].examples[1]=   ",
-                "sluice.cull.categories[0].examples[2]=home dinners"
+                "sluice.sift.categories[0].name=food",
+                "sluice.sift.categories[0].description=Food and meal photos",
+                "sluice.sift.categories[0].examples[0]=restaurant plates",
+                "sluice.sift.categories[0].examples[1]=   ",
+                "sluice.sift.categories[0].examples[2]=home dinners"
         ).run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.categories().getFirst().examples())
@@ -108,10 +108,10 @@ class CullConfigTest {
     @Test
     void providerSettingsBindWhenAllFieldsPresent() {
         this.runner.withPropertyValues(
-                "sluice.cull.provider=anthropic",
-                "sluice.cull.provider-settings.anthropic.model=claude-sonnet-5",
-                "sluice.cull.provider-settings.anthropic.endpoint=https://api.anthropic.com",
-                "sluice.cull.provider-settings.anthropic.max-retries=5"
+                "sluice.sift.provider=anthropic",
+                "sluice.sift.provider-settings.anthropic.model=claude-sonnet-5",
+                "sluice.sift.provider-settings.anthropic.endpoint=https://api.anthropic.com",
+                "sluice.sift.provider-settings.anthropic.max-retries=5"
         ).run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.providerSettings()).containsExactly(entry("anthropic",
@@ -121,7 +121,7 @@ class CullConfigTest {
 
     @Test
     void aProviderWhoseOnlyValueIsBlankStillBindsAsItsOwnEntry() {
-        this.runner.withPropertyValues("sluice.cull.provider-settings.anthropic.model=")
+        this.runner.withPropertyValues("sluice.sift.provider-settings.anthropic.model=")
                 .run(context -> {
                     final CullConfig config = context.getBean(CullConfig.class);
                     assertThat(config.providerSettings()).containsOnlyKeys("anthropic");
@@ -133,7 +133,7 @@ class CullConfigTest {
     // alone rather than reading it as a word boundary.
     @Test
     void aHyphenatedProviderIdSurvivesAsItsOwnKey() {
-        this.runner.withPropertyValues("sluice.cull.provider-settings.external-agent.model=their-model")
+        this.runner.withPropertyValues("sluice.sift.provider-settings.external-agent.model=their-model")
                 .run(context -> {
                     final CullConfig config = context.getBean(CullConfig.class);
                     assertThat(config.providerSettings()).containsOnlyKeys("external-agent");

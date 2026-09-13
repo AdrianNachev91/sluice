@@ -87,7 +87,7 @@ class YamlSettingsStoreTest {
     @Test
     void aFailedWriteLeavesNeitherALeftoverNorAChangedConfigFile(@TempDir final Path dir) throws IOException {
         final Path file = dir.resolve("config.yml");
-        final String original = "sluice:\n  cull:\n    provider: manual\n";
+        final String original = "sluice:\n  sift:\n    provider: manual\n";
         Files.writeString(file, original);
 
         assertThatThrownBy(() -> new YamlSettingsStore(new FailingWriteDocument(file)).save(settings()))
@@ -134,7 +134,7 @@ class YamlSettingsStoreTest {
         final Path file = dir.resolve("config.yml");
         Files.writeString(file, """
                 sluice:
-                  cull:
+                  sift:
                     external-agent:
                       poll-interval: 30s
                     provider-settings:
@@ -274,7 +274,7 @@ class YamlSettingsStoreTest {
         final Path file = dir.resolve("config.yml");
         Files.writeString(file, """
                 sluice:
-                  cull:
+                  sift:
                     provider-settings:
                       some-other-provider:
                         model: their-model
@@ -284,7 +284,7 @@ class YamlSettingsStoreTest {
         new YamlSettingsStore(file).save(settings());
 
         final var providerSettings = asMap(asMap(asMap(
-                new Yaml().<Map<String, Object>>load(read(file)).get("sluice")).get("cull")).get("provider-settings"));
+                new Yaml().<Map<String, Object>>load(read(file)).get("sluice")).get("sift")).get("provider-settings"));
         assertThat(asMap(providerSettings.get("some-other-provider")))
                 .containsEntry("model", "their-model")
                 .containsEntry("endpoint", "https://theirs.invalid");
@@ -320,8 +320,8 @@ class YamlSettingsStoreTest {
         final var propertySources = new MutablePropertySources();
         sources.forEach(propertySources::addLast);
         return new Binder(ConfigurationPropertySources.from(propertySources))
-                .bind("sluice.cull", CullConfig.class)
-                .orElseThrow(() -> new AssertionError("the saved file carries no sluice.cull block"));
+                .bind("sluice.sift", CullConfig.class)
+                .orElseThrow(() -> new AssertionError("the saved file carries no sluice.sift block"));
     }
 
     private static Settings settings() {
@@ -346,7 +346,7 @@ class YamlSettingsStoreTest {
         final var sluice = asMap(loaded.get("sluice"));
         final var paths = asMap(sluice.get("paths"));
         final var montage = asMap(sluice.get("montage"));
-        final var cull = asMap(sluice.get("cull"));
+        final var cull = asMap(sluice.get("sift"));
         final var ui = asMap(sluice.get("ui"));
         final var providerSettings = asMap(cull.get("provider-settings"));
         final var anthropic = asMap(providerSettings.get("anthropic"));

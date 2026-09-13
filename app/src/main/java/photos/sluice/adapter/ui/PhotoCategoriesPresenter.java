@@ -31,8 +31,8 @@ import java.util.Set;
  *
  * <p>No override note, unlike every other settings surface. One is drawn where a source above the
  * config file supplies a value, found by asking whether that source holds the property. A list of
- * cards is never held under {@code sluice.cull.categories} itself: an environment variable or a
- * command-line argument supplies {@code sluice.cull.categories[0].name} and its siblings. So the
+ * cards is never held under {@code sluice.sift.categories} itself: an environment variable or a
+ * command-line argument supplies {@code sluice.sift.categories[0].name} and its siblings. So the
  * question has no answer to give here, and a note that cannot fire is worse than none.
  */
 @Component

@@ -14,7 +14,7 @@ import java.util.List;
  * @param provider {@link String} the configured provider id
  * @param providers a {@link List} of {@link ProviderChoice} every provider a user can pick, each
  *     carrying which settings it uses
- * @param providerOverride an override note for {@code sluice.cull.provider}, or null
+ * @param providerOverride an override note for {@code sluice.sift.provider}, or null
  * @param providerUnrecognised a note that the configured provider is not one this install has, or
  *     null when it is
  * @param model {@link ModelPicker} what the model picker offers and shows selected, or null for a
@@ -151,7 +151,7 @@ public record SettingsView(FolderField workingRoot, FolderField libraryRoot, Fol
      * <p>A choice carries its own fields, so picking one in a dropdown answers what to show without
      * asking anything again. Nothing can then be asked about a provider that does not exist.
      *
-     * @param id {@link String} the provider id, as {@code sluice.cull.provider} spells it
+     * @param id {@link String} the provider id, as {@code sluice.sift.provider} spells it
      * @param label {@link String} the name a screen shows for it
      * @param fields {@link ProviderFields} which settings this provider uses
      * @param defaultEndpoint {@link String} what an empty endpoint field actually reaches, or null

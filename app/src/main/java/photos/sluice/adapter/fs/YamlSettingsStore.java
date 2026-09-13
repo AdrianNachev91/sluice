@@ -70,7 +70,7 @@ public class YamlSettingsStore implements SettingsStore {
         YamlConfigFile.set(montage, "tile-size", settings.montage().tileSize());
         YamlConfigFile.set(montage, "tiles-per-row", settings.montage().tilesPerRow());
 
-        final Map<String, Object> cull = this.document.ensureGroup(sluice, "cull");
+        final Map<String, Object> cull = this.document.ensureGroup(sluice, "sift");
         YamlConfigFile.set(cull, "provider", settings.provider());
         YamlConfigFile.set(cull, "categories", categories(settings.categories()));
 

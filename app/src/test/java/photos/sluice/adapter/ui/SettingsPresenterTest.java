@@ -456,10 +456,10 @@ class SettingsPresenterTest {
     @Test
     void anOverriddenPropertyCarriesANoteNamingTheVariable() {
         final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
-        settingsUseCase.overrides.put("sluice.cull.provider", new ByEnvironmentVariable("sluice.cull.provider", "SLUICE_CULL_PROVIDER"));
+        settingsUseCase.overrides.put("sluice.sift.provider", new ByEnvironmentVariable("sluice.sift.provider", "SLUICE_SIFT_PROVIDER"));
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        assertThat(presenter.view().providerOverride()).contains("SLUICE_CULL_PROVIDER");
+        assertThat(presenter.view().providerOverride()).contains("SLUICE_SIFT_PROVIDER");
     }
 
     @Test

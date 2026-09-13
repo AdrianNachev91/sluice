@@ -30,7 +30,7 @@ class CliLauncherTest {
     // Spring accepts a setting written with no value at all, so both spellings have to be filtered.
     @Test
     void aSettingOverrideWithNoValueIsNotParsedAsAFlagEither() {
-        final String[] args = CliLauncher.commandArgs(new String[]{"--sluice.cull.provider", "cull"});
+        final String[] args = CliLauncher.commandArgs(new String[]{"--sluice.sift.provider", "cull"});
 
         assertThat(args).containsExactly("cull");
     }

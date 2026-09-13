@@ -72,8 +72,8 @@ class ConfigExampleFileTest {
         final var propertySources = new MutablePropertySources();
         sources.forEach(propertySources::addLast);
         return new Binder(ConfigurationPropertySources.from(propertySources))
-                .bind("sluice.cull", CullConfig.class)
-                .orElseThrow(() -> new AssertionError("config.example.yml carries no sluice.cull block"));
+                .bind("sluice.sift", CullConfig.class)
+                .orElseThrow(() -> new AssertionError("config.example.yml carries no sluice.sift block"));
     }
 
     /**

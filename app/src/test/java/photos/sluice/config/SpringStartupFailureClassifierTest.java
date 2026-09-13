@@ -77,7 +77,7 @@ class SpringStartupFailureClassifierTest {
         final Path configFile = dir.resolve("config.yml");
         Files.writeString(configFile, """
                 sluice:
-                  cull:
+                  sift:
                     categories:
                       - name: junk
                         description: Screenshots and blurry shots.

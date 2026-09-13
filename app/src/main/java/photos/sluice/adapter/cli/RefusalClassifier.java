@@ -243,7 +243,7 @@ public class RefusalClassifier {
     private static Refusal providerUnrecognised(final UnrecognisedProviderException unrecognised) {
         final List<String> registered = unrecognised.registered().stream().sorted().toList();
         return new Refusal(RefusalKind.PROVIDER_UNRECOGNISED,
-                "There is no vision provider called '" + unrecognised.provider() + "'. Set sluice.cull.provider "
+                "There is no vision provider called '" + unrecognised.provider() + "'. Set sluice.sift.provider "
                         + "to one of: " + String.join(", ", registered) + ".",
                 Fields.of("provider", unrecognised.provider(), "registered", registered));
     }

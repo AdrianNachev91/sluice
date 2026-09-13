@@ -30,7 +30,7 @@ sluice:
     # The Inbox. See the folder-roots note above.
     inbox: /home/example/Sluice/Inbox
 
-  cull:
+  sift:
     # Which vision provider looks at your photos: "anthropic" calls a vision model from inside the app,
     # "external-agent" waits for an agent you run yourself to write decision shards. Shown at its
     # default, which needs no API key of yours.

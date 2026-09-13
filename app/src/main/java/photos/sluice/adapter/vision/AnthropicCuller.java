@@ -1217,7 +1217,7 @@ class AnthropicCuller implements VisionCuller {
     private String requiredModel() {
         final String model = this.settings.providerSettings(PROVIDER_ID).model();
         if (model == null || model.isBlank()) {
-            throw new IllegalStateException("sluice.cull.provider-settings." + PROVIDER_ID
+            throw new IllegalStateException("sluice.sift.provider-settings." + PROVIDER_ID
                     + ".model is not set; the '" + PROVIDER_ID
                     + "' vision provider needs the model id to request");
         }

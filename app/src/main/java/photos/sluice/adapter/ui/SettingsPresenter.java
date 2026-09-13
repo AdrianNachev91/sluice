@@ -146,7 +146,7 @@ public class SettingsPresenter {
                 folderField(paths.libraryRoot(), librarySuggestion(), violations.get(PathRole.LIBRARY_ROOT)),
                 folderField(paths.inbox(), inboxSuggestion(paths.workingRoot()), violations.get(PathRole.INBOX)),
                 shownProvider, this.visionProvider.providerChoices(),
-                this.overrideNote("sluice.cull.provider"),
+                this.overrideNote("sluice.sift.provider"),
                 this.unrecognisedProviderNote(settings.provider()),
                 modelPicker.picker(), this.overrideNote(providerProperty(shownProvider, "model")),
                 modelPicker.unrecognisedNote(),
@@ -976,7 +976,7 @@ public class SettingsPresenter {
      * @return {@link String} the full property name
      */
     private static String providerProperty(final String providerId, final String setting) {
-        return "sluice.cull.provider-settings." + providerId + "." + setting;
+        return "sluice.sift.provider-settings." + providerId + "." + setting;
     }
 
     /**

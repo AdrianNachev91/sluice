@@ -2,7 +2,7 @@ sluice:
   montage:
     tiles-per-row: 5
     tile-size: 224
-  cull:
+  sift:
     # Which vision provider culls. Built in: external-agent (an agent you run reads the montages
     # and writes the decision shards) and anthropic (the app calls the Anthropic API with your
     # key). Future openai and ollama adapters are planned but not yet written. A new provider is

@@ -57,7 +57,7 @@ class EnvironmentSettingsSourcesTest {
         @Test
         void reportsNothingWhenASourceBelowTheConfigFileSuppliesIt() {
             final var sources = new EnvironmentSettingsSources(environmentWith(
-                    configFile("sluice.cull.provider"), plain("belowEverything", LIBRARY_ROOT)));
+                    configFile("sluice.sift.provider"), plain("belowEverything", LIBRARY_ROOT)));
 
             assertThat(sources.higherPrecedenceOverride(LIBRARY_ROOT)).isEmpty();
         }
@@ -65,7 +65,7 @@ class EnvironmentSettingsSourcesTest {
         @Test
         void reportsNothingWhenNothingSuppliesItAtAll() {
             final var sources = new EnvironmentSettingsSources(
-                    environmentWith(plain("commandLineArgs", "sluice.cull.provider"), configFile(LIBRARY_ROOT)));
+                    environmentWith(plain("commandLineArgs", "sluice.sift.provider"), configFile(LIBRARY_ROOT)));
 
             assertThat(sources.higherPrecedenceOverride("sluice.paths.inbox")).isEmpty();
         }

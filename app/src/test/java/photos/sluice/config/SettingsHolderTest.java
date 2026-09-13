@@ -113,10 +113,10 @@ class SettingsHolderTest {
                 .withInitializer(new ConfigDataApplicationContextInitializer())
                 .withUserConfiguration(SettingsContext.class)
                 .withPropertyValues(
-                        "sluice.cull.categories[0].name=receipts",
-                        "sluice.cull.categories[0].description=Paper receipts and invoices",
-                        "sluice.cull.categories[1].name=receipts",
-                        "sluice.cull.categories[1].description=Photos of till slips")
+                        "sluice.sift.categories[0].name=receipts",
+                        "sluice.sift.categories[0].description=Paper receipts and invoices",
+                        "sluice.sift.categories[1].name=receipts",
+                        "sluice.sift.categories[1].description=Photos of till slips")
                 .run(context -> assertThat(context).getFailure()
                         .rootCause()
                         .hasMessageContaining("receipts"));

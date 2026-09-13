@@ -156,7 +156,7 @@ class CullEngineTest {
         final CullJobOutcome outcome = pipeline.cull(new CullScope.Year(2019, null)).join();
 
         assertThat(outcome).isInstanceOf(CullJobOutcome.Applied.class);
-        assertThat(progress.events).noneMatch(event -> event.startsWith("started:Culling"));
+        assertThat(progress.events).noneMatch(event -> event.startsWith("started:Sifting"));
     }
 
     @Test
@@ -901,7 +901,7 @@ class CullEngineTest {
             assertThat(outcome).isInstanceOf(CullJobOutcome.Waiting.class);
             final WaitingCullJob job = ((CullJobOutcome.Waiting) outcome).job();
             assertThat(job.shards()).isEqualTo(new ShardTally(0, 0, 1));
-            assertThat(progress.events).noneMatch(event -> event.startsWith("started:Culling"));
+            assertThat(progress.events).noneMatch(event -> event.startsWith("started:Sifting"));
             assertThat(pipeline.isWatchActive(job.prepDir())).isFalse();
         }
 
@@ -1083,7 +1083,7 @@ class CullEngineTest {
             final CullJobOutcome outcome = resuming.resume(prepDir, false).join();
 
             assertThat(outcome).isInstanceOf(CullJobOutcome.Applied.class);
-            assertThat(progress.events).noneMatch(event -> event.startsWith("started:Culling"));
+            assertThat(progress.events).noneMatch(event -> event.startsWith("started:Sifting"));
             assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
         }
 

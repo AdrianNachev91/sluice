@@ -12,7 +12,7 @@ contract.
 
 ```mermaid
 flowchart TD
-    A["cull(prep, opts)"] --> B["require sluice.cull.provider-settings.<br/>anthropic.model"]
+    A["cull(prep, opts)"] --> B["require sluice.sift.provider-settings.<br/>anthropic.model"]
     B --> C["render the system prompt<br/>(CullerPrompt + the cards<br/>index.json recorded)"]
     C --> W["read every sidecar up front<br/>(the whole scope's src list;<br/>an unreadable one contributes<br/>nothing and drops its montage)"]
     W --> D["build the API client<br/>(API key via SecretStore, optional endpoint,<br/>transport max-retries)"]

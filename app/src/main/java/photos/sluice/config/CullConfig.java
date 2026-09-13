@@ -8,13 +8,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Binds the {@code sluice.cull} settings. Which provider drives the culler, the settings kept for
+ * Binds the {@code sluice.sift} settings. Which provider drives the culler, the settings kept for
  * each provider, and the classification categories it routes photos to.
  *
  * <p>These are the values the app starts on. {@link SettingsHolder} takes them from here once and
  * is what everything reads afterwards. So a save changes what a cull sees without a restart.
  */
-@ConfigurationProperties(prefix = "sluice.cull")
+@ConfigurationProperties(prefix = "sluice.sift")
 public record CullConfig(String provider, Map<String, CullProviderSettings> providerSettings,
                          List<CullCategory> categories) {
 
