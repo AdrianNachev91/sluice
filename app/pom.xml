@@ -15,7 +15,7 @@
   <artifactId>sluice</artifactId>
   <!-- Numbers and dots only, with no Maven qualifier. A qualifier reaches a user: it goes into the
        jar's Implementation-Version, which SluiceVersionProvider prints. -->
-  <version>0.1.0</version>
+  <version>1.0.0</version>
   <packaging>jar</packaging>
 
   <name>Sluice</name>
