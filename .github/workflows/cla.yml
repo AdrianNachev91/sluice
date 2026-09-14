@@ -1,14 +1,13 @@
 name: CLA Assistant
 
-# Blocks a pull request until its author has signed CLA.md, per Phase 19
-# (docs/plans/java-port-phases/phase-19-license-and-marks.md). The relicensing
+# Blocks a pull request until its author has signed CLA.md. The relicensing
 # grant in CLA.md's Section 4 is why this check exists at all - see that file.
 #
 # path-to-document below points at this repository's own CLA.md. When this
 # workflow is carried into the public "sluice" repo at the final public-cut
-# sweep (see docs/plans/2026-07-10-public-migration.md), that URL must be
-# updated to the public repo's own raw CLA.md URL, or contributors reading
-# the PR comment will be sent to a private repo they cannot see.
+# sweep, that URL must be updated to the public repo's own raw CLA.md URL,
+# or contributors reading the PR comment will be sent to a private repo
+# they cannot see.
 on:
   issue_comment:
     types: [created]

@@ -10,6 +10,11 @@ Near-duplicates get grouped so you pick the keeper. Junk and low-value shots go 
 for a second look. Everything else moves into your library. Nothing is ever deleted unless the exact same
 bytes already exist somewhere safe - see "The safety model" below.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/images/screenshot-dark.png">
+  <img src=".github/images/screenshot-light.png" alt="The Sluice dashboard, with Sort ready to run">
+</picture>
+
 ## Installing
 
 Download the build for your platform from the
@@ -41,7 +46,7 @@ The config file lives at an OS-standard location: `%APPDATA%\Sluice\config.yml` 
 `$XDG_CONFIG_HOME/sluice/config.yml` (or `~/.config/sluice/config.yml`) on Linux. A fully commented
 copy describing every setting ships alongside the app, and inside this repository at
 [`app/src/main/resources/config.example.yml`](app/src/main/resources/config.example.yml). The app's
-own copy is never read: Settings rewrites the real file without comments on every save.
+own copy is never read. Settings rewrites the real file without comments on every save.
 
 ## Judging your photos: two ways
 
@@ -70,7 +75,7 @@ A vision provider is a swap-in, not a drop-in equal. Before trusting a new, weak
   should have deleted.
 - **Structured-output discipline varies.** Sifting depends on a valid decision file per contact sheet
   and on reading fine detail in small tiles (a photo of a screen, a document). A weaker model misses
-  more of both. Sluice validates every shard and fails loudly rather than silently mis-filing, so a
+  more of both. Sluice validates every decision file and fails loudly rather than silently mis-filing, so a
   shaky provider costs you redone sheets, not lost photos.
 - **Free tiers have quotas.** They rate-limit hard under anything but light, incremental use.
 - **The safety net holds regardless of provider.** Never-delete-media, routing anything discarded
@@ -85,7 +90,7 @@ Two invariants hold regardless of what else changes:
 - **Sluice never deletes a photo or video unless the exact same bytes already exist somewhere
   safe.** That means in your library, already staged, or freshly verified at their destination.
   Everything else it sets aside is moved into a staging folder, never removed. There are no bulk or
-  recursive deletes, and no file is ever silently overwritten; a naming collision gets a suffix
+  recursive deletes, and no file is ever silently overwritten. A naming collision gets a suffix
   instead.
 - **A file Sluice cannot date confidently goes to a clearly-named Unsorted folder** rather than a
   guessed date. It never fabricates a folder for a photo it isn't sure about.
@@ -98,11 +103,11 @@ you do, and a library broken this way is outside what Sluice can detect or defen
 
 ## Support
 
-This is a display project built and maintained by one person, not a commercially supported product.
-Bug reports and feedback are genuinely welcome, and the app itself will sometimes point you at
-opening one. Active support, and a guaranteed response, should not be expected. This is a
-statement about support, not about quality: bugs are treated seriously when they're found, there's
-just no promise of a maintainer standing by.
+This is a personal project, built and maintained by one person and shared publicly as a working
+example, not a commercially supported product. Bug reports and feedback are genuinely welcome, and
+the app itself will sometimes point you at opening one. Active support, and a guaranteed response,
+should not be expected. This is a statement about support, not about quality. Bugs are treated
+seriously when they're found. There's just no promise of a maintainer standing by.
 
 ## Versioning
 
