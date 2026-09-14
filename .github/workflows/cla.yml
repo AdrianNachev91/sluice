@@ -2,12 +2,6 @@ name: CLA Assistant
 
 # Blocks a pull request until its author has signed CLA.md. The relicensing
 # grant in CLA.md's Section 4 is why this check exists at all - see that file.
-#
-# path-to-document below points at this repository's own CLA.md. When this
-# workflow is carried into the public "sluice" repo at the final public-cut
-# sweep, that URL must be updated to the public repo's own raw CLA.md URL,
-# or contributors reading the PR comment will be sent to a private repo
-# they cannot see.
 on:
   issue_comment:
     types: [created]
@@ -33,6 +27,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          path-to-document: 'https://raw.githubusercontent.com/AdrianNachev91/PhotoOrganizer/master/CLA.md'
+          path-to-document: 'https://raw.githubusercontent.com/AdrianNachev91/sluice/master/CLA.md'
           path-to-signatures: 'signatures/version1/cla.json'
           branch: 'cla-signatures'

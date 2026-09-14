@@ -2,6 +2,9 @@
 app/target/
 # IDE
 .idea/
+# Local scratch, never crosses to GitHub.
+tmp/*
+!tmp/.gitkeep
 # Obsidian. app/docs/design is a vault, and its shared settings are committed so a
 # clone opens the same graph. The rest is per-viewer state: workspace.json rewrites
 # on every pane change, and plugins are binaries each reader installs themselves.
