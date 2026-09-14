@@ -54,28 +54,25 @@ the key, not only at its end. A sidecar with a non-standard suffix (`IMG_1234.jp
 real sidecar the sweep is meant to reach, and demanding the extension come last would make it
 immortal. See [`takeout-sidecar-pairing.md`](takeout-sidecar-pairing.md) section 3.
 
-**Or the owner key is at least 46 characters.** Google truncates a long sidecar name, and the cut
-usually takes the media extension with it. Such a name looks like nothing in particular, so length
-is the only thing left to read. 46 is where Google cuts. Measured on a real export: every one of
-its 773 cut names came out at exactly that length.
+**Or the owner key is at least 46 characters.** Google truncates a long sidecar name, usually
+taking the media extension with it. A cut name then looks like nothing in particular, so length is
+the only thing left to read. 46 is where Google cuts. Every one of 773 cut names in a surveyed
+export came out at exactly that length. Without this signal a cut name could never be swept at
+all, and a processed Inbox would fill with stale JSON that nothing ever claims.
 
-A file failing both is something like `metadata.json`, `notes.json` or
+A file failing both signals is something like `metadata.json`, `notes.json` or
 `print-subscriptions.json`. Real Takeout exports ship one album descriptor per album, and any dump
 can carry an unrelated app's JSON. Those are not this mechanism's to delete.
 
-The second signal is what keeps a truncated sidecar from becoming immortal. Without it, a cut name
-could never be swept at all, and a processed Inbox would fill with stale JSON that nothing will
-ever claim.
+**This second signal is a deletion licence, not only a keep.** It says nothing about the file's
+contents. So any long-named `.json` gets swept once its media is gone, sidecar or not. A user's
+`my_wedding_guest_list_and_seating_plan_final_v3.json` sitting in a folder whose media has left
+gets deleted too.
 
-**Read the second signal as a deletion licence, not only as a keep.** It says nothing about the
-file's contents, so a `.json` that was never a sidecar is swept anyway once its name is long enough.
-A user's `my_wedding_guest_list_and_seating_plan_final_v3.json` sitting in a folder whose media has
-gone will be deleted.
-
-That is a deliberate trade, and the numbers drive it. In a surveyed export of 14,789 sidecars, 773
-had cut names and 5 files were genuine non-sidecars. Protecting the long-named strays would strand
-all 773 forever. Length is the only thing that separates the two populations, and it separates them
-imperfectly. A shorter stray is safe, which covers every name Google's own manifests use.
+That is a deliberate trade. In a surveyed export of 14,789 sidecars, 773 had cut names and 5 were
+genuine non-sidecars. Protecting those 5 would have stranded all 773 real cut names forever - length
+is the only thing separating the two populations, and it separates them imperfectly. A shorter
+stray is always safe, which covers every name Google's own manifests use.
 
 ### 3. The name match
 
