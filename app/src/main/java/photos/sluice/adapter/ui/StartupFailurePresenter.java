@@ -56,7 +56,7 @@ public class StartupFailurePresenter {
 
     /**
      * The card the failure window draws, chosen so a failure added later cannot take the generic
-     * card's copy with nobody deciding it should.
+     * card's wording with nobody deciding it should.
      *
      * <p>A rejected setting names the file only when the value is in the user's own. The app's own
      * bundled defaults are a text resource too. Sending a user to edit one of those would offer to

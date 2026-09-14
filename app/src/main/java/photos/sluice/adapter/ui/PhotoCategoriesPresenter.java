@@ -98,7 +98,7 @@ public class PhotoCategoriesPresenter {
      * cards back in the order they are drawn. So opening this screen and saving can move that one
      * card to the top of the config file.
      *
-     * @return {@link PhotoCategoriesView} the cards and the page's own copy
+     * @return {@link PhotoCategoriesView} the cards and the page's own wording
      */
     public PhotoCategoriesView view() {
         final Settings settings = this.settingsUseCase.settings();

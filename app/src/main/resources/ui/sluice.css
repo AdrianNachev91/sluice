@@ -8,7 +8,8 @@
  *
  * One rule holds across every screen: nothing sizes to a fixed pixel width. Layouts size to their
  * content, and a control that holds text grows with the text in it. Text length is not a constant.
- * The same sentence runs roughly a third longer in German, and copy gets rewritten on taste alone.
+ * The same sentence runs roughly a third longer in German, and wording gets rewritten on taste
+ * alone.
  * A label sized to fit its English string breaks the first time either happens. Spacing, padding
  * and font sizes are fine to pin. Widths of things holding words are not. A graphic is not a thing
  * holding words, so the brand mark below is sized outright.

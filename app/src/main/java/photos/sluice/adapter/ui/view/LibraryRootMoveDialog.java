@@ -16,8 +16,8 @@ import java.util.function.Consumer;
  *
  * <p>Settings is the one screen that asks. The first-run card holds the same field and answers the
  * question itself, because a move needs every folder usable and that card is on screen exactly while
- * one is not. Kept apart from the screen anyway, since the flow is five sentences of copy and a job
- * that runs for as long as a library takes.
+ * one is not. Kept apart from the screen anyway, since the flow is five sentences and a job that
+ * runs for as long as a library takes.
  */
 final class LibraryRootMoveDialog {
 
