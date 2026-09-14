@@ -7,7 +7,7 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>4.1.0</version>
+    <version>4.1.1</version>
     <relativePath/>
   </parent>
 
@@ -31,9 +31,9 @@
 
   <properties>
     <java.version>26</java.version>
-    <javafx.version>26.0.1</javafx.version>
+    <javafx.version>26.0.2</javafx.version>
     <testfx.version>4.0.18</testfx.version>
-    <twelvemonkeys.version>3.14.0</twelvemonkeys.version>
+    <twelvemonkeys.version>3.15.0</twelvemonkeys.version>
   </properties>
 
   <dependencyManagement>
@@ -63,7 +63,7 @@
     <dependency>
       <groupId>photos.sluice</groupId>
       <artifactId>secret-store</artifactId>
-      <version>1.0.0</version>
+      <version>1.0.1</version>
     </dependency>
     <!-- Parses the command line. The starter rather than picocli alone, for the one bean it adds:
          a factory that builds each command through Spring, so a command class can be injected with
@@ -81,12 +81,12 @@
     <dependency>
       <groupId>com.drewnoakes</groupId>
       <artifactId>metadata-extractor</artifactId>
-      <version>2.20.0</version>
+      <version>2.21.0</version>
     </dependency>
     <dependency>
       <groupId>com.anthropic</groupId>
       <artifactId>anthropic-java</artifactId>
-      <version>2.50.0</version>
+      <version>2.62.0</version>
     </dependency>
     <!-- Versions for all com.twelvemonkeys.imageio modules come from the BOM above, imported
          into dependencyManagement - every module here always resolves to the same release. -->
@@ -153,7 +153,7 @@
     <dependency>
       <groupId>com.tngtech.archunit</groupId>
       <artifactId>archunit-junit5</artifactId>
-      <version>1.4.2</version>
+      <version>1.5.0</version>
       <scope>test</scope>
     </dependency>
     <!-- Evaluates a JSON document against a JSON Schema, so a test can put a malformed response
@@ -163,7 +163,7 @@
     <dependency>
       <groupId>com.networknt</groupId>
       <artifactId>json-schema-validator</artifactId>
-      <version>3.0.6</version>
+      <version>3.0.7</version>
       <scope>test</scope>
     </dependency>
     <!-- Drives the real window in a test: starts the toolkit, runs work on the FX thread, and
