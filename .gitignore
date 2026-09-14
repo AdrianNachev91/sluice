@@ -1,0 +1,14 @@
+# Build output
+app/target/
+# IDE
+.idea/
+# Obsidian. app/docs/design is a vault, and its shared settings are committed so a
+# clone opens the same graph. The rest is per-viewer state: workspace.json rewrites
+# on every pane change, and plugins are binaries each reader installs themselves.
+app/docs/design/.obsidian/*
+!app/docs/design/.obsidian/app.json
+!app/docs/design/.obsidian/appearance.json
+!app/docs/design/.obsidian/community-plugins.json
+!app/docs/design/.obsidian/core-plugins.json
+!app/docs/design/.obsidian/graph.json
+!app/docs/design/.obsidian/snippets/
