@@ -1,5 +1,6 @@
 # Build output
 app/target/
+app/output/
 # IDE
 .idea/
 # Local scratch, never crosses to GitHub.

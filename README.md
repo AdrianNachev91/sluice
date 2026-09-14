@@ -21,8 +21,11 @@ Download the build for your platform from the
 [latest release](https://github.com/AdrianNachev91/sluice/releases/latest). Installed copies update
 themselves in the background.
 
-- **Windows:** `sluice.exe` is a self-installing bootstrapper. Requires Windows 10 (build 17763,
-  October 2018 Update) or later.
+- **Windows:** `sluice.exe` is a self-installing bootstrapper - it installs itself with no prompts
+  and no choice of folder, then shows up in the Start menu. That is deliberate, not a step skipped.
+  Prefer to choose where it lives instead? Download the zip and unzip it anywhere - the folder is
+  self-contained, so moving it afterwards, or running it straight off a USB drive, works too.
+  Requires Windows 10 (build 17763, October 2018 Update) or later.
 - **macOS:** download the zip for your Mac (Apple Silicon or Intel), unzip it, and drag the app to
   Applications. Requires macOS 11 or later, either architecture.
 - **Linux:** the `.deb` installs on Debian- and Ubuntu-based distributions. Requires glibc 2.34 or
