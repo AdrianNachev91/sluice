@@ -11,10 +11,9 @@ import java.util.function.Consumer;
  * screens that draw a link sit several layers below it. Threading it through all of them would put
  * a parameter on scenes that draw no link at all.
  *
- * <p>A screen drawing a link is not required to be running inside a launched app. A gallery render
- * and a test both build one, and neither has a browser to hand. So an unset opener is a state to
- * tolerate rather than refuse. The address is on screen either way, since a link is only ever put
- * on text that already shows it.
+ * <p>A screen drawing a link can be built on its own, outside a launched app, and nothing built that
+ * way has a browser to hand. So an unset opener is a state to tolerate rather than refuse. The
+ * address is on screen either way, since a link is only ever put on text that already shows it.
  */
 final class ExternalBrowser {
 

@@ -167,8 +167,7 @@ final class Dialogs {
      * The question built and dressed, with nothing shown yet.
      *
      * <p>Separate from showing it so a dialog can be drawn without a modal loop. A modal blocks its
-     * caller until a button is pressed. So the screen gallery has no other way to reach the pane it
-     * wants to snapshot.
+     * caller until a button is pressed, so nothing could otherwise reach the pane to look at it.
      *
      * @param heading {@link String} what the question is about
      * @param question {@link String} the question itself
@@ -352,7 +351,7 @@ final class Dialogs {
      * still modal, so nothing becomes unreachable. It appears somewhere the reader was not looking.
      *
      * <p>A node with no scene is left unowned rather than refused. That is a pane built outside a
-     * window, which the screen gallery does, and a dialog is not what it is being built for.
+     * window, and a dialog is not what such a pane is being built for.
      *
      * @param alert {@link Alert} the dialog
      * @param opensOver {@link Node} something on the window the dialog opens over

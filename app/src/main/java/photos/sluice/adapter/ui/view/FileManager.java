@@ -15,9 +15,8 @@ import java.util.function.Consumer;
  * <p>Held here rather than passed down. Only the desktop launch has anything that can open a folder,
  * and the screen offering it sits several layers below.
  *
- * <p>A screen offering the button is not required to be running inside a launched app. A gallery
- * render and a test both build one, and neither has a file manager to hand. So an unset opener is a
- * state to tolerate rather than refuse.
+ * <p>A screen offering the button can be built on its own, outside a launched app, and nothing built
+ * that way has a file manager to hand. So an unset opener is a state to tolerate rather than refuse.
  */
 final class FileManager {
 
