@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    # Chunk branches run the same two legs a master push does, so a chunk's CI answer arrives
-    # before its diff is reviewed rather than after it lands. The macOS job below stays off this
-    # path, gated to dispatch and schedule, so a branch push costs exactly what a master push costs.
+    # Chunk branches run the same two legs a master push does, plus the macOS job below, so a
+    # chunk's CI answer covers all three platforms before its diff is reviewed rather than after it
+    # lands. A master push skips macOS, since every chunk reaching master has already run it.
     branches: [master, 'chunk/**']
     # CI only builds/tests the Java app (`mvn -f app/pom.xml test`), so run it only when the app or
     # this workflow itself changes. A docs-only commit skips it - no point burning the matrix on one.
@@ -16,12 +16,8 @@ on:
     paths:
       - 'app/**'
       - '.github/workflows/ci.yml'
-  # The macOS job below runs on these two events only, never on a push. A macOS runner draws ten
-  # times its wall-clock against the account's monthly minute allowance, and a private repo's
-  # workflows stop running once that allowance is spent. So the cadence is chosen against the
-  # allowance rather than against a bill. Weekly plus the manual trigger costs about a tenth of
-  # it. Nightly would cost most of it, and the price of getting that wrong is CI stopping in the
-  # middle of a phase.
+  # The macOS job below also runs on these two, so a master-only change still gets a Mac answer
+  # weekly or on demand.
   workflow_dispatch:
   schedule:
     - cron: '0 3 * * 1'
@@ -121,12 +117,13 @@ jobs:
         run: mvn -f app/pom.xml test
 
   # A separate job rather than a third entry in the matrix above, because it answers to different
-  # events. A matrix cannot hold one leg back from a push while the other two run.
+  # events. A matrix cannot hold one leg back from a master push while the other two run.
   build-macos:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    if: >-
+      github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+      || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/chunk/'))
     runs-on: macos-latest
-    # Same ceiling as the matrix above, and it matters more here: this runner bills at ten times
-    # its wall-clock against the monthly allowance.
+    # Same ceiling as the matrix above.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
